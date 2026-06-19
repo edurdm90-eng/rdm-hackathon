@@ -22,6 +22,9 @@
       "@better-auth/expo": "1.6.11"
     }
   },
+  "overrides": {
+    "bson": "7.2.0"
+  },
   "type": "module",
   "scripts": {
     "dev": "turbo dev",
