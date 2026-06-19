@@ -1,8 +1,6 @@
-import { Ionicons, MaterialIcons } from "@expo/vector-icons";
-import { Link } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 import { Drawer } from "expo-router/drawer";
 
-import { HeaderButton } from "@/components/header-button";
 import { NAV_THEME } from "@/lib/constants";
 import { useColorScheme } from "@/lib/use-color-scheme";
 
@@ -13,6 +11,7 @@ const DrawerLayout = () => {
   return (
     <Drawer
       screenOptions={{
+        headerShown: false,
         headerStyle: {
           backgroundColor: theme.background,
         },
@@ -23,35 +22,33 @@ const DrawerLayout = () => {
         drawerStyle: {
           backgroundColor: theme.background,
         },
+        drawerActiveBackgroundColor: theme.card,
+        drawerActiveTintColor: theme.primary,
+        drawerInactiveTintColor: theme.text,
         drawerLabelStyle: {
           color: theme.text,
+          fontWeight: "700",
         },
-        drawerInactiveTintColor: theme.text,
+        sceneStyle: {
+          backgroundColor: theme.background,
+        },
       }}
     >
       <Drawer.Screen
         name="index"
         options={{
-          headerTitle: "Home",
-          drawerLabel: "Home",
+          headerTitle: "Hack Room",
+          drawerLabel: "Hack Room",
           drawerIcon: ({ size, color }) => (
-            <Ionicons name="home-outline" size={size} color={color} />
+            <Ionicons name="flash-outline" size={size} color={color} />
           ),
         }}
       />
       <Drawer.Screen
         name="(tabs)"
         options={{
-          headerTitle: "Tabs",
-          drawerLabel: "Tabs",
-          drawerIcon: ({ size, color }) => (
-            <MaterialIcons name="border-bottom" size={size} color={color} />
-          ),
-          headerRight: () => (
-            <Link href="/modal" asChild>
-              <HeaderButton />
-            </Link>
-          ),
+          drawerItemStyle: { display: "none" },
+          headerShown: false,
         }}
       />
     </Drawer>
