@@ -2,7 +2,7 @@ import type { AppRouter } from "@rdm-hack/api/routers/index";
 import { Ionicons } from "@expo/vector-icons";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import type { inferRouterOutputs } from "@trpc/server";
-import { useNavigation } from "expo-router";
+import { useNavigation, useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -111,6 +111,14 @@ export function HackRoomHome() {
 
 export function HackRoomScreen() {
   return <AuthenticatedRoute>{(user) => <HackRoomDashboard user={user} />}</AuthenticatedRoute>;
+}
+
+export function HackRoomDetailScreen({ roomId }: { roomId: string }) {
+  return (
+    <AuthenticatedRoute>
+      {(user) => <HackRoomDetailDashboard roomId={roomId} user={user} />}
+    </AuthenticatedRoute>
+  );
 }
 
 export function ProfileScreen() {
@@ -467,11 +475,152 @@ function ProfileDashboard({ user }: { user: SessionUser }) {
 }
 
 function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
+  const router = useRouter();
   const dashboard = useQuery(trpc.hackRoom.dashboard.queryOptions());
   const [roomForm, setRoomForm] = useState(emptyRoomForm);
   const [inviteCode, setInviteCode] = useState("");
   const [createRoomModalOpen, setCreateRoomModalOpen] = useState(false);
-  const [selectedRoomId, setSelectedRoomId] = useState("");
+  const [message, setMessage] = useState<{ text: string; tone: Tone } | null>(null);
+
+  const hostedRooms = dashboard.data?.hostedRooms ?? [];
+  const joinedRooms = dashboard.data?.joinedRooms ?? [];
+  const allRooms = useMemo(() => {
+    const seen = new Set<string>();
+    const rooms: Array<{ role: Role; room: HackRoom }> = [];
+
+    hostedRooms.forEach((room) => {
+      seen.add(room._id);
+      rooms.push({ role: "host", room });
+    });
+    joinedRooms.forEach((room) => {
+      if (!seen.has(room._id)) {
+        rooms.push({ role: "participant", room });
+      }
+    });
+
+    return rooms;
+  }, [hostedRooms, joinedRooms]);
+
+  const invalidateDashboard = async () => {
+    await queryClient.invalidateQueries({ queryKey: trpc.hackRoom.dashboard.queryKey() });
+  };
+
+  const createRoom = useMutation(
+    trpc.hackRoom.createRoom.mutationOptions({
+      onError: (error) => setMessage({ text: error.message, tone: "red" }),
+      onSuccess: async (room) => {
+        setRoomForm(emptyRoomForm);
+        setCreateRoomModalOpen(false);
+        setMessage({ text: `Created ${room.name} with invite ${room.inviteCode}`, tone: "violet" });
+        await invalidateDashboard();
+      },
+    }),
+  );
+
+  const joinRoom = useMutation(
+    trpc.hackRoom.joinRoom.mutationOptions({
+      onError: (error) => setMessage({ text: error.message, tone: "red" }),
+      onSuccess: async (room) => {
+        setInviteCode("");
+        setMessage({ text: `Joined ${room.name}`, tone: "cyan" });
+        await invalidateDashboard();
+      },
+    }),
+  );
+
+  const isBusy =
+    createRoom.isPending ||
+    joinRoom.isPending;
+
+  const handleSignOut = async () => {
+    await authClient.signOut();
+    await queryClient.invalidateQueries();
+  };
+
+  const handleNotifications = () => {
+    setMessage({ text: "No new notifications right now", tone: "cyan" });
+  };
+
+  const handleShareCode = async (room: HackRoom) => {
+    await Share.share({
+      message: `Join ${room.name} in XRDM Hack Room with invite code ${room.inviteCode}`,
+      title: `${room.name} invite`,
+    });
+  };
+
+  const handleOpenRoom = (roomId: string) => {
+    router.push({
+      pathname: "/hack-room/[roomId]",
+      params: { roomId },
+    });
+  };
+
+  return (
+    <View style={styles.screen}>
+      <AppHeader onNotificationPress={handleNotifications} onProfilePress={handleSignOut} />
+      <ScrollView
+        contentContainerStyle={styles.dashboardContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        {isBusy ? (
+          <View style={styles.compactBusyRow}>
+            <ActivityIndicator color={theme.award} />
+            <Text style={styles.mutedText}>Syncing Hack Room...</Text>
+          </View>
+        ) : null}
+
+
+        <RoomCommandCenter
+          createRoomPending={createRoom.isPending}
+          createRoomModalOpen={createRoomModalOpen}
+          inviteCode={inviteCode}
+          joinRoomPending={joinRoom.isPending}
+          onCreateRoom={() => createRoom.mutate(roomForm)}
+          onInviteCodeChange={setInviteCode}
+          onJoinRoom={() => joinRoom.mutate({ inviteCode })}
+          onRoomFormChange={setRoomForm}
+          onSetCreateRoomModalOpen={setCreateRoomModalOpen}
+          roomForm={roomForm}
+        />
+
+        <RoomShelf
+          allRooms={allRooms}
+          onSelectRoom={handleOpenRoom}
+          onShareRoom={handleShareCode}
+        />
+
+        {dashboard.isLoading ? (
+          <Panel
+            eyebrow="Sync"
+            icon="cloud-download-outline"
+            title="Loading Hack Room Data"
+            tone="cyan"
+          >
+            <View style={styles.loadingInline}>
+              <ActivityIndicator color={theme.participant} />
+              <Text style={styles.mutedText}>Fetching rooms, tasks, and proof records.</Text>
+            </View>
+          </Panel>
+        ) : null}
+
+        {dashboard.error ? <ErrorBanner message={dashboard.error.message} /> : null}
+        {message ? <StatusBanner message={message.text} tone={message.tone} /> : null}
+
+      </ScrollView>
+    </View>
+  );
+}
+
+function HackRoomDetailDashboard({
+  roomId,
+  user: _user,
+}: {
+  roomId: string;
+  user: SessionUser;
+}) {
+  const router = useRouter();
+  const dashboard = useQuery(trpc.hackRoom.dashboard.queryOptions());
   const [activeRoomTab, setActiveRoomTab] = useState<RoomTab>("participants");
   const [activeParticipantTab, setActiveParticipantTab] =
     useState<ParticipantTab>("assignments");
@@ -506,24 +655,24 @@ function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
 
     return rooms;
   }, [hostedRooms, joinedRooms]);
-  const selectedRoomEntry = allRooms.find((entry) => entry.room._id === selectedRoomId);
+  const selectedRoomEntry = allRooms.find((entry) => entry.room._id === roomId);
   const selectedRoom = selectedRoomEntry?.room;
   const selectedRoomRole = selectedRoomEntry?.role ?? "participant";
   const roomTasks = useMemo(
-    () => tasks.filter((task) => task.roomId === selectedRoomId),
-    [selectedRoomId, tasks],
+    () => tasks.filter((task) => task.roomId === roomId),
+    [roomId, tasks],
   );
   const roomSubmissions = useMemo(
-    () => hostSubmissions.filter((submission) => submission.roomId === selectedRoomId),
-    [hostSubmissions, selectedRoomId],
+    () => hostSubmissions.filter((submission) => submission.roomId === roomId),
+    [hostSubmissions, roomId],
   );
   const roomMySubmissions = useMemo(
-    () => mySubmissions.filter((submission) => submission.roomId === selectedRoomId),
-    [mySubmissions, selectedRoomId],
+    () => mySubmissions.filter((submission) => submission.roomId === roomId),
+    [mySubmissions, roomId],
   );
   const roomWinners = useMemo(
-    () => visibleWinners.filter((submission) => submission.roomId === selectedRoomId),
-    [selectedRoomId, visibleWinners],
+    () => visibleWinners.filter((submission) => submission.roomId === roomId),
+    [roomId, visibleWinners],
   );
   const selectedTask = roomTasks.find((task) => task._id === selectedTaskId);
   const pendingHostSubmissions = roomSubmissions.filter(
@@ -536,16 +685,6 @@ function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
     ["approved", "winner"].includes(submission.status),
   );
   const winnerSubmissions = roomSubmissions.filter((submission) => submission.status === "winner");
-
-  useEffect(() => {
-    if (
-      selectedRoomId &&
-      !dashboard.isFetching &&
-      !allRooms.some((entry) => entry.room._id === selectedRoomId)
-    ) {
-      setSelectedRoomId("");
-    }
-  }, [allRooms, dashboard.isFetching, selectedRoomId]);
 
   useEffect(() => {
     if (!roomTasks.length) {
@@ -563,33 +702,6 @@ function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
   const invalidateDashboard = async () => {
     await queryClient.invalidateQueries({ queryKey: trpc.hackRoom.dashboard.queryKey() });
   };
-
-  const createRoom = useMutation(
-    trpc.hackRoom.createRoom.mutationOptions({
-      onError: (error) => setMessage({ text: error.message, tone: "red" }),
-      onSuccess: async (room) => {
-        setRoomForm(emptyRoomForm);
-        setCreateRoomModalOpen(false);
-        setActiveRoomTab("participants");
-        setMessage({ text: `Created ${room.name} with invite ${room.inviteCode}`, tone: "violet" });
-        await invalidateDashboard();
-        setSelectedRoomId(room._id);
-      },
-    }),
-  );
-
-  const joinRoom = useMutation(
-    trpc.hackRoom.joinRoom.mutationOptions({
-      onError: (error) => setMessage({ text: error.message, tone: "red" }),
-      onSuccess: async (room) => {
-        setInviteCode("");
-        setActiveParticipantTab("assignments");
-        setMessage({ text: `Joined ${room.name}`, tone: "cyan" });
-        await invalidateDashboard();
-        setSelectedRoomId(room._id);
-      },
-    }),
-  );
 
   const createTask = useMutation(
     trpc.hackRoom.createTask.mutationOptions({
@@ -645,8 +757,6 @@ function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
   );
 
   const isBusy =
-    createRoom.isPending ||
-    joinRoom.isPending ||
     createTask.isPending ||
     submitProof.isPending ||
     approveSubmission.isPending ||
@@ -660,6 +770,10 @@ function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
 
   const handleNotifications = () => {
     setMessage({ text: "No new notifications right now", tone: "cyan" });
+  };
+
+  const handleBackToRooms = () => {
+    router.replace("/hack-room");
   };
 
   const toggleProofType = (proofType: ProofType) => {
@@ -680,7 +794,7 @@ function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
 
   const handleCreateTask = (kind: TaskKind) => {
     if (!selectedRoom) {
-      setMessage({ text: "Select or create a room before publishing", tone: "red" });
+      setMessage({ text: "Room is still loading", tone: "red" });
       return;
     }
     if (selectedRoomRole !== "host") {
@@ -758,44 +872,32 @@ function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
+        <Pressable
+          accessibilityRole="button"
+          onPress={handleBackToRooms}
+          style={({ pressed }) => [styles.detailBackButton, pressed && styles.pressed]}
+        >
+          <Ionicons name="chevron-back-outline" size={18} color={theme.participant} />
+          <Text style={styles.detailBackText}>Hack Rooms</Text>
+        </Pressable>
+
         {isBusy ? (
           <View style={styles.compactBusyRow}>
             <ActivityIndicator color={theme.award} />
-            <Text style={styles.mutedText}>Syncing Hack Room...</Text>
+            <Text style={styles.mutedText}>Syncing room...</Text>
           </View>
         ) : null}
-
-
-        <RoomCommandCenter
-          createRoomPending={createRoom.isPending}
-          createRoomModalOpen={createRoomModalOpen}
-          inviteCode={inviteCode}
-          joinRoomPending={joinRoom.isPending}
-          onCreateRoom={() => createRoom.mutate(roomForm)}
-          onInviteCodeChange={setInviteCode}
-          onJoinRoom={() => joinRoom.mutate({ inviteCode })}
-          onRoomFormChange={setRoomForm}
-          onSetCreateRoomModalOpen={setCreateRoomModalOpen}
-          roomForm={roomForm}
-        />
-
-        <RoomShelf
-          allRooms={allRooms}
-          onSelectRoom={setSelectedRoomId}
-          onShareRoom={handleShareCode}
-          selectedRoomId={selectedRoomId}
-        />
 
         {dashboard.isLoading ? (
           <Panel
             eyebrow="Sync"
             icon="cloud-download-outline"
-            title="Loading Hack Room Data"
+            title="Loading Room"
             tone="cyan"
           >
             <View style={styles.loadingInline}>
               <ActivityIndicator color={theme.participant} />
-              <Text style={styles.mutedText}>Fetching rooms, tasks, and proof records.</Text>
+              <Text style={styles.mutedText}>Fetching room details.</Text>
             </View>
           </Panel>
         ) : null}
@@ -845,6 +947,19 @@ function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
             taskKind={taskKind}
             winnerSubmissions={winnerSubmissions}
           />
+        ) : !dashboard.isLoading ? (
+          <Panel eyebrow="Room" icon="alert-circle-outline" title="Room Not Found" tone="red">
+            <EmptyState
+              icon="flash-outline"
+              text="This room is not available for your account. Go back and choose one of your rooms."
+            />
+            <HackButton
+              icon="arrow-back-outline"
+              label="Back to Hack Rooms"
+              onPress={handleBackToRooms}
+              tone="cyan"
+            />
+          </Panel>
         ) : null}
       </ScrollView>
     </View>
@@ -1002,12 +1117,10 @@ function RoomShelf({
   allRooms,
   onSelectRoom,
   onShareRoom,
-  selectedRoomId,
 }: {
   allRooms: Array<{ role: Role; room: HackRoom }>;
   onSelectRoom: (roomId: string) => void;
   onShareRoom: (room: HackRoom) => void;
-  selectedRoomId: string;
 }) {
   return (
     <View style={styles.roomShelfSection}>
@@ -1031,7 +1144,7 @@ function RoomShelf({
               onShare={() => onShareRoom(room)}
               role={role}
               room={room}
-              selected={selectedRoomId === room._id}
+              selected={false}
             />
           ))}
         </ScrollView>
@@ -3164,6 +3277,23 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     padding: 16,
+  },
+  detailBackButton: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    backgroundColor: theme.participantDark,
+    borderColor: theme.participantBorder,
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 6,
+    minHeight: 40,
+    paddingHorizontal: 11,
+  },
+  detailBackText: {
+    color: theme.participant,
+    fontSize: 12,
+    fontWeight: "900",
   },
   disabled: {
     opacity: 0.48,
