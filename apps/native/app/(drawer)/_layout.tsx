@@ -10,6 +10,7 @@ const DrawerLayout = () => {
 
   return (
     <Drawer
+      initialRouteName="(tabs)"
       screenOptions={{
         headerShown: false,
         headerStyle: {
@@ -35,17 +36,17 @@ const DrawerLayout = () => {
       }}
     >
       <Drawer.Screen
-        name="index"
+        name="(tabs)"
         options={{
-          headerTitle: "Hack Room",
-          drawerLabel: "Hack Room",
+          headerTitle: "Home",
+          drawerLabel: "Home",
           drawerIcon: ({ size, color }) => (
-            <Ionicons name="flash-outline" size={size} color={color} />
+            <Ionicons name="home-outline" size={size} color={color} />
           ),
         }}
       />
       <Drawer.Screen
-        name="(tabs)"
+        name="index"
         options={{
           drawerItemStyle: { display: "none" },
           headerShown: false,

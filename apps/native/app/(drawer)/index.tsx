@@ -1,5 +1,5 @@
-import { HackRoomHome } from "@/components/hack-room";
+import { Redirect } from "expo-router";
 
-export default function Home() {
-  return <HackRoomHome />;
+export default function DrawerIndex() {
+  return <Redirect href="/(drawer)/(tabs)" />;
 }

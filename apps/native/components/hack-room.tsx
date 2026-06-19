@@ -2,6 +2,7 @@ import type { AppRouter } from "@rdm-hack/api/routers/index";
 import { Ionicons } from "@expo/vector-icons";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import type { inferRouterOutputs } from "@trpc/server";
+import { useNavigation } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -17,6 +18,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import z from "zod";
 
 import { authClient } from "@/lib/auth-client";
@@ -34,6 +36,11 @@ type Role = "participant" | "host";
 type AuthMode = "sign-in" | "sign-up";
 type ProofType = "github" | "drive" | "file" | "url" | "video" | "deck";
 type Tone = "cyan" | "violet" | "gold" | "orange" | "red";
+type SessionUser = {
+  email: string;
+  id: string;
+  name: string;
+};
 
 const proofTypeOptions: Array<{ label: string; value: ProofType }> = [
   { label: "GitHub", value: "github" },
@@ -70,7 +77,11 @@ const emptySubmitForm = {
   proofUrl: "",
 };
 
-export function HackRoomHome() {
+export function NativeHomeScreen() {
+  return <AuthenticatedRoute>{(user) => <HomeDashboard user={user} />}</AuthenticatedRoute>;
+}
+
+export function AuthenticatedTabs({ children }: { children: React.ReactNode }) {
   const { data: session, isPending } = authClient.useSession();
 
   if (isPending) {
@@ -86,7 +97,42 @@ export function HackRoomHome() {
     return <AuthGateway />;
   }
 
-  return <HackRoomDashboard user={session.user} />;
+  return children;
+}
+
+export function HackRoomHome() {
+  return <HackRoomScreen />;
+}
+
+export function HackRoomScreen() {
+  return <AuthenticatedRoute>{(user) => <HackRoomDashboard user={user} />}</AuthenticatedRoute>;
+}
+
+export function ProfileScreen() {
+  return <AuthenticatedRoute>{(user) => <ProfileDashboard user={user} />}</AuthenticatedRoute>;
+}
+
+function AuthenticatedRoute({
+  children,
+}: {
+  children: (user: SessionUser) => React.ReactNode;
+}) {
+  const { data: session, isPending } = authClient.useSession();
+
+  if (isPending) {
+    return (
+      <View style={styles.loadingScreen}>
+        <ActivityIndicator color={theme.participant} />
+        <Text style={styles.loadingText}>Opening Hack Room...</Text>
+      </View>
+    );
+  }
+
+  if (!session?.user) {
+    return <AuthGateway />;
+  }
+
+  return children(session.user);
 }
 
 function AuthGateway() {
@@ -246,15 +292,176 @@ function AuthGateway() {
   );
 }
 
-function HackRoomDashboard({
-  user,
-}: {
-  user: {
-    email: string;
-    id: string;
-    name: string;
+function HomeDashboard({ user }: { user: SessionUser }) {
+  const dashboard = useQuery(trpc.hackRoom.dashboard.queryOptions());
+  const [message, setMessage] = useState<{ text: string; tone: Tone } | null>(null);
+
+  const handleSignOut = async () => {
+    await authClient.signOut();
+    await queryClient.invalidateQueries();
   };
-}) {
+
+  return (
+    <View style={styles.screen}>
+      <AppHeader
+        onNotificationPress={() => setMessage({ text: "No new notifications right now", tone: "cyan" })}
+        onProfilePress={handleSignOut}
+      />
+      <ScrollView
+        contentContainerStyle={styles.dashboardContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.dashboardHero}>
+          <Text style={styles.dashboardHeadline}>Home</Text>
+          <Text style={styles.dashboardCopy}>
+            Welcome back, {firstName(user.name)}. Your room activity, pending reviews, and XRDM
+            progress live here.
+          </Text>
+
+          <View style={styles.profileCard}>
+            <Avatar name={user.name} tone="cyan" />
+            <View style={styles.profileText}>
+              <Text style={styles.profileName}>{user.name}</Text>
+              <Text style={styles.profileEmail}>{user.email}</Text>
+            </View>
+            {dashboard.isLoading ? <ActivityIndicator color={theme.award} /> : null}
+          </View>
+
+          <View style={styles.metricsGrid}>
+            <MetricCard
+              icon="shield-checkmark-outline"
+              label="Hosted"
+              tone="violet"
+              value={dashboard.data?.stats.activeRooms ?? 0}
+            />
+            <MetricCard
+              icon="enter-outline"
+              label="Joined"
+              tone="cyan"
+              value={dashboard.data?.stats.joinedRooms ?? 0}
+            />
+            <MetricCard
+              icon="hourglass-outline"
+              label="Reviews"
+              tone="gold"
+              value={dashboard.data?.stats.pendingSubmissions ?? 0}
+            />
+          </View>
+        </View>
+
+        {dashboard.error ? <ErrorBanner message={dashboard.error.message} /> : null}
+        {message ? <StatusBanner message={message.text} tone={message.tone} /> : null}
+
+        <Panel eyebrow="Overview" icon="grid-outline" title="Hack Room Snapshot" tone="cyan">
+          <View style={styles.listStack}>
+            {dashboard.data?.joinedRooms.length || dashboard.data?.hostedRooms.length ? (
+              <>
+                {dashboard.data.hostedRooms.slice(0, 2).map((room) => (
+                  <RoomCard key={room._id} role="host" room={room} />
+                ))}
+                {dashboard.data.joinedRooms.slice(0, 2).map((room) => (
+                  <RoomCard key={room._id} role="participant" room={room} />
+                ))}
+              </>
+            ) : (
+              <EmptyState
+                icon="home-outline"
+                text="Create or join a hack room from the Hack Room tab to start seeing activity here."
+              />
+            )}
+          </View>
+        </Panel>
+
+        <Panel eyebrow="Proof" icon="checkmark-circle-outline" title="Recent Submissions" tone="gold">
+          <View style={styles.listStack}>
+            {dashboard.data?.mySubmissions.length ? (
+              dashboard.data.mySubmissions
+                .slice(0, 2)
+                .map((submission) => (
+                  <SubmissionCard key={submission._id} submission={submission} />
+                ))
+            ) : (
+              <EmptyState
+                icon="checkmark-circle-outline"
+                text="Your submitted proof records will appear here after you complete a task."
+              />
+            )}
+          </View>
+        </Panel>
+      </ScrollView>
+    </View>
+  );
+}
+
+function ProfileDashboard({ user }: { user: SessionUser }) {
+  const dashboard = useQuery(trpc.hackRoom.dashboard.queryOptions());
+  const [message, setMessage] = useState<{ text: string; tone: Tone } | null>(null);
+
+  const handleSignOut = async () => {
+    await authClient.signOut();
+    await queryClient.invalidateQueries();
+  };
+
+  return (
+    <View style={styles.screen}>
+      <AppHeader
+        onNotificationPress={() => setMessage({ text: "No new notifications right now", tone: "cyan" })}
+        onProfilePress={handleSignOut}
+      />
+      <ScrollView
+        contentContainerStyle={styles.dashboardContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.dashboardHero}>
+          <View style={styles.profileHero}>
+            <Avatar name={user.name} tone="cyan" />
+            <View style={styles.profileText}>
+              <Text style={styles.dashboardHeadline}>{user.name}</Text>
+              <Text style={styles.profileEmail}>{user.email}</Text>
+            </View>
+          </View>
+
+          <View style={styles.metricsGrid}>
+            <MetricCard
+              icon="flash-outline"
+              label="Rooms"
+              tone="cyan"
+              value={(dashboard.data?.stats.activeRooms ?? 0) + (dashboard.data?.stats.joinedRooms ?? 0)}
+            />
+            <MetricCard
+              icon="trophy-outline"
+              label="Wins"
+              tone="gold"
+              value={dashboard.data?.stats.winners ?? 0}
+            />
+            <MetricCard
+              icon="people-outline"
+              label="Network"
+              tone="violet"
+              value={dashboard.data?.stats.participants ?? 0}
+            />
+          </View>
+        </View>
+
+        {dashboard.error ? <ErrorBanner message={dashboard.error.message} /> : null}
+        {message ? <StatusBanner message={message.text} tone={message.tone} /> : null}
+
+        <Panel eyebrow="Account" icon="person-circle-outline" title="Profile" tone="cyan">
+          <View style={styles.profileDetails}>
+            <ProfileRow label="Name" value={user.name} />
+            <ProfileRow label="Email" value={user.email} />
+            <ProfileRow label="User ID" value={user.id} />
+          </View>
+          <HackButton icon="log-out-outline" label="Sign Out" onPress={handleSignOut} tone="red" />
+        </Panel>
+      </ScrollView>
+    </View>
+  );
+}
+
+function HackRoomDashboard({ user }: { user: SessionUser }) {
   const dashboard = useQuery(trpc.hackRoom.dashboard.queryOptions());
   const [role, setRole] = useState<Role>("participant");
   const [roomForm, setRoomForm] = useState(emptyRoomForm);
@@ -382,6 +589,10 @@ function HackRoomDashboard({
     await queryClient.invalidateQueries();
   };
 
+  const handleNotifications = () => {
+    setMessage({ text: "No new notifications right now", tone: "cyan" });
+  };
+
   const toggleProofType = (proofType: ProofType) => {
     setProofTypes((current) => {
       if (current.includes(proofType)) {
@@ -400,32 +611,13 @@ function HackRoomDashboard({
 
   return (
     <View style={styles.screen}>
+      <AppHeader onNotificationPress={handleNotifications} onProfilePress={handleSignOut} />
       <ScrollView
         contentContainerStyle={styles.dashboardContent}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.dashboardHero}>
-          <View style={styles.heroTopRow}>
-            <View style={styles.brandRow}>
-              <View style={styles.brandMark}>
-                <Image accessibilityIgnoresInvertColors source={rdmLogo} style={styles.headerLogo} />
-              </View>
-              <View>
-                <Text style={styles.eyebrow}>XRDM Hack Room</Text>
-                <Text style={styles.brandName}>Mission Control</Text>
-              </View>
-            </View>
-            <Pressable
-              accessibilityRole="button"
-              onPress={handleSignOut}
-              style={({ pressed }) => [styles.signOutButton, pressed && styles.pressed]}
-            >
-              <Ionicons name="log-out-outline" size={17} color={theme.danger} />
-              <Text style={styles.signOutText}>Sign Out</Text>
-            </Pressable>
-          </View>
-
           <Text style={styles.dashboardHeadline}>Good to see you, {firstName(user.name)}.</Text>
           <Text style={styles.dashboardCopy}>
             Host rooms with invite codes, review verifiable proof, or join a sprint and ship your
@@ -1082,6 +1274,87 @@ function HostTrack({
   );
 }
 
+function AppHeader({
+  onNotificationPress,
+  onProfilePress,
+}: {
+  onNotificationPress: () => void;
+  onProfilePress: () => void;
+}) {
+  const navigation = useNavigation();
+  const handleOpenMenu = () => {
+    (navigation as { dispatch: (action: { type: string }) => void }).dispatch({
+      type: "OPEN_DRAWER",
+    });
+  };
+
+  return (
+    <SafeAreaView edges={["top"]} style={styles.homeHeaderSafe}>
+      <View style={styles.homeHeader}>
+        <Image accessibilityIgnoresInvertColors source={rdmLogo} style={styles.homeHeaderLogo} />
+        <View style={styles.homeHeaderActions}>
+          <HeaderIconButton
+            accessibilityLabel="Notifications"
+            icon="notifications-outline"
+            onPress={onNotificationPress}
+          />
+          <HeaderIconButton
+            accessibilityLabel="Open menu"
+            icon="menu-outline"
+            onPress={handleOpenMenu}
+          />
+          <HeaderIconButton
+            accessibilityLabel="Sign out"
+            icon="person-circle-outline"
+            onPress={onProfilePress}
+            tone="profile"
+          />
+        </View>
+      </View>
+    </SafeAreaView>
+  );
+}
+
+function HeaderIconButton({
+  accessibilityLabel,
+  icon,
+  onPress,
+  tone = "default",
+}: {
+  accessibilityLabel: string;
+  icon: React.ComponentProps<typeof Ionicons>["name"];
+  onPress: () => void;
+  tone?: "default" | "profile";
+}) {
+  const color = tone === "profile" ? theme.participant : theme.text;
+
+  return (
+    <Pressable
+      accessibilityLabel={accessibilityLabel}
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.headerIconButton,
+        tone === "profile" && styles.headerProfileButton,
+        pressed && styles.pressed,
+      ]}
+    >
+      <Ionicons name={icon} size={22} color={color} />
+    </Pressable>
+  );
+}
+
+function ProfileRow({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.profileRow}>
+      <Text style={styles.profileRowLabel}>{label}</Text>
+      <Text selectable style={styles.profileRowValue}>
+        {value}
+      </Text>
+    </View>
+  );
+}
+
 function Panel({
   action,
   children,
@@ -1545,24 +1818,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
   },
-  brandMark: {
-    alignItems: "center",
-    height: 42,
-    justifyContent: "center",
-    overflow: "hidden",
-    width: 112,
-  },
-  brandName: {
-    color: theme.text,
-    fontSize: 18,
-    fontWeight: "700",
-    letterSpacing: 0,
-  },
-  brandRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 12,
-  },
   button: {
     alignItems: "center",
     borderRadius: 8,
@@ -1625,7 +1880,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     letterSpacing: 0,
     lineHeight: 34,
-    marginTop: 20,
   },
   dashboardHero: {
     backgroundColor: theme.panel,
@@ -1699,16 +1953,43 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     letterSpacing: 0,
   },
-  heroTopRow: {
-    alignItems: "flex-start",
+  headerIconButton: {
+    alignItems: "center",
+    backgroundColor: theme.panelStrong,
+    borderColor: theme.border,
+    borderRadius: 8,
+    borderWidth: 1,
+    height: 42,
+    justifyContent: "center",
+    width: 42,
+  },
+  headerProfileButton: {
+    backgroundColor: theme.participantDark,
+    borderColor: theme.participantBorder,
+  },
+  homeHeader: {
+    alignItems: "center",
+    backgroundColor: theme.background,
+    borderBottomColor: theme.border,
+    borderBottomWidth: 1,
     flexDirection: "row",
     gap: 12,
     justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
   },
-  headerLogo: {
-    height: 42,
+  homeHeaderActions: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+  },
+  homeHeaderLogo: {
+    height: 44,
     resizeMode: "cover",
-    width: 112,
+    width: 116,
+  },
+  homeHeaderSafe: {
+    backgroundColor: theme.background,
   },
   hostRoomCard: {
     backgroundColor: theme.panelStrong,
@@ -1886,9 +2167,36 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 2,
   },
+  profileDetails: {
+    gap: 10,
+  },
+  profileHero: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 12,
+  },
   profileName: {
     color: theme.text,
     fontSize: 14,
+    fontWeight: "700",
+  },
+  profileRow: {
+    backgroundColor: theme.backgroundAlt,
+    borderColor: theme.border,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 4,
+    padding: 12,
+  },
+  profileRowLabel: {
+    color: theme.dim,
+    fontFamily: Platform.select({ default: "monospace" }),
+    fontSize: 10,
+    textTransform: "uppercase",
+  },
+  profileRowValue: {
+    color: theme.text,
+    fontSize: 13,
     fontWeight: "700",
   },
   profileText: {
@@ -2088,22 +2396,6 @@ const styles = StyleSheet.create({
     color: theme.host,
     fontSize: 11,
     fontWeight: "700",
-  },
-  signOutButton: {
-    alignItems: "center",
-    backgroundColor: theme.dangerDark,
-    borderColor: theme.dangerBorder,
-    borderRadius: 8,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-  },
-  signOutText: {
-    color: theme.danger,
-    fontSize: 11,
-    fontWeight: "800",
   },
   statusBanner: {
     alignItems: "center",
