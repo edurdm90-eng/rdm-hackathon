@@ -538,17 +538,14 @@ function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
   const winnerSubmissions = roomSubmissions.filter((submission) => submission.status === "winner");
 
   useEffect(() => {
-    if (!allRooms.length) {
-      if (selectedRoomId) {
-        setSelectedRoomId("");
-      }
-      return;
+    if (
+      selectedRoomId &&
+      !dashboard.isFetching &&
+      !allRooms.some((entry) => entry.room._id === selectedRoomId)
+    ) {
+      setSelectedRoomId("");
     }
-
-    if (!selectedRoomId || !allRooms.some((entry) => entry.room._id === selectedRoomId)) {
-      setSelectedRoomId(allRooms[0]?.room._id ?? "");
-    }
-  }, [allRooms, selectedRoomId]);
+  }, [allRooms, dashboard.isFetching, selectedRoomId]);
 
   useEffect(() => {
     if (!roomTasks.length) {
@@ -573,10 +570,10 @@ function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
       onSuccess: async (room) => {
         setRoomForm(emptyRoomForm);
         setCreateRoomModalOpen(false);
-        setSelectedRoomId(room._id);
         setActiveRoomTab("participants");
         setMessage({ text: `Created ${room.name} with invite ${room.inviteCode}`, tone: "violet" });
         await invalidateDashboard();
+        setSelectedRoomId(room._id);
       },
     }),
   );
@@ -586,10 +583,10 @@ function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
       onError: (error) => setMessage({ text: error.message, tone: "red" }),
       onSuccess: async (room) => {
         setInviteCode("");
-        setSelectedRoomId(room._id);
         setActiveParticipantTab("assignments");
         setMessage({ text: `Joined ${room.name}`, tone: "cyan" });
         await invalidateDashboard();
+        setSelectedRoomId(room._id);
       },
     }),
   );
@@ -770,7 +767,6 @@ function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
 
 
         <RoomCommandCenter
-          allRooms={allRooms}
           createRoomPending={createRoom.isPending}
           createRoomModalOpen={createRoomModalOpen}
           inviteCode={inviteCode}
@@ -779,10 +775,14 @@ function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
           onInviteCodeChange={setInviteCode}
           onJoinRoom={() => joinRoom.mutate({ inviteCode })}
           onRoomFormChange={setRoomForm}
-          onSelectRoom={setSelectedRoomId}
           onSetCreateRoomModalOpen={setCreateRoomModalOpen}
-          onShareRoom={handleShareCode}
           roomForm={roomForm}
+        />
+
+        <RoomShelf
+          allRooms={allRooms}
+          onSelectRoom={setSelectedRoomId}
+          onShareRoom={handleShareCode}
           selectedRoomId={selectedRoomId}
         />
 
@@ -852,7 +852,6 @@ function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
 }
 
 function RoomCommandCenter({
-  allRooms,
   createRoomPending,
   createRoomModalOpen,
   inviteCode,
@@ -861,13 +860,9 @@ function RoomCommandCenter({
   onInviteCodeChange,
   onJoinRoom,
   onRoomFormChange,
-  onSelectRoom,
   onSetCreateRoomModalOpen,
-  onShareRoom,
   roomForm,
-  selectedRoomId,
 }: {
-  allRooms: Array<{ role: Role; room: HackRoom }>;
   createRoomPending: boolean;
   createRoomModalOpen: boolean;
   inviteCode: string;
@@ -876,11 +871,8 @@ function RoomCommandCenter({
   onInviteCodeChange: (value: string) => void;
   onJoinRoom: () => void;
   onRoomFormChange: React.Dispatch<React.SetStateAction<typeof emptyRoomForm>>;
-  onSelectRoom: (roomId: string) => void;
   onSetCreateRoomModalOpen: (open: boolean) => void;
-  onShareRoom: (room: HackRoom) => void;
   roomForm: typeof emptyRoomForm;
-  selectedRoomId: string;
 }) {
   return (
     <>
@@ -931,31 +923,6 @@ function RoomCommandCenter({
             )}
           </Pressable>
         </View>
-
-        <View style={styles.roomShelfHeader}>
-          <Text style={styles.sectionEyebrow}>Your rooms</Text>
-          <CounterLabel label={`${allRooms.length} active`} />
-        </View>
-        {allRooms.length ? (
-          <ScrollView
-            contentContainerStyle={styles.roomShelf}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-          >
-            {allRooms.map(({ role, room }) => (
-              <SelectableRoomCard
-                key={room._id}
-                onPress={() => onSelectRoom(room._id)}
-                onShare={() => onShareRoom(room)}
-                role={role}
-                room={room}
-                selected={selectedRoomId === room._id}
-              />
-            ))}
-          </ScrollView>
-        ) : (
-          <EmptyState icon="flash-outline" text="No rooms yet. Join with a code or create one." />
-        )}
       </Panel>
 
       <Modal
@@ -1028,6 +995,50 @@ function RoomCommandCenter({
         </View>
       </Modal>
     </>
+  );
+}
+
+function RoomShelf({
+  allRooms,
+  onSelectRoom,
+  onShareRoom,
+  selectedRoomId,
+}: {
+  allRooms: Array<{ role: Role; room: HackRoom }>;
+  onSelectRoom: (roomId: string) => void;
+  onShareRoom: (room: HackRoom) => void;
+  selectedRoomId: string;
+}) {
+  return (
+    <View style={styles.roomShelfSection}>
+      <View style={styles.roomShelfHeaderOutside}>
+        <View>
+          <Text style={styles.sectionEyebrow}>Your Hack Rooms</Text>
+          <Text style={styles.roomShelfTitle}>Select a room to open details</Text>
+        </View>
+        <CounterLabel label={`${allRooms.length} active`} />
+      </View>
+      {allRooms.length ? (
+        <ScrollView
+          contentContainerStyle={styles.roomShelf}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+        >
+          {allRooms.map(({ role, room }) => (
+            <SelectableRoomCard
+              key={room._id}
+              onPress={() => onSelectRoom(room._id)}
+              onShare={() => onShareRoom(room)}
+              role={role}
+              room={room}
+              selected={selectedRoomId === room._id}
+            />
+          ))}
+        </ScrollView>
+      ) : (
+        <EmptyState icon="flash-outline" text="Created and joined rooms will appear here." />
+      )}
+    </View>
   );
 }
 
@@ -3736,6 +3747,20 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "space-between",
+  },
+  roomShelfHeaderOutside: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  roomShelfSection: {
+    gap: 10,
+  },
+  roomShelfTitle: {
+    color: theme.text,
+    fontSize: 16,
+    fontWeight: "800",
+    marginTop: 3,
   },
   roomStatsGrid: {
     flexDirection: "row",
