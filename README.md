@@ -32,6 +32,7 @@ This project uses MongoDB with Mongoose.
 
 1. Make sure you have MongoDB set up.
 2. Update your `apps/server/.env` file with your MongoDB connection URI.
+3. Data is stored in the `rdm-hack` MongoDB database by default. Override this with `DATABASE_NAME` if needed.
 
 Then, run the development server:
 
