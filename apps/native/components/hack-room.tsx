@@ -33,6 +33,10 @@ type HackTask = DashboardData["tasks"][number];
 type HackRoom = DashboardData["hostedRooms"][number];
 type HackSubmission = DashboardData["hostSubmissions"][number];
 type Role = "participant" | "host";
+type TaskKind = "task" | "challenge" | "game";
+type RoomTab = "participants" | "assign" | "history" | "challenges" | "winners";
+type ParticipantTab = "assignments" | "proof" | "winners";
+type SubmissionStatus = DashboardData["mySubmissions"][number]["status"];
 type AuthMode = "sign-in" | "sign-up";
 type ProofType = "github" | "drive" | "file" | "url" | "video" | "deck";
 type Tone = "cyan" | "violet" | "gold" | "orange" | "red";
@@ -463,11 +467,14 @@ function ProfileDashboard({ user }: { user: SessionUser }) {
 
 function HackRoomDashboard({ user }: { user: SessionUser }) {
   const dashboard = useQuery(trpc.hackRoom.dashboard.queryOptions());
-  const [role, setRole] = useState<Role>("participant");
   const [roomForm, setRoomForm] = useState(emptyRoomForm);
   const [inviteCode, setInviteCode] = useState("");
-  const [taskRoomId, setTaskRoomId] = useState("");
+  const [selectedRoomId, setSelectedRoomId] = useState("");
+  const [activeRoomTab, setActiveRoomTab] = useState<RoomTab>("participants");
+  const [activeParticipantTab, setActiveParticipantTab] =
+    useState<ParticipantTab>("assignments");
   const [taskForm, setTaskForm] = useState(emptyTaskForm);
+  const [taskKind, setTaskKind] = useState<TaskKind>("challenge");
   const [proofTypes, setProofTypes] = useState<Array<ProofType>>(["github", "video"]);
   const [selectedTaskId, setSelectedTaskId] = useState("");
   const [submitForm, setSubmitForm] = useState(emptySubmitForm);
@@ -480,29 +487,79 @@ function HackRoomDashboard({ user }: { user: SessionUser }) {
   const tasks = dashboard.data?.tasks ?? [];
   const mySubmissions = dashboard.data?.mySubmissions ?? [];
   const hostSubmissions = dashboard.data?.hostSubmissions ?? [];
-  const firstHostedRoomId = hostedRooms[0]?._id ?? "";
-  const joinedRoomIds = useMemo(() => new Set(joinedRooms.map((room) => room._id)), [joinedRooms]);
-  const participantTasks = useMemo(
-    () => tasks.filter((task) => joinedRoomIds.has(task.roomId)),
-    [joinedRoomIds, tasks],
+  const visibleWinners = dashboard.data?.visibleWinners ?? [];
+  const allRooms = useMemo(() => {
+    const seen = new Set<string>();
+    const rooms: Array<{ role: Role; room: HackRoom }> = [];
+
+    hostedRooms.forEach((room) => {
+      seen.add(room._id);
+      rooms.push({ role: "host", room });
+    });
+    joinedRooms.forEach((room) => {
+      if (!seen.has(room._id)) {
+        rooms.push({ role: "participant", room });
+      }
+    });
+
+    return rooms;
+  }, [hostedRooms, joinedRooms]);
+  const selectedRoomEntry = allRooms.find((entry) => entry.room._id === selectedRoomId);
+  const selectedRoom = selectedRoomEntry?.room;
+  const selectedRoomRole = selectedRoomEntry?.role ?? "participant";
+  const roomTasks = useMemo(
+    () => tasks.filter((task) => task.roomId === selectedRoomId),
+    [selectedRoomId, tasks],
   );
-  const selectedTask = participantTasks.find((task) => task._id === selectedTaskId);
-  const pendingHostSubmissions = hostSubmissions.filter(
+  const roomSubmissions = useMemo(
+    () => hostSubmissions.filter((submission) => submission.roomId === selectedRoomId),
+    [hostSubmissions, selectedRoomId],
+  );
+  const roomMySubmissions = useMemo(
+    () => mySubmissions.filter((submission) => submission.roomId === selectedRoomId),
+    [mySubmissions, selectedRoomId],
+  );
+  const roomWinners = useMemo(
+    () => visibleWinners.filter((submission) => submission.roomId === selectedRoomId),
+    [selectedRoomId, visibleWinners],
+  );
+  const selectedTask = roomTasks.find((task) => task._id === selectedTaskId);
+  const pendingHostSubmissions = roomSubmissions.filter(
     (submission) => submission.status === "submitted",
   );
-  const winnerSubmissions = hostSubmissions.filter((submission) => submission.status === "winner");
+  const approvedHostSubmissions = roomSubmissions.filter(
+    (submission) => submission.status === "approved",
+  );
+  const historySubmissions = roomSubmissions.filter((submission) =>
+    ["approved", "winner"].includes(submission.status),
+  );
+  const winnerSubmissions = roomSubmissions.filter((submission) => submission.status === "winner");
 
   useEffect(() => {
-    if (!taskRoomId && firstHostedRoomId) {
-      setTaskRoomId(firstHostedRoomId);
+    if (!allRooms.length) {
+      if (selectedRoomId) {
+        setSelectedRoomId("");
+      }
+      return;
     }
-  }, [firstHostedRoomId, taskRoomId]);
+
+    if (!selectedRoomId || !allRooms.some((entry) => entry.room._id === selectedRoomId)) {
+      setSelectedRoomId(allRooms[0]?.room._id ?? "");
+    }
+  }, [allRooms, selectedRoomId]);
 
   useEffect(() => {
-    if (!selectedTaskId && participantTasks[0]?._id) {
-      setSelectedTaskId(participantTasks[0]._id);
+    if (!roomTasks.length) {
+      if (selectedTaskId) {
+        setSelectedTaskId("");
+      }
+      return;
     }
-  }, [participantTasks, selectedTaskId]);
+
+    if (!selectedTaskId || !roomTasks.some((task) => task._id === selectedTaskId)) {
+      setSelectedTaskId(roomTasks[0]?._id ?? "");
+    }
+  }, [roomTasks, selectedTaskId]);
 
   const invalidateDashboard = async () => {
     await queryClient.invalidateQueries({ queryKey: trpc.hackRoom.dashboard.queryKey() });
@@ -513,8 +570,8 @@ function HackRoomDashboard({ user }: { user: SessionUser }) {
       onError: (error) => setMessage({ text: error.message, tone: "red" }),
       onSuccess: async (room) => {
         setRoomForm(emptyRoomForm);
-        setTaskRoomId(room._id);
-        setRole("host");
+        setSelectedRoomId(room._id);
+        setActiveRoomTab("participants");
         setMessage({ text: `Created ${room.name} with invite ${room.inviteCode}`, tone: "violet" });
         await invalidateDashboard();
       },
@@ -526,7 +583,8 @@ function HackRoomDashboard({ user }: { user: SessionUser }) {
       onError: (error) => setMessage({ text: error.message, tone: "red" }),
       onSuccess: async (room) => {
         setInviteCode("");
-        setRole("participant");
+        setSelectedRoomId(room._id);
+        setActiveParticipantTab("assignments");
         setMessage({ text: `Joined ${room.name}`, tone: "cyan" });
         await invalidateDashboard();
       },
@@ -539,7 +597,7 @@ function HackRoomDashboard({ user }: { user: SessionUser }) {
       onSuccess: async () => {
         setTaskForm(emptyTaskForm);
         setProofTypes(["github", "video"]);
-        setMessage({ text: "Task published to the hack room", tone: "violet" });
+        setMessage({ text: "Room assignment published for all participants", tone: "violet" });
         await invalidateDashboard();
       },
     }),
@@ -556,11 +614,21 @@ function HackRoomDashboard({ user }: { user: SessionUser }) {
     }),
   );
 
+  const approveSubmission = useMutation(
+    trpc.hackRoom.approveSubmission.mutationOptions({
+      onError: (error) => setMessage({ text: error.message, tone: "red" }),
+      onSuccess: async () => {
+        setMessage({ text: "Proof approved and added to room history", tone: "cyan" });
+        await invalidateDashboard();
+      },
+    }),
+  );
+
   const selectWinner = useMutation(
     trpc.hackRoom.selectWinner.mutationOptions({
       onError: (error) => setMessage({ text: error.message, tone: "red" }),
       onSuccess: async () => {
-        setMessage({ text: "Winner selected and XRDM award recorded", tone: "gold" });
+        setMessage({ text: "Winner announced and XRDM award recorded", tone: "gold" });
         await invalidateDashboard();
       },
     }),
@@ -581,6 +649,7 @@ function HackRoomDashboard({ user }: { user: SessionUser }) {
     joinRoom.isPending ||
     createTask.isPending ||
     submitProof.isPending ||
+    approveSubmission.isPending ||
     selectWinner.isPending ||
     returnSubmission.isPending;
 
@@ -606,6 +675,78 @@ function HackRoomDashboard({ user }: { user: SessionUser }) {
     await Share.share({
       message: `Join ${room.name} in XRDM Hack Room with invite code ${room.inviteCode}`,
       title: `${room.name} invite`,
+    });
+  };
+
+  const handleCreateTask = (kind: TaskKind) => {
+    if (!selectedRoom) {
+      setMessage({ text: "Select or create a room before publishing", tone: "red" });
+      return;
+    }
+    if (selectedRoomRole !== "host") {
+      setMessage({ text: "Only the host can publish inside this room", tone: "red" });
+      return;
+    }
+
+    createTask.mutate({
+      description: taskForm.description,
+      dueAt: taskForm.dueAt,
+      kind,
+      proofTypes,
+      rewardXrdm: Number(taskForm.rewardXrdm),
+      roomId: selectedRoom._id,
+      title: taskForm.title,
+    });
+  };
+
+  const handleSubmitProof = () => {
+    if (!selectedTask) {
+      setMessage({ text: "Choose an assignment before submitting proof", tone: "red" });
+      return;
+    }
+
+    submitProof.mutate({
+      notes: submitForm.notes,
+      proofUrl: submitForm.proofUrl,
+      roomId: selectedTask.roomId,
+      taskId: selectedTask._id,
+    });
+  };
+
+  const handleApproveSubmission = (submission: HackSubmission) => {
+    const feedback =
+      feedbackBySubmission[submission._id] ||
+      submission.hostFeedback ||
+      "Approved. Clear proof and solid contribution.";
+    approveSubmission.mutate({
+      hostFeedback: feedback,
+      submissionId: submission._id,
+    });
+  };
+
+  const handleReturnSubmission = (submission: HackSubmission) => {
+    const feedback =
+      feedbackBySubmission[submission._id] ||
+      submission.hostFeedback ||
+      "Thanks for the submission. Please add clearer proof and resubmit.";
+    returnSubmission.mutate({
+      hostFeedback: feedback,
+      submissionId: submission._id,
+    });
+  };
+
+  const handleSelectWinner = (submission: HackSubmission) => {
+    const feedback =
+      feedbackBySubmission[submission._id] ||
+      submission.hostFeedback ||
+      "Strong contribution and clear proof of participation.";
+    const award = Number(
+      awardBySubmission[submission._id] || submission.awardXrdm || submission.rewardXrdm || 20,
+    );
+    selectWinner.mutate({
+      awardXrdm: award,
+      hostFeedback: feedback,
+      submissionId: submission._id,
     });
   };
 
@@ -655,6 +796,21 @@ function HackRoomDashboard({ user }: { user: SessionUser }) {
           </View>
         </View>
 
+        <RoomCommandCenter
+          allRooms={allRooms}
+          createRoomPending={createRoom.isPending}
+          inviteCode={inviteCode}
+          joinRoomPending={joinRoom.isPending}
+          onCreateRoom={() => createRoom.mutate(roomForm)}
+          onInviteCodeChange={setInviteCode}
+          onJoinRoom={() => joinRoom.mutate({ inviteCode })}
+          onRoomFormChange={setRoomForm}
+          onSelectRoom={setSelectedRoomId}
+          onShareRoom={handleShareCode}
+          roomForm={roomForm}
+          selectedRoomId={selectedRoomId}
+        />
+
         {dashboard.isLoading ? (
           <Panel
             eyebrow="Sync"
@@ -672,121 +828,1182 @@ function HackRoomDashboard({ user }: { user: SessionUser }) {
         {dashboard.error ? <ErrorBanner message={dashboard.error.message} /> : null}
         {message ? <StatusBanner message={message.text} tone={message.tone} /> : null}
 
-        <View style={styles.roleSwitchGrid}>
-          <RoleButton
-            active={role === "participant"}
-            description="Join rooms and submit proof"
-            icon="enter-outline"
-            label="Participant"
-            onPress={() => setRole("participant")}
-            tone="cyan"
-          />
-          <RoleButton
-            active={role === "host"}
-            description="Create tasks and choose winners"
-            icon="shield-checkmark-outline"
-            label="Host"
-            onPress={() => setRole("host")}
-            tone="violet"
-          />
-        </View>
-
-        {role === "participant" ? (
-          <ParticipantTrack
-            inviteCode={inviteCode}
-            joinedRooms={joinedRooms}
-            joinRoomPending={joinRoom.isPending}
-            mySubmissions={mySubmissions}
-            onInviteCodeChange={setInviteCode}
-            onJoinRoom={() => joinRoom.mutate({ inviteCode })}
-            onSelectTask={setSelectedTaskId}
-            onSubmitProof={() => {
-              if (!selectedTask) {
-                setMessage({ text: "Choose an assignment before submitting proof", tone: "red" });
-                return;
-              }
-              submitProof.mutate({
-                notes: submitForm.notes,
-                proofUrl: submitForm.proofUrl,
-                roomId: selectedTask.roomId,
-                taskId: selectedTask._id,
-              });
-            }}
-            participantTasks={participantTasks}
-            selectedTask={selectedTask}
-            selectedTaskId={selectedTaskId}
-            submitForm={submitForm}
-            submitProofPending={submitProof.isPending}
-            updateSubmitForm={setSubmitForm}
-          />
-        ) : (
-          <HostTrack
+        {selectedRoom ? (
+          <RoomWorkspace
+            activeParticipantTab={activeParticipantTab}
+            activeRoomTab={activeRoomTab}
+            approvedSubmissions={approvedHostSubmissions}
+            approveSubmissionPending={approveSubmission.isPending}
             awardBySubmission={awardBySubmission}
-            createRoomPending={createRoom.isPending}
             createTaskPending={createTask.isPending}
             feedbackBySubmission={feedbackBySubmission}
-            hostedRooms={hostedRooms}
-            hostSubmissions={hostSubmissions}
-            onCreateRoom={() => createRoom.mutate(roomForm)}
-            onCreateTask={() => {
-              if (!taskRoomId) {
-                setMessage({ text: "Create a room before publishing a task", tone: "red" });
-                return;
-              }
-              createTask.mutate({
-                description: taskForm.description,
-                dueAt: taskForm.dueAt,
-                proofTypes,
-                rewardXrdm: Number(taskForm.rewardXrdm),
-                roomId: taskRoomId,
-                title: taskForm.title,
-              });
-            }}
-            onReturnSubmission={(submission) => {
-              const feedback =
-                feedbackBySubmission[submission._id] ||
-                submission.hostFeedback ||
-                "Thanks for the submission. Please add clearer proof and resubmit.";
-              returnSubmission.mutate({
-                hostFeedback: feedback,
-                submissionId: submission._id,
-              });
-            }}
-            onSelectWinner={(submission) => {
-              const feedback =
-                feedbackBySubmission[submission._id] ||
-                submission.hostFeedback ||
-                "Strong contribution and clear proof of participation.";
-              const award = Number(
-                awardBySubmission[submission._id] ||
-                  submission.awardXrdm ||
-                  submission.rewardXrdm ||
-                  20,
-              );
-              selectWinner.mutate({
-                awardXrdm: award,
-                hostFeedback: feedback,
-                submissionId: submission._id,
-              });
-            }}
+            historySubmissions={historySubmissions}
+            mySubmissions={roomMySubmissions}
+            onApproveSubmission={handleApproveSubmission}
+            onCreateTask={handleCreateTask}
+            onParticipantTabChange={setActiveParticipantTab}
+            onReturnSubmission={handleReturnSubmission}
+            onRoomTabChange={setActiveRoomTab}
+            onSelectTask={setSelectedTaskId}
+            onSelectWinner={handleSelectWinner}
             onShareRoom={handleShareCode}
-            pendingHostSubmissions={pendingHostSubmissions}
+            onSubmitProof={handleSubmitProof}
+            pendingSubmissions={pendingHostSubmissions}
             proofTypes={proofTypes}
             returnSubmissionPending={returnSubmission.isPending}
-            roomForm={roomForm}
+            room={selectedRoom}
+            roomRole={selectedRoomRole}
+            roomTasks={roomTasks}
+            roomWinners={roomWinners}
+            selectedTask={selectedTask}
+            selectedTaskId={selectedTaskId}
             selectWinnerPending={selectWinner.isPending}
             setAwardBySubmission={setAwardBySubmission}
             setFeedbackBySubmission={setFeedbackBySubmission}
             setProofTypes={toggleProofType}
-            setRoomForm={setRoomForm}
+            setSubmitForm={setSubmitForm}
             setTaskForm={setTaskForm}
-            setTaskRoomId={setTaskRoomId}
+            setTaskKind={setTaskKind}
+            submitForm={submitForm}
+            submitProofPending={submitProof.isPending}
             taskForm={taskForm}
-            taskRoomId={taskRoomId}
+            taskKind={taskKind}
             winnerSubmissions={winnerSubmissions}
           />
+        ) : (
+          <Panel eyebrow="Room" icon="flash-outline" title="Choose a Hack Room" tone="cyan">
+            <EmptyState
+              icon="key-outline"
+              text="Enter an invite code or create a hack room to open the internal workspace."
+            />
+          </Panel>
         )}
       </ScrollView>
+    </View>
+  );
+}
+
+function RoomCommandCenter({
+  allRooms,
+  createRoomPending,
+  inviteCode,
+  joinRoomPending,
+  onCreateRoom,
+  onInviteCodeChange,
+  onJoinRoom,
+  onRoomFormChange,
+  onSelectRoom,
+  onShareRoom,
+  roomForm,
+  selectedRoomId,
+}: {
+  allRooms: Array<{ role: Role; room: HackRoom }>;
+  createRoomPending: boolean;
+  inviteCode: string;
+  joinRoomPending: boolean;
+  onCreateRoom: () => void;
+  onInviteCodeChange: (value: string) => void;
+  onJoinRoom: () => void;
+  onRoomFormChange: React.Dispatch<React.SetStateAction<typeof emptyRoomForm>>;
+  onSelectRoom: (roomId: string) => void;
+  onShareRoom: (room: HackRoom) => void;
+  roomForm: typeof emptyRoomForm;
+  selectedRoomId: string;
+}) {
+  return (
+    <Panel eyebrow="Lobby" icon="key-outline" title="Join or Create Hack Room" tone="cyan">
+      <View style={styles.inviteJoinRow}>
+        <View style={styles.inviteInputColumn}>
+          <Text style={styles.fieldLabel}>Enter invite code</Text>
+          <HackTextInput
+            autoCapitalize="characters"
+            onChangeText={onInviteCodeChange}
+            placeholder="HR-ABC123"
+            value={inviteCode}
+          />
+        </View>
+        <Pressable
+          accessibilityRole="button"
+          disabled={!inviteCode.trim() || joinRoomPending}
+          onPress={onJoinRoom}
+          style={({ pressed }) => [
+            styles.joinTightButton,
+            (!inviteCode.trim() || joinRoomPending) && styles.disabled,
+            pressed && styles.pressed,
+          ]}
+        >
+          {joinRoomPending ? (
+            <ActivityIndicator color="#03120c" />
+          ) : (
+            <>
+              <Ionicons name="enter-outline" size={18} color="#03120c" />
+              <Text style={styles.joinTightText}>Join</Text>
+            </>
+          )}
+        </Pressable>
+      </View>
+
+      <View style={styles.createRoomCard}>
+        <View style={styles.sectionHeadingRow}>
+          <View>
+            <Text style={styles.sectionEyebrow}>Host</Text>
+            <Text style={styles.sectionTitleSmall}>Create Hack Room</Text>
+          </View>
+          <StatusPill label="Host owns room" tone="violet" />
+        </View>
+        <Field label="Room name">
+          <HackTextInput
+            onChangeText={(value) => onRoomFormChange((current) => ({ ...current, name: value }))}
+            placeholder="AI Agents Sprint"
+            value={roomForm.name}
+          />
+        </Field>
+        <Field label="Room brief">
+          <HackTextInput
+            multiline
+            onChangeText={(value) =>
+              onRoomFormChange((current) => ({ ...current, description: value }))
+            }
+            placeholder="Participants build and submit working demos by deadline."
+            style={styles.textArea}
+            value={roomForm.description}
+          />
+        </Field>
+        <HackButton
+          disabled={!roomForm.name.trim() || createRoomPending}
+          icon="add-outline"
+          label="Create Room"
+          loading={createRoomPending}
+          onPress={onCreateRoom}
+          tone="violet"
+        />
+      </View>
+
+      <View style={styles.roomShelfHeader}>
+        <Text style={styles.sectionEyebrow}>Your rooms</Text>
+        <CounterLabel label={`${allRooms.length} active`} />
+      </View>
+      {allRooms.length ? (
+        <ScrollView
+          contentContainerStyle={styles.roomShelf}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+        >
+          {allRooms.map(({ role, room }) => (
+            <SelectableRoomCard
+              key={room._id}
+              onPress={() => onSelectRoom(room._id)}
+              onShare={() => onShareRoom(room)}
+              role={role}
+              room={room}
+              selected={selectedRoomId === room._id}
+            />
+          ))}
+        </ScrollView>
+      ) : (
+        <EmptyState icon="flash-outline" text="No rooms yet. Join with a code or create one." />
+      )}
+    </Panel>
+  );
+}
+
+function SelectableRoomCard({
+  onPress,
+  onShare,
+  role,
+  room,
+  selected,
+}: {
+  onPress: () => void;
+  onShare: () => void;
+  role: Role;
+  room: HackRoom;
+  selected: boolean;
+}) {
+  const tone = role === "host" ? "violet" : "cyan";
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.selectableRoomCard,
+        selected && styles.selectableRoomCardActive,
+        pressed && styles.pressed,
+      ]}
+    >
+      <View style={styles.cardTopRow}>
+        <StatusPill label={role} tone={tone} />
+        <Pressable
+          accessibilityRole="button"
+          onPress={onShare}
+          style={({ pressed }) => [styles.roomShareIcon, pressed && styles.pressed]}
+        >
+          <Ionicons name="share-outline" size={15} color={theme.muted} />
+        </Pressable>
+      </View>
+      <Text numberOfLines={1} style={styles.cardTitle}>
+        {room.name}
+      </Text>
+      <Text numberOfLines={2} style={styles.cardDescription}>
+        {room.description || `Hosted by ${room.hostName}`}
+      </Text>
+      <View style={styles.inviteMiniRow}>
+        <Ionicons name="key-outline" size={14} color={theme.host} />
+        <Text numberOfLines={1} style={styles.inviteMiniText}>
+          {room.inviteCode}
+        </Text>
+      </View>
+      <Text style={styles.cardMeta}>{room.participants.length} participants</Text>
+    </Pressable>
+  );
+}
+
+function RoomWorkspace({
+  activeParticipantTab,
+  activeRoomTab,
+  approvedSubmissions,
+  approveSubmissionPending,
+  awardBySubmission,
+  createTaskPending,
+  feedbackBySubmission,
+  historySubmissions,
+  mySubmissions,
+  onApproveSubmission,
+  onCreateTask,
+  onParticipantTabChange,
+  onReturnSubmission,
+  onRoomTabChange,
+  onSelectTask,
+  onSelectWinner,
+  onShareRoom,
+  onSubmitProof,
+  pendingSubmissions,
+  proofTypes,
+  returnSubmissionPending,
+  room,
+  roomRole,
+  roomTasks,
+  roomWinners,
+  selectedTask,
+  selectedTaskId,
+  selectWinnerPending,
+  setAwardBySubmission,
+  setFeedbackBySubmission,
+  setProofTypes,
+  setSubmitForm,
+  setTaskForm,
+  setTaskKind,
+  submitForm,
+  submitProofPending,
+  taskForm,
+  taskKind,
+  winnerSubmissions,
+}: {
+  activeParticipantTab: ParticipantTab;
+  activeRoomTab: RoomTab;
+  approvedSubmissions: DashboardData["hostSubmissions"];
+  approveSubmissionPending: boolean;
+  awardBySubmission: Record<string, string>;
+  createTaskPending: boolean;
+  feedbackBySubmission: Record<string, string>;
+  historySubmissions: DashboardData["hostSubmissions"];
+  mySubmissions: DashboardData["mySubmissions"];
+  onApproveSubmission: (submission: HackSubmission) => void;
+  onCreateTask: (kind: TaskKind) => void;
+  onParticipantTabChange: (tab: ParticipantTab) => void;
+  onReturnSubmission: (submission: HackSubmission) => void;
+  onRoomTabChange: (tab: RoomTab) => void;
+  onSelectTask: (taskId: string) => void;
+  onSelectWinner: (submission: HackSubmission) => void;
+  onShareRoom: (room: HackRoom) => void;
+  onSubmitProof: () => void;
+  pendingSubmissions: DashboardData["hostSubmissions"];
+  proofTypes: Array<ProofType>;
+  returnSubmissionPending: boolean;
+  room: HackRoom;
+  roomRole: Role;
+  roomTasks: DashboardData["tasks"];
+  roomWinners: DashboardData["visibleWinners"];
+  selectedTask?: HackTask;
+  selectedTaskId: string;
+  selectWinnerPending: boolean;
+  setAwardBySubmission: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  setFeedbackBySubmission: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  setProofTypes: (proofType: ProofType) => void;
+  setSubmitForm: React.Dispatch<React.SetStateAction<typeof emptySubmitForm>>;
+  setTaskForm: React.Dispatch<React.SetStateAction<typeof emptyTaskForm>>;
+  setTaskKind: React.Dispatch<React.SetStateAction<TaskKind>>;
+  submitForm: typeof emptySubmitForm;
+  submitProofPending: boolean;
+  taskForm: typeof emptyTaskForm;
+  taskKind: TaskKind;
+  winnerSubmissions: DashboardData["hostSubmissions"];
+}) {
+  const tone = roomRole === "host" ? "violet" : "cyan";
+  return (
+    <View style={styles.roomWorkspace}>
+      <View style={styles.roomWorkspaceHeader}>
+        <View style={styles.roomWorkspaceTitleBlock}>
+          <Text style={styles.sectionEyebrow}>Inside Hack Room</Text>
+          <Text numberOfLines={1} style={styles.roomWorkspaceTitle}>
+            {room.name}
+          </Text>
+          <Text numberOfLines={2} style={styles.cardDescription}>
+            {room.description || `Hosted by ${room.hostName}`}
+          </Text>
+        </View>
+        <StatusPill label={roomRole} tone={tone} />
+      </View>
+
+      <View style={styles.roomStatsGrid}>
+        <MiniStat icon="people-outline" label="Participants" value={room.participants.length} />
+        <MiniStat icon="clipboard-outline" label="Tasks" value={roomTasks.length} />
+        <MiniStat icon="trophy-outline" label="Winners" value={roomWinners.length} />
+      </View>
+
+      {roomRole === "host" ? (
+        <HostRoomWorkspace
+          activeRoomTab={activeRoomTab}
+          approvedSubmissions={approvedSubmissions}
+          approveSubmissionPending={approveSubmissionPending}
+          awardBySubmission={awardBySubmission}
+          createTaskPending={createTaskPending}
+          feedbackBySubmission={feedbackBySubmission}
+          historySubmissions={historySubmissions}
+          onApproveSubmission={onApproveSubmission}
+          onCreateTask={onCreateTask}
+          onReturnSubmission={onReturnSubmission}
+          onRoomTabChange={onRoomTabChange}
+          onSelectWinner={onSelectWinner}
+          onShareRoom={onShareRoom}
+          pendingSubmissions={pendingSubmissions}
+          proofTypes={proofTypes}
+          returnSubmissionPending={returnSubmissionPending}
+          room={room}
+          roomTasks={roomTasks}
+          selectWinnerPending={selectWinnerPending}
+          setAwardBySubmission={setAwardBySubmission}
+          setFeedbackBySubmission={setFeedbackBySubmission}
+          setProofTypes={setProofTypes}
+          setTaskForm={setTaskForm}
+          setTaskKind={setTaskKind}
+          taskForm={taskForm}
+          taskKind={taskKind}
+          winnerSubmissions={winnerSubmissions}
+        />
+      ) : (
+        <ParticipantRoomWorkspace
+          activeParticipantTab={activeParticipantTab}
+          mySubmissions={mySubmissions}
+          onParticipantTabChange={onParticipantTabChange}
+          onSelectTask={onSelectTask}
+          onSubmitProof={onSubmitProof}
+          roomTasks={roomTasks}
+          roomWinners={roomWinners}
+          selectedTask={selectedTask}
+          selectedTaskId={selectedTaskId}
+          setSubmitForm={setSubmitForm}
+          submitForm={submitForm}
+          submitProofPending={submitProofPending}
+        />
+      )}
+    </View>
+  );
+}
+
+function HostRoomWorkspace({
+  activeRoomTab,
+  approvedSubmissions,
+  approveSubmissionPending,
+  awardBySubmission,
+  createTaskPending,
+  feedbackBySubmission,
+  historySubmissions,
+  onApproveSubmission,
+  onCreateTask,
+  onReturnSubmission,
+  onRoomTabChange,
+  onSelectWinner,
+  onShareRoom,
+  pendingSubmissions,
+  proofTypes,
+  returnSubmissionPending,
+  room,
+  roomTasks,
+  selectWinnerPending,
+  setAwardBySubmission,
+  setFeedbackBySubmission,
+  setProofTypes,
+  setTaskForm,
+  setTaskKind,
+  taskForm,
+  taskKind,
+  winnerSubmissions,
+}: {
+  activeRoomTab: RoomTab;
+  approvedSubmissions: DashboardData["hostSubmissions"];
+  approveSubmissionPending: boolean;
+  awardBySubmission: Record<string, string>;
+  createTaskPending: boolean;
+  feedbackBySubmission: Record<string, string>;
+  historySubmissions: DashboardData["hostSubmissions"];
+  onApproveSubmission: (submission: HackSubmission) => void;
+  onCreateTask: (kind: TaskKind) => void;
+  onReturnSubmission: (submission: HackSubmission) => void;
+  onRoomTabChange: (tab: RoomTab) => void;
+  onSelectWinner: (submission: HackSubmission) => void;
+  onShareRoom: (room: HackRoom) => void;
+  pendingSubmissions: DashboardData["hostSubmissions"];
+  proofTypes: Array<ProofType>;
+  returnSubmissionPending: boolean;
+  room: HackRoom;
+  roomTasks: DashboardData["tasks"];
+  selectWinnerPending: boolean;
+  setAwardBySubmission: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  setFeedbackBySubmission: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  setProofTypes: (proofType: ProofType) => void;
+  setTaskForm: React.Dispatch<React.SetStateAction<typeof emptyTaskForm>>;
+  setTaskKind: React.Dispatch<React.SetStateAction<TaskKind>>;
+  taskForm: typeof emptyTaskForm;
+  taskKind: TaskKind;
+  winnerSubmissions: DashboardData["hostSubmissions"];
+}) {
+  const challengeTasks = roomTasks.filter((task) => task.kind === "challenge" || task.kind === "game");
+  const hostTabs: Array<{
+    icon: React.ComponentProps<typeof Ionicons>["name"];
+    id: RoomTab;
+    label: string;
+  }> = [
+    { icon: "people-outline", id: "participants", label: "Participants" },
+    { icon: "clipboard-outline", id: "assign", label: "Assign Task" },
+    { icon: "time-outline", id: "history", label: "History" },
+    { icon: "game-controller-outline", id: "challenges", label: "Challenges" },
+    { icon: "trophy-outline", id: "winners", label: "Winners" },
+  ];
+
+  return (
+    <View style={styles.trackStack}>
+      <ScrollView
+        contentContainerStyle={styles.roomTabs}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+      >
+        {hostTabs.map((tab) => (
+          <RoomTabButton
+            active={activeRoomTab === tab.id}
+            icon={tab.icon}
+            key={tab.id}
+            label={tab.label}
+            onPress={() => onRoomTabChange(tab.id)}
+            tone="violet"
+          />
+        ))}
+      </ScrollView>
+
+      {activeRoomTab === "participants" ? (
+        <Panel
+          action={<CounterLabel label={`${room.participants.length} joined`} />}
+          eyebrow="Host Menu"
+          icon="people-outline"
+          title="Participants"
+          tone="violet"
+        >
+          <View style={styles.inviteStrip}>
+            <Ionicons name="key-outline" size={16} color={theme.host} />
+            <Text numberOfLines={1} style={styles.inviteCode}>
+              {room.inviteCode}
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => onShareRoom(room)}
+              style={({ pressed }) => [styles.shareButton, pressed && styles.pressed]}
+            >
+              <Ionicons name="share-outline" size={15} color={theme.host} />
+              <Text style={styles.shareText}>Share</Text>
+            </Pressable>
+          </View>
+          <View style={styles.listStack}>
+            {room.participants.length ? (
+              room.participants.map((participant) => (
+                <ParticipantListItem key={participant.userId} participant={participant} />
+              ))
+            ) : (
+              <EmptyState
+                icon="people-outline"
+                text="Share the invite code. Joined participants will appear here."
+              />
+            )}
+          </View>
+        </Panel>
+      ) : null}
+
+      {activeRoomTab === "assign" ? (
+        <AssignmentComposer
+          createTaskPending={createTaskPending}
+          fixedKind="task"
+          onCreateTask={onCreateTask}
+          proofTypes={proofTypes}
+          setProofTypes={setProofTypes}
+          setTaskForm={setTaskForm}
+          taskForm={taskForm}
+          title="Assign Task"
+        />
+      ) : null}
+
+      {activeRoomTab === "history" ? (
+        <Panel
+          action={<CounterLabel label={`${historySubmissions.length} approved`} />}
+          eyebrow="Approved Proof"
+          icon="time-outline"
+          title="History"
+          tone="gold"
+        >
+          <View style={styles.listStack}>
+            {historySubmissions.length ? (
+              historySubmissions.map((submission) => (
+                <SubmissionReviewCard
+                  key={submission._id}
+                  mode="history"
+                  submission={submission}
+                />
+              ))
+            ) : (
+              <EmptyState
+                icon="time-outline"
+                text="Approved proof and winner records will collect here."
+              />
+            )}
+          </View>
+        </Panel>
+      ) : null}
+
+      {activeRoomTab === "challenges" ? (
+        <Panel
+          action={<CounterLabel label={`${challengeTasks.length} live`} />}
+          eyebrow="Host Menu"
+          icon="game-controller-outline"
+          title="Challenges and Games"
+          tone="violet"
+        >
+          <View style={styles.kindSwitchRow}>
+            <KindButton
+              active={taskKind === "challenge"}
+              icon="sparkles-outline"
+              label="Challenge"
+              onPress={() => setTaskKind("challenge")}
+            />
+            <KindButton
+              active={taskKind === "game"}
+              icon="game-controller-outline"
+              label="Game"
+              onPress={() => setTaskKind("game")}
+            />
+          </View>
+          <AssignmentComposer
+            createTaskPending={createTaskPending}
+            fixedKind={taskKind === "task" ? "challenge" : taskKind}
+            onCreateTask={onCreateTask}
+            proofTypes={proofTypes}
+            setProofTypes={setProofTypes}
+            setTaskForm={setTaskForm}
+            taskForm={taskForm}
+            title={taskKind === "game" ? "Create Game Card" : "Create Challenge Card"}
+          />
+          <View style={styles.divider} />
+          <View style={styles.listStack}>
+            {challengeTasks.length ? (
+              challengeTasks.map((task) => (
+                <TaskCard key={task._id} onPress={() => {}} selected={false} task={task} />
+              ))
+            ) : (
+              <EmptyState
+                icon="game-controller-outline"
+                text="Create challenge or game cards for participants to complete with proof."
+              />
+            )}
+          </View>
+        </Panel>
+      ) : null}
+
+      {activeRoomTab === "winners" ? (
+        <Panel
+          action={<CounterLabel label={`${approvedSubmissions.length} ready`} />}
+          eyebrow="Announcement"
+          icon="trophy-outline"
+          title="Announce Winners"
+          tone="gold"
+        >
+          <View style={styles.listStack}>
+            {approvedSubmissions.length ? (
+              approvedSubmissions.map((submission) => (
+                <SubmissionReviewCard
+                  award={
+                    awardBySubmission[submission._id] ??
+                    String(submission.awardXrdm ?? submission.rewardXrdm ?? 20)
+                  }
+                  feedback={
+                    feedbackBySubmission[submission._id] ??
+                    submission.hostFeedback ??
+                    "Strong contribution and clear proof of participation."
+                  }
+                  key={submission._id}
+                  mode="winner"
+                  onAwardChange={(value) =>
+                    setAwardBySubmission((current) => ({ ...current, [submission._id]: value }))
+                  }
+                  onFeedbackChange={(value) =>
+                    setFeedbackBySubmission((current) => ({
+                      ...current,
+                      [submission._id]: value,
+                    }))
+                  }
+                  onSelectWinner={() => onSelectWinner(submission)}
+                  selectWinnerPending={selectWinnerPending}
+                  submission={submission}
+                />
+              ))
+            ) : (
+              <EmptyState
+                icon="trophy-outline"
+                text="Approve proof from the review queue before announcing winners."
+              />
+            )}
+          </View>
+          <View style={styles.divider} />
+          <Text style={styles.sectionEyebrow}>Winners Picked</Text>
+          <View style={styles.listStack}>
+            {winnerSubmissions.length ? (
+              winnerSubmissions.map((submission) => (
+                <SubmissionCard key={submission._id} submission={submission} />
+              ))
+            ) : (
+              <EmptyState
+                icon="trophy-outline"
+                text="Announced winners will appear here with awarded XRDM."
+              />
+            )}
+          </View>
+        </Panel>
+      ) : null}
+
+      <Panel
+        action={<CounterLabel label={`${pendingSubmissions.length} pending`} />}
+        eyebrow="Verification"
+        icon="ribbon-outline"
+        title="Review Queue"
+        tone="violet"
+      >
+        <View style={styles.listStack}>
+          {pendingSubmissions.length ? (
+            pendingSubmissions.map((submission) => (
+              <SubmissionReviewCard
+                approveSubmissionPending={approveSubmissionPending}
+                feedback={
+                  feedbackBySubmission[submission._id] ??
+                  submission.hostFeedback ??
+                  "Approved. Clear proof and solid contribution."
+                }
+                key={submission._id}
+                mode="review"
+                onApprove={() => onApproveSubmission(submission)}
+                onFeedbackChange={(value) =>
+                  setFeedbackBySubmission((current) => ({
+                    ...current,
+                    [submission._id]: value,
+                  }))
+                }
+                onReturn={() => onReturnSubmission(submission)}
+                returnSubmissionPending={returnSubmissionPending}
+                submission={submission}
+              />
+            ))
+          ) : (
+            <EmptyState
+              icon="ribbon-outline"
+              text="Participant proof waiting for host review will appear here."
+            />
+          )}
+        </View>
+      </Panel>
+    </View>
+  );
+}
+
+function ParticipantRoomWorkspace({
+  activeParticipantTab,
+  mySubmissions,
+  onParticipantTabChange,
+  onSelectTask,
+  onSubmitProof,
+  roomTasks,
+  roomWinners,
+  selectedTask,
+  selectedTaskId,
+  setSubmitForm,
+  submitForm,
+  submitProofPending,
+}: {
+  activeParticipantTab: ParticipantTab;
+  mySubmissions: DashboardData["mySubmissions"];
+  onParticipantTabChange: (tab: ParticipantTab) => void;
+  onSelectTask: (taskId: string) => void;
+  onSubmitProof: () => void;
+  roomTasks: DashboardData["tasks"];
+  roomWinners: DashboardData["visibleWinners"];
+  selectedTask?: HackTask;
+  selectedTaskId: string;
+  setSubmitForm: React.Dispatch<React.SetStateAction<typeof emptySubmitForm>>;
+  submitForm: typeof emptySubmitForm;
+  submitProofPending: boolean;
+}) {
+  const participantTabs: Array<{
+    icon: React.ComponentProps<typeof Ionicons>["name"];
+    id: ParticipantTab;
+    label: string;
+  }> = [
+    { icon: "clipboard-outline", id: "assignments", label: "Tasks" },
+    { icon: "checkmark-circle-outline", id: "proof", label: "My Proof" },
+    { icon: "trophy-outline", id: "winners", label: "Winners" },
+  ];
+
+  return (
+    <View style={styles.trackStack}>
+      <ScrollView
+        contentContainerStyle={styles.roomTabs}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+      >
+        {participantTabs.map((tab) => (
+          <RoomTabButton
+            active={activeParticipantTab === tab.id}
+            icon={tab.icon}
+            key={tab.id}
+            label={tab.label}
+            onPress={() => onParticipantTabChange(tab.id)}
+            tone="cyan"
+          />
+        ))}
+      </ScrollView>
+
+      {activeParticipantTab === "assignments" ? (
+        <Panel
+          action={<CounterLabel label={`${roomTasks.length} live`} />}
+          eyebrow="Participant"
+          icon="clipboard-outline"
+          title="Assigned Work"
+          tone="cyan"
+        >
+          <View style={styles.listStack}>
+            {roomTasks.length ? (
+              roomTasks.map((task) => {
+                const submission = mySubmissions.find((item) => item.taskId === task._id);
+                return (
+                  <TaskCard
+                    key={task._id}
+                    onPress={() => onSelectTask(task._id)}
+                    selected={selectedTaskId === task._id}
+                    status={submission?.status}
+                    task={task}
+                  />
+                );
+              })
+            ) : (
+              <EmptyState
+                icon="clipboard-outline"
+                text="The host has not assigned tasks, challenges, or games yet."
+              />
+            )}
+          </View>
+
+          <View style={styles.submitCard}>
+            <View style={styles.sectionHeadingRow}>
+              <View>
+                <Text style={styles.sectionEyebrow}>Submit Proof</Text>
+                <Text style={styles.sectionTitleSmall}>
+                  {selectedTask?.title ?? "Select an assignment"}
+                </Text>
+              </View>
+              {selectedTask ? (
+                <StatusPill label={`+${selectedTask.rewardXrdm} XRDM`} tone="gold" />
+              ) : null}
+            </View>
+
+            <Field label="Proof link">
+              <HackTextInput
+                autoCapitalize="none"
+                keyboardType="url"
+                onChangeText={(value) =>
+                  setSubmitForm((current) => ({ ...current, proofUrl: value }))
+                }
+                placeholder="https://github.com/team/project"
+                value={submitForm.proofUrl}
+              />
+            </Field>
+
+            <Field label="Note to host">
+              <HackTextInput
+                multiline
+                onChangeText={(value) =>
+                  setSubmitForm((current) => ({ ...current, notes: value }))
+                }
+                placeholder="Mention branch, demo timestamp, or implementation notes."
+                style={styles.textArea}
+                value={submitForm.notes}
+              />
+            </Field>
+
+            <HackButton
+              disabled={!selectedTask || !submitForm.proofUrl.trim() || submitProofPending}
+              icon="send-outline"
+              label="Submit Proof"
+              loading={submitProofPending}
+              onPress={onSubmitProof}
+              tone="cyan"
+            />
+          </View>
+        </Panel>
+      ) : null}
+
+      {activeParticipantTab === "proof" ? (
+        <Panel
+          action={<CounterLabel label={`${mySubmissions.length} records`} />}
+          eyebrow="Participant"
+          icon="checkmark-circle-outline"
+          title="My Proof Status"
+          tone="cyan"
+        >
+          <View style={styles.listStack}>
+            {mySubmissions.length ? (
+              mySubmissions.map((submission) => (
+                <SubmissionCard key={submission._id} submission={submission} />
+              ))
+            ) : (
+              <EmptyState
+                icon="checkmark-circle-outline"
+                text="Submitted proof will appear here with returned, approved, or winner status."
+              />
+            )}
+          </View>
+        </Panel>
+      ) : null}
+
+      {activeParticipantTab === "winners" ? (
+        <Panel
+          action={<CounterLabel label={`${roomWinners.length} announced`} />}
+          eyebrow="Room"
+          icon="trophy-outline"
+          title="Winner Announcements"
+          tone="gold"
+        >
+          <View style={styles.listStack}>
+            {roomWinners.length ? (
+              roomWinners.map((submission) => (
+                <SubmissionCard key={submission._id} submission={submission} />
+              ))
+            ) : (
+              <EmptyState
+                icon="trophy-outline"
+                text="Winner announcements from the host will appear here."
+              />
+            )}
+          </View>
+        </Panel>
+      ) : null}
+    </View>
+  );
+}
+
+function AssignmentComposer({
+  createTaskPending,
+  fixedKind,
+  onCreateTask,
+  proofTypes,
+  setProofTypes,
+  setTaskForm,
+  taskForm,
+  title,
+}: {
+  createTaskPending: boolean;
+  fixedKind: TaskKind;
+  onCreateTask: (kind: TaskKind) => void;
+  proofTypes: Array<ProofType>;
+  setProofTypes: (proofType: ProofType) => void;
+  setTaskForm: React.Dispatch<React.SetStateAction<typeof emptyTaskForm>>;
+  taskForm: typeof emptyTaskForm;
+  title: string;
+}) {
+  return (
+    <View style={styles.assignmentComposer}>
+      <View style={styles.sectionHeadingRow}>
+        <View>
+          <Text style={styles.sectionEyebrow}>{kindLabel(fixedKind)}</Text>
+          <Text style={styles.sectionTitleSmall}>{title}</Text>
+        </View>
+        <StatusPill label="All participants" tone="violet" />
+      </View>
+
+      <Field label={`${kindLabel(fixedKind)} title`}>
+        <HackTextInput
+          onChangeText={(value) => setTaskForm((current) => ({ ...current, title: value }))}
+          placeholder={
+            fixedKind === "game"
+              ? "Bug bash arena"
+              : fixedKind === "challenge"
+                ? "Ship the fastest demo"
+                : "Build a working prototype"
+          }
+          value={taskForm.title}
+        />
+      </Field>
+      <Field label="Due date">
+        <HackTextInput
+          onChangeText={(value) => setTaskForm((current) => ({ ...current, dueAt: value }))}
+          placeholder="Tonight 9:00 PM"
+          value={taskForm.dueAt}
+        />
+      </Field>
+      <Field label="Brief and rules">
+        <HackTextInput
+          multiline
+          onChangeText={(value) =>
+            setTaskForm((current) => ({ ...current, description: value }))
+          }
+          placeholder="Write the task, rules, proof requirement, and scoring signal."
+          style={styles.textAreaLarge}
+          value={taskForm.description}
+        />
+      </Field>
+
+      <Field label="Expected proof">
+        <View style={styles.proofGrid}>
+          {proofTypeOptions.map((option) => {
+            const active = proofTypes.includes(option.value);
+            return (
+              <Pressable
+                accessibilityRole="button"
+                key={option.value}
+                onPress={() => setProofTypes(option.value)}
+                style={[styles.proofChip, active && styles.proofChipActive]}
+              >
+                <Text style={[styles.proofChipText, active && styles.proofChipTextActive]}>
+                  {option.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </Field>
+
+      <Field label="XRDM reward">
+        <HackTextInput
+          keyboardType="number-pad"
+          onChangeText={(value) => setTaskForm((current) => ({ ...current, rewardXrdm: value }))}
+          placeholder="20"
+          value={taskForm.rewardXrdm}
+        />
+      </Field>
+
+      <HackButton
+        disabled={
+          !taskForm.title.trim() ||
+          !taskForm.description.trim() ||
+          !taskForm.dueAt.trim() ||
+          createTaskPending
+        }
+        icon="send-outline"
+        label={`Publish ${kindLabel(fixedKind)}`}
+        loading={createTaskPending}
+        onPress={() => onCreateTask(fixedKind)}
+        tone="violet"
+      />
+    </View>
+  );
+}
+
+function SubmissionReviewCard({
+  approveSubmissionPending,
+  award,
+  feedback,
+  mode,
+  onApprove,
+  onAwardChange,
+  onFeedbackChange,
+  onReturn,
+  onSelectWinner,
+  returnSubmissionPending,
+  selectWinnerPending,
+  submission,
+}: {
+  approveSubmissionPending?: boolean;
+  award?: string;
+  feedback?: string;
+  mode: "history" | "review" | "winner";
+  onApprove?: () => void;
+  onAwardChange?: (value: string) => void;
+  onFeedbackChange?: (value: string) => void;
+  onReturn?: () => void;
+  onSelectWinner?: () => void;
+  returnSubmissionPending?: boolean;
+  selectWinnerPending?: boolean;
+  submission: HackSubmission;
+}) {
+  return (
+    <View style={styles.reviewCard}>
+      <View style={styles.reviewHeader}>
+        <Avatar name={submission.participantName} tone="cyan" />
+        <View style={styles.reviewTitleBlock}>
+          <Text style={styles.cardTitle}>{submission.participantName}</Text>
+          <Text style={styles.cardMeta}>
+            {submission.roomName} - {submission.taskTitle}
+          </Text>
+        </View>
+        <StatusPill label={submission.status} tone={statusTone(submission.status)} />
+      </View>
+
+      <LinkRow url={submission.proofUrl} />
+      {submission.notes ? <Text style={styles.notesText}>{submission.notes}</Text> : null}
+
+      {mode !== "history" ? (
+        <Field label="Host feedback">
+          <HackTextInput
+            multiline
+            onChangeText={onFeedbackChange}
+            style={styles.textArea}
+            value={feedback}
+          />
+        </Field>
+      ) : submission.hostFeedback ? (
+        <Text style={styles.feedbackText}>{submission.hostFeedback}</Text>
+      ) : null}
+
+      {mode === "winner" ? (
+        <Field label="XRDM award">
+          <HackTextInput keyboardType="number-pad" onChangeText={onAwardChange} value={award} />
+        </Field>
+      ) : null}
+
+      {mode === "review" ? (
+        <View style={styles.reviewActions}>
+          <HackButton
+            disabled={returnSubmissionPending}
+            label="Return"
+            loading={returnSubmissionPending}
+            onPress={onReturn ?? (() => {})}
+            tone="red"
+          />
+          <HackButton
+            disabled={approveSubmissionPending}
+            icon="checkmark-circle-outline"
+            label="Approve"
+            loading={approveSubmissionPending}
+            onPress={onApprove ?? (() => {})}
+            tone="cyan"
+          />
+        </View>
+      ) : null}
+
+      {mode === "winner" ? (
+        <HackButton
+          disabled={selectWinnerPending}
+          icon="trophy-outline"
+          label="Announce Winner"
+          loading={selectWinnerPending}
+          onPress={onSelectWinner ?? (() => {})}
+          tone="gold"
+        />
+      ) : null}
+    </View>
+  );
+}
+
+function RoomTabButton({
+  active,
+  icon,
+  label,
+  onPress,
+  tone,
+}: {
+  active: boolean;
+  icon: React.ComponentProps<typeof Ionicons>["name"];
+  label: string;
+  onPress: () => void;
+  tone: "cyan" | "violet";
+}) {
+  const toneColors = getToneColors(tone);
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={[
+        styles.roomTabButton,
+        active && {
+          backgroundColor: toneColors.bg,
+          borderColor: toneColors.fg,
+        },
+      ]}
+    >
+      <Ionicons name={icon} size={16} color={active ? toneColors.fg : theme.muted} />
+      <Text style={[styles.roomTabText, active && { color: toneColors.fg }]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function KindButton({
+  active,
+  icon,
+  label,
+  onPress,
+}: {
+  active: boolean;
+  icon: React.ComponentProps<typeof Ionicons>["name"];
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={[styles.kindButton, active && styles.kindButtonActive]}
+    >
+      <Ionicons name={icon} size={16} color={active ? theme.host : theme.muted} />
+      <Text style={[styles.kindButtonText, active && styles.kindButtonTextActive]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function MiniStat({
+  icon,
+  label,
+  value,
+}: {
+  icon: React.ComponentProps<typeof Ionicons>["name"];
+  label: string;
+  value: number;
+}) {
+  return (
+    <View style={styles.miniStat}>
+      <Ionicons name={icon} size={16} color={theme.participant} />
+      <Text style={styles.miniStatValue}>{value}</Text>
+      <Text numberOfLines={1} style={styles.miniStatLabel}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+function ParticipantListItem({
+  participant,
+}: {
+  participant: HackRoom["participants"][number];
+}) {
+  return (
+    <View style={styles.participantRow}>
+      <Avatar name={participant.name} tone="cyan" />
+      <View style={styles.profileText}>
+        <Text style={styles.profileName}>{participant.name}</Text>
+        <Text style={styles.profileEmail}>{participant.email}</Text>
+      </View>
+      <Text style={styles.cardMeta}>{formatDate(participant.joinedAt)}</Text>
     </View>
   );
 }
@@ -1576,7 +2793,7 @@ function TaskCard({
 }: {
   onPress: () => void;
   selected: boolean;
-  status?: "submitted" | "winner" | "returned";
+  status?: SubmissionStatus;
   task: HackTask;
 }) {
   return (
@@ -1598,6 +2815,7 @@ function TaskCard({
         {task.description}
       </Text>
       <View style={styles.proofTypeRow}>
+        <Text style={styles.proofTypeLabel}>{kindLabel(task.kind ?? "task")}</Text>
         {task.proofTypes.map((proofType) => (
           <Text key={proofType} style={styles.proofTypeLabel}>
             {proofType}
@@ -1608,7 +2826,14 @@ function TaskCard({
   );
 }
 
-function SubmissionCard({ submission }: { submission: DashboardData["mySubmissions"][number] }) {
+function SubmissionCard({
+  submission,
+}: {
+  submission:
+    | DashboardData["hostSubmissions"][number]
+    | DashboardData["mySubmissions"][number]
+    | DashboardData["visibleWinners"][number];
+}) {
   return (
     <View style={styles.submissionCard}>
       <View style={styles.cardTopRow}>
@@ -1741,11 +2966,18 @@ function getToneColors(tone: Tone) {
   };
 }
 
-function statusTone(status?: "submitted" | "winner" | "returned") {
+function statusTone(status?: SubmissionStatus) {
   if (status === "winner") return "gold";
+  if (status === "approved") return "cyan";
   if (status === "returned") return "red";
   if (status === "submitted") return "orange";
   return "gold";
+}
+
+function kindLabel(kind: TaskKind) {
+  if (kind === "challenge") return "Challenge";
+  if (kind === "game") return "Game";
+  return "Task";
 }
 
 function getInitials(name: string) {
@@ -1953,6 +3185,22 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     letterSpacing: 0,
   },
+  assignmentComposer: {
+    backgroundColor: theme.panelStrong,
+    borderColor: theme.border,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 12,
+    padding: 12,
+  },
+  createRoomCard: {
+    backgroundColor: theme.panelStrong,
+    borderColor: theme.border,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 12,
+    padding: 12,
+  },
   headerIconButton: {
     alignItems: "center",
     backgroundColor: theme.panelStrong,
@@ -2020,6 +3268,34 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
   },
+  inviteInputColumn: {
+    flex: 1,
+    gap: 7,
+  },
+  inviteJoinRow: {
+    alignItems: "flex-end",
+    flexDirection: "row",
+    gap: 10,
+  },
+  inviteMiniRow: {
+    alignItems: "center",
+    backgroundColor: theme.hostDark,
+    borderColor: theme.hostBorder,
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 6,
+    marginTop: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 7,
+  },
+  inviteMiniText: {
+    color: theme.host,
+    flex: 1,
+    fontFamily: Platform.select({ default: "monospace" }),
+    fontSize: 11,
+    fontWeight: "800",
+  },
   inviteStrip: {
     alignItems: "center",
     backgroundColor: theme.hostDark,
@@ -2030,6 +3306,51 @@ const styles = StyleSheet.create({
     gap: 8,
     marginTop: 12,
     padding: 9,
+  },
+  joinTightButton: {
+    alignItems: "center",
+    backgroundColor: theme.participant,
+    borderRadius: 8,
+    flexDirection: "row",
+    gap: 6,
+    height: 46,
+    justifyContent: "center",
+    minWidth: 78,
+    paddingHorizontal: 12,
+  },
+  joinTightText: {
+    color: "#03120c",
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  kindButton: {
+    alignItems: "center",
+    backgroundColor: theme.panelStrong,
+    borderColor: theme.border,
+    borderRadius: 8,
+    borderWidth: 1,
+    flex: 1,
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "center",
+    minHeight: 42,
+    paddingHorizontal: 10,
+  },
+  kindButtonActive: {
+    backgroundColor: theme.hostDark,
+    borderColor: theme.host,
+  },
+  kindButtonText: {
+    color: theme.muted,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  kindButtonTextActive: {
+    color: theme.host,
+  },
+  kindSwitchRow: {
+    flexDirection: "row",
+    gap: 8,
   },
   linkRow: {
     alignItems: "center",
@@ -2094,6 +3415,28 @@ const styles = StyleSheet.create({
     gap: 8,
     marginTop: 14,
   },
+  miniStat: {
+    backgroundColor: theme.backgroundAlt,
+    borderColor: theme.border,
+    borderRadius: 8,
+    borderWidth: 1,
+    flex: 1,
+    minHeight: 76,
+    padding: 10,
+  },
+  miniStatLabel: {
+    color: theme.dim,
+    fontFamily: Platform.select({ default: "monospace" }),
+    fontSize: 9,
+    marginTop: 2,
+    textTransform: "uppercase",
+  },
+  miniStatValue: {
+    color: theme.text,
+    fontSize: 18,
+    fontWeight: "900",
+    marginTop: 6,
+  },
   mutedText: {
     color: theme.muted,
     flex: 1,
@@ -2147,6 +3490,16 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: "row",
     gap: 10,
+  },
+  participantRow: {
+    alignItems: "center",
+    backgroundColor: theme.panelStrong,
+    borderColor: theme.border,
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 11,
+    padding: 12,
   },
   pressed: {
     opacity: 0.74,
@@ -2265,6 +3618,73 @@ const styles = StyleSheet.create({
   reviewTitleBlock: {
     flex: 1,
   },
+  roomShareIcon: {
+    alignItems: "center",
+    backgroundColor: theme.backgroundAlt,
+    borderColor: theme.border,
+    borderRadius: 8,
+    borderWidth: 1,
+    height: 32,
+    justifyContent: "center",
+    width: 32,
+  },
+  roomShelf: {
+    gap: 10,
+    paddingBottom: 2,
+  },
+  roomShelfHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  roomStatsGrid: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  roomTabButton: {
+    alignItems: "center",
+    backgroundColor: theme.panelStrong,
+    borderColor: theme.border,
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 7,
+    minHeight: 42,
+    paddingHorizontal: 12,
+  },
+  roomTabText: {
+    color: theme.muted,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  roomTabs: {
+    gap: 8,
+    paddingBottom: 2,
+  },
+  roomWorkspace: {
+    backgroundColor: theme.panel,
+    borderColor: theme.border,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 14,
+    padding: 14,
+  },
+  roomWorkspaceHeader: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    gap: 10,
+    justifyContent: "space-between",
+  },
+  roomWorkspaceTitle: {
+    color: theme.text,
+    fontSize: 21,
+    fontWeight: "800",
+    letterSpacing: 0,
+    lineHeight: 27,
+  },
+  roomWorkspaceTitleBlock: {
+    flex: 1,
+  },
   roleButton: {
     backgroundColor: theme.panelStrong,
     borderColor: theme.border,
@@ -2305,6 +3725,19 @@ const styles = StyleSheet.create({
   screen: {
     backgroundColor: theme.background,
     flex: 1,
+  },
+  selectableRoomCard: {
+    backgroundColor: theme.backgroundAlt,
+    borderColor: theme.border,
+    borderRadius: 8,
+    borderWidth: 1,
+    minHeight: 166,
+    padding: 12,
+    width: 236,
+  },
+  selectableRoomCardActive: {
+    backgroundColor: theme.participantDark,
+    borderColor: theme.participant,
   },
   sectionEyebrow: {
     color: theme.participantBorder,

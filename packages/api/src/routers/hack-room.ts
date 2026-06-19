@@ -5,6 +5,7 @@ import { z } from "zod";
 import { protectedProcedure, router } from "../index";
 
 const proofTypeSchema = z.enum(["github", "drive", "file", "url", "video", "deck"]);
+const taskKindSchema = z.enum(["task", "challenge", "game"]);
 
 type ParticipantRecord = {
   userId: string;
@@ -30,6 +31,7 @@ type HackTaskRecord = {
   _id: string;
   roomId: string;
   hostId: string;
+  kind?: z.infer<typeof taskKindSchema>;
   title: string;
   description: string;
   dueAt: string;
@@ -48,7 +50,7 @@ type HackSubmissionRecord = {
   participantEmail: string;
   proofUrl: string;
   notes: string;
-  status: "submitted" | "winner" | "returned";
+  status: "submitted" | "approved" | "winner" | "returned";
   hostFeedback?: string;
   awardXrdm?: number;
   submittedAt: string;
@@ -126,20 +128,26 @@ export const hackRoomRouter = router({
     const joinedRoomIds = joinedRooms.map((room) => room._id);
     const visibleRoomIds = [...new Set([...hostedRoomIds, ...joinedRoomIds])];
 
-    const [visibleTasks, mySubmissions, hostSubmissions] = await Promise.all([
-      visibleRoomIds.length
-        ? taskCollection().find({ roomId: { $in: visibleRoomIds } }).toArray()
-        : [],
-      submissionCollection().find({ participantId: user.id }).toArray(),
-      hostedRoomIds.length
-        ? submissionCollection().find({ roomId: { $in: hostedRoomIds } }).toArray()
-        : [],
-    ]);
+    const [visibleTasks, mySubmissions, hostSubmissions, visibleWinnerSubmissions] =
+      await Promise.all([
+        visibleRoomIds.length
+          ? taskCollection().find({ roomId: { $in: visibleRoomIds } }).toArray()
+          : [],
+        submissionCollection().find({ participantId: user.id }).toArray(),
+        hostedRoomIds.length
+          ? submissionCollection().find({ roomId: { $in: hostedRoomIds } }).toArray()
+          : [],
+        visibleRoomIds.length
+          ? submissionCollection()
+              .find({ roomId: { $in: visibleRoomIds }, status: "winner" })
+              .toArray()
+          : [],
+      ]);
 
     const roomById = new Map([...hostedRooms, ...joinedRooms].map((room) => [room._id, room]));
     const taskById = new Map(visibleTasks.map((task) => [task._id, task]));
 
-    const submissionsWithContext = hostSubmissions.map((submission) => {
+    const withSubmissionContext = (submission: HackSubmissionRecord) => {
       const task = taskById.get(submission.taskId);
       const room = roomById.get(submission.roomId);
       return {
@@ -148,13 +156,14 @@ export const hackRoomRouter = router({
         taskTitle: task?.title ?? "Hack task",
         rewardXrdm: task?.rewardXrdm ?? submission.awardXrdm ?? 0,
       };
-    });
+    };
 
     return {
       hostedRooms: hostedRooms.sort(byNewest),
       joinedRooms: joinedRooms.sort(byNewest),
       tasks: visibleTasks.sort(byNewest).map((task) => ({
         ...task,
+        kind: task.kind ?? "task",
         roomName: roomById.get(task.roomId)?.name ?? "Hack room",
         inviteCode: roomById.get(task.roomId)?.inviteCode ?? "",
       })),
@@ -168,7 +177,8 @@ export const hackRoomRouter = router({
           rewardXrdm: task?.rewardXrdm ?? submission.awardXrdm ?? 0,
         };
       }),
-      hostSubmissions: submissionsWithContext.sort(byNewest),
+      hostSubmissions: hostSubmissions.map(withSubmissionContext).sort(byNewest),
+      visibleWinners: visibleWinnerSubmissions.map(withSubmissionContext).sort(byNewest),
       stats: {
         activeRooms: hostedRooms.length,
         joinedRooms: joinedRooms.length,
@@ -252,6 +262,7 @@ export const hackRoomRouter = router({
     .input(
       z.object({
         roomId: z.string().min(1),
+        kind: taskKindSchema.default("task"),
         title: z.string().trim().min(3).max(100),
         description: z.string().trim().min(10).max(700),
         dueAt: z.string().trim().min(3).max(80),
@@ -266,6 +277,7 @@ export const hackRoomRouter = router({
         _id: makeId("task"),
         roomId: input.roomId,
         hostId: ctx.session.user.id,
+        kind: input.kind,
         title: input.title,
         description: input.description,
         dueAt: input.dueAt,
@@ -356,6 +368,43 @@ export const hackRoomRouter = router({
 
       await submissionCollection().insertOne(submission);
       return submission;
+    }),
+
+  approveSubmission: protectedProcedure
+    .input(
+      z.object({
+        submissionId: z.string().min(1),
+        hostFeedback: z.string().trim().min(3).max(700),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const submission = await submissionCollection().findOne({ _id: input.submissionId });
+
+      if (!submission) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Submission not found",
+        });
+      }
+
+      await requireHostedRoom(submission.roomId, ctx.session.user.id);
+      const timestamp = now();
+
+      await submissionCollection().updateOne(
+        { _id: input.submissionId },
+        {
+          $set: {
+            status: "approved",
+            hostFeedback: input.hostFeedback,
+            reviewedAt: timestamp,
+            updatedAt: timestamp,
+          },
+          $unset: { awardXrdm: "" },
+        },
+      );
+
+      const updatedSubmission = await submissionCollection().findOne({ _id: input.submissionId });
+      return updatedSubmission ?? submission;
     }),
 
   selectWinner: protectedProcedure
