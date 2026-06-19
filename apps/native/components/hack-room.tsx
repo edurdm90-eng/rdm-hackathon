@@ -1,10 +1,11 @@
 import type { AppRouter } from "@rdm-hack/api/routers/index";
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import type { inferRouterOutputs } from "@trpc/server";
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Image,
   KeyboardAvoidingView,
   Linking,
   Platform,
@@ -21,6 +22,8 @@ import z from "zod";
 import { authClient } from "@/lib/auth-client";
 import { HACK_THEME as theme } from "@/lib/constants";
 import { queryClient, trpc } from "@/utils/trpc";
+
+const rdmLogo = require("@/assets/logo/rdm-logo.png");
 
 type RouterOutputs = inferRouterOutputs<AppRouter>;
 type DashboardData = RouterOutputs["hackRoom"]["dashboard"];
@@ -168,29 +171,7 @@ function AuthGateway() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.authHero}>
-          <View style={styles.brandRow}>
-            <View style={styles.brandMark}>
-              <MaterialCommunityIcons name="hexagon-multiple" size={22} color={theme.participant} />
-            </View>
-            <View>
-              <Text style={styles.eyebrow}>XRDM Corporate</Text>
-              <Text style={styles.brandName}>Hack Room</Text>
-            </View>
-          </View>
-
-          <Text style={styles.authHeadline}>Build, submit, verify, and win.</Text>
-          <Text style={styles.authCopy}>
-            Join invite-only rooms, publish tasks, submit proof, and lock in XRDM awards from a
-            focused mobile command center.
-          </Text>
-
-          <View style={styles.authStatsRow}>
-            <MiniStat label="Rooms" value="Live" />
-            <MiniStat label="Proof" value="Verified" />
-            <MiniStat label="Rewards" value="XRDM" />
-          </View>
-        </View>
+        <Image accessibilityIgnoresInvertColors source={rdmLogo} style={styles.authLogo} />
 
         <View style={styles.authCard}>
           <SegmentedToggle
@@ -207,14 +188,7 @@ function AuthGateway() {
             rightLabel="Create"
           />
 
-          <Text style={styles.formTitle}>
-            {isSignUp ? "Create your hacker profile" : "Welcome back, builder"}
-          </Text>
-          <Text style={styles.formSubtitle}>
-            {isSignUp
-              ? "Start hosting rooms or join one with an invite code."
-              : "Sign in to continue your hackathon flow."}
-          </Text>
+          <Text style={styles.formTitle}>{isSignUp ? "Create Account" : "Sign In"}</Text>
 
           {error ? <ErrorBanner message={error} /> : null}
 
@@ -435,11 +409,7 @@ function HackRoomDashboard({
           <View style={styles.heroTopRow}>
             <View style={styles.brandRow}>
               <View style={styles.brandMark}>
-                <MaterialCommunityIcons
-                  name="hexagon-multiple"
-                  size={22}
-                  color={theme.participant}
-                />
+                <Image accessibilityIgnoresInvertColors source={rdmLogo} style={styles.headerLogo} />
               </View>
               <View>
                 <Text style={styles.eyebrow}>XRDM Hack Room</Text>
@@ -1305,15 +1275,6 @@ function MetricCard({
   );
 }
 
-function MiniStat({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.miniStat}>
-      <Text style={styles.miniStatValue}>{value}</Text>
-      <Text style={styles.miniStatLabel}>{label}</Text>
-    </View>
-  );
-}
-
 function RoomCard({ role, room }: { role: Role; room: HackRoom | DashboardData["joinedRooms"][number] }) {
   const tone = role === "host" ? "violet" : "cyan";
   return (
@@ -1543,38 +1504,21 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     gap: 14,
+    maxWidth: 420,
     padding: 16,
+    width: "100%",
   },
-  authCopy: {
-    color: theme.muted,
-    fontSize: 14,
-    lineHeight: 22,
-    marginTop: 12,
-  },
-  authHeadline: {
-    color: theme.text,
-    fontSize: 34,
-    fontWeight: "700",
-    letterSpacing: 0,
-    lineHeight: 40,
-    marginTop: 32,
-  },
-  authHero: {
-    backgroundColor: theme.panel,
-    borderColor: theme.border,
-    borderRadius: 8,
-    borderWidth: 1,
-    padding: 18,
+  authLogo: {
+    height: 92,
+    marginBottom: 12,
+    resizeMode: "cover",
+    width: 240,
   },
   authScrollContent: {
-    gap: 16,
+    alignItems: "center",
+    flexGrow: 1,
+    justifyContent: "center",
     padding: 18,
-    paddingBottom: 28,
-  },
-  authStatsRow: {
-    flexDirection: "row",
-    gap: 8,
-    marginTop: 20,
   },
   avatar: {
     alignItems: "center",
@@ -1603,13 +1547,10 @@ const styles = StyleSheet.create({
   },
   brandMark: {
     alignItems: "center",
-    backgroundColor: theme.participantDark,
-    borderColor: theme.participantBorder,
-    borderRadius: 8,
-    borderWidth: 1,
-    height: 44,
+    height: 42,
     justifyContent: "center",
-    width: 44,
+    overflow: "hidden",
+    width: 112,
   },
   brandName: {
     color: theme.text,
@@ -1752,11 +1693,6 @@ const styles = StyleSheet.create({
     fontSize: 10,
     textTransform: "uppercase",
   },
-  formSubtitle: {
-    color: theme.muted,
-    fontSize: 13,
-    lineHeight: 20,
-  },
   formTitle: {
     color: theme.text,
     fontSize: 20,
@@ -1768,6 +1704,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 12,
     justifyContent: "space-between",
+  },
+  headerLogo: {
+    height: 42,
+    resizeMode: "cover",
+    width: 112,
   },
   hostRoomCard: {
     backgroundColor: theme.panelStrong,
@@ -1871,26 +1812,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
     marginTop: 14,
-  },
-  miniStat: {
-    backgroundColor: theme.backgroundAlt,
-    borderColor: theme.border,
-    borderRadius: 8,
-    borderWidth: 1,
-    flex: 1,
-    padding: 10,
-  },
-  miniStatLabel: {
-    color: theme.dim,
-    fontFamily: Platform.select({ default: "monospace" }),
-    fontSize: 10,
-    marginTop: 3,
-    textTransform: "uppercase",
-  },
-  miniStatValue: {
-    color: theme.award,
-    fontSize: 13,
-    fontWeight: "800",
   },
   mutedText: {
     color: theme.muted,
