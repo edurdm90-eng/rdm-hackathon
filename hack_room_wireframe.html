@@ -1,0 +1,1288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Hack Room · XRDM Hackathon — Mobile Wireframe</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;1,300&family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;1,9..144,400&display=swap');
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+/* ═══════════════════════
+   DESIGN TOKENS
+═══════════════════════ */
+:root{
+  /* Canvas */
+  --p:#0A0C0F; --sh:#0D0F12; --bg0:#0C0E11; --bg1:#141618; --bg2:#1A1D20; --bg3:#222528; --bg4:#2A2E32;
+  /* Text */
+  --t1:#EEE8DE; --t2:#CCC6BA; --t3:#9C9690; --t4:#626058; --t5:#363330;
+  /* Participant — cyan-emerald */
+  --em:#1EEAB0; --emd:#0B8060; --emb:#061F18;
+  /* Organizer — electric violet */
+  --vi:#A060FF; --vid:#4A1A90; --vib:#160A2A;
+  /* Gold (XRDM / awards) */
+  --gd:#F0C040; --gdd:#8A6A00; --gdb:#241A00;
+  /* Coral (urgent / deadline) */
+  --co:#FF5A4A; --cod:#901E14; --cob:#280A08;
+  /* Sky (challenges / info) */
+  --sk:#38B8FF; --skd:#0C5888; --skb:#061428;
+  /* Lime (games) */
+  --lm:#80E040; --lmd:#3A6A10; --lmb:#0E1C04;
+  /* Orange (spot challenge) */
+  --or:#FF8820; --ord:#904200; --orb:#241000;
+  /* Borders */
+  --bs:rgba(238,232,222,.06); --bm:rgba(238,232,222,.12); --bl:rgba(238,232,222,.20);
+  /* Fonts */
+  --mono:'IBM Plex Mono',monospace;
+  --sans:'IBM Plex Sans',sans-serif;
+  --serif:'Fraunces',Georgia,serif;
+  --r:11px;
+}
+
+body{font-family:var(--sans);background:var(--p);color:var(--t1);padding:28px 14px 60px;min-height:100vh;}
+
+/* ═══════════════════════
+   PAGE CHROME
+═══════════════════════ */
+.masthead{text-align:center;margin-bottom:26px;}
+.mh-eye{font-family:var(--mono);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--em);margin-bottom:7px;}
+.masthead h1{font-family:var(--serif);font-size:26px;font-weight:500;font-style:italic;color:var(--t1);margin-bottom:4px;}
+.masthead p{font-size:13px;color:var(--t3);font-weight:300;}
+
+/* Nav map */
+.nav-map{max-width:1080px;margin:0 auto 24px;background:var(--bg2);border:1px solid var(--bm);border-radius:var(--r);padding:16px 20px;}
+.nm-title{font-family:var(--mono);font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--em);margin-bottom:12px;}
+.nm-row{display:flex;gap:10px;flex-wrap:wrap;}
+.nm-col{flex:1;min-width:120px;}
+.nm-ch{font-family:var(--mono);font-size:8px;letter-spacing:1.5px;text-transform:uppercase;border-bottom:1px solid var(--bm);padding-bottom:5px;margin-bottom:7px;}
+.nm-col.shared .nm-ch{color:var(--t3);}
+.nm-col.part .nm-ch{color:var(--em);}
+.nm-col.org .nm-ch{color:var(--vi);}
+.nm-item{font-size:11px;color:var(--t3);padding:2px 0;display:flex;align-items:center;gap:5px;}
+.nm-item::before{content:'›';font-family:var(--mono);}
+.nm-col.part .nm-item::before{color:var(--emd);}
+.nm-col.org .nm-item::before{color:var(--vid);}
+
+/* Row header */
+.row-hd{display:flex;align-items:center;gap:12px;max-width:1080px;margin:24px auto 12px;}
+.rh-l{font-family:var(--mono);font-size:9px;letter-spacing:2px;text-transform:uppercase;white-space:nowrap;}
+.rh-line{flex:1;height:1px;}
+.rh-b{font-family:var(--mono);font-size:8px;padding:3px 9px;border-radius:3px;white-space:nowrap;border:1px solid;}
+.row-shared .rh-l,.row-shared .rh-b{color:var(--t3);}
+.row-shared .rh-line{background:var(--bm);}
+.row-shared .rh-b{background:var(--bg3);border-color:var(--bm);}
+.row-part .rh-l{color:var(--em);}
+.row-part .rh-line{background:rgba(30,234,176,.25);}
+.row-part .rh-b{background:var(--emb);color:var(--em);border-color:var(--emd);}
+.row-org .rh-l{color:var(--vi);}
+.row-org .rh-line{background:rgba(160,96,255,.25);}
+.row-org .rh-b{background:var(--vib);color:var(--vi);border-color:var(--vid);}
+.row-games .rh-l{color:var(--lm);}
+.row-games .rh-line{background:rgba(128,224,64,.25);}
+.row-games .rh-b{background:var(--lmb);color:var(--lm);border-color:var(--lmd);}
+
+/* Grid */
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;max-width:1080px;margin:0 auto;}
+
+/* ═══════════════════════
+   PHONE SHELL
+═══════════════════════ */
+.pw{display:flex;flex-direction:column;align-items:center;gap:8px;}
+.pw-lbl{font-family:var(--mono);font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--t4);text-align:center;}
+.phone{width:100%;max-width:300px;border-radius:40px;padding:8px;border:1px solid var(--bm);}
+.phone-sh{background:var(--sh);}
+.phone-part{background:#061210;}
+.phone-org{background:#100820;}
+.phone-game{background:#091200;}
+.inner{border-radius:33px;overflow:hidden;height:660px;display:flex;flex-direction:column;position:relative;}
+.inner-sh{background:var(--bg1);}
+.inner-part{background:#0C1610;}
+.inner-org{background:#100C1C;}
+.inner-game{background:#0C1406;}
+
+.notch{position:absolute;top:0;left:50%;transform:translateX(-50%);width:90px;height:24px;border-radius:0 0 13px 13px;z-index:30;display:flex;align-items:center;justify-content:center;gap:5px;}
+.notch-sh{background:var(--sh);}
+.notch-part{background:#061210;}
+.notch-org{background:#100820;}
+.notch-game{background:#091200;}
+.np{width:34px;height:3.5px;background:var(--bg4);border-radius:2px;}
+.nd{width:7px;height:7px;background:var(--bg4);border-radius:50%;}
+
+.scr{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-webkit-overflow-scrolling:touch;}
+.scr::-webkit-scrollbar{display:none;}
+.bp{padding:13px 14px 16px;}
+
+/* ═══════════════════════
+   UNIVERSAL TOP BAR
+═══════════════════════ */
+.topbar{height:50px;padding:0 13px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--bs);flex-shrink:0;z-index:20;}
+.topbar-sh{background:var(--bg0);}
+.topbar-part{background:#08120C;}
+.topbar-org{background:#0C061A;}
+.topbar-game{background:#091000;}
+.tb-left{display:flex;align-items:center;gap:7px;min-width:52px;}
+.tb-back{display:flex;align-items:center;gap:4px;cursor:pointer;font-family:var(--mono);font-size:10px;color:var(--t3);background:none;border:none;padding:0;}
+.tb-back-ic{font-size:15px;}
+.tbi-part{color:var(--em);}
+.tbi-org{color:var(--vi);}
+.tbi-game{color:var(--lm);}
+.tbi-sh{color:var(--em);}
+.tb-ham{width:28px;height:28px;border-radius:7px;border:1px solid var(--bm);background:var(--bg2);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3.5px;cursor:pointer;}
+.tb-bar{width:12px;height:1.5px;background:var(--t2);border-radius:1px;}
+.tb-centre{flex:1;text-align:center;padding:0 5px;}
+.tb-title{font-size:12px;font-weight:600;color:var(--t1);}
+.tb-bc{font-family:var(--mono);font-size:8px;color:var(--t4);margin-top:1px;}
+.tb-right{min-width:52px;display:flex;justify-content:flex-end;}
+.role-badge{font-family:var(--mono);font-size:8px;font-weight:600;padding:3px 8px;border-radius:20px;border:1px solid;white-space:nowrap;}
+.rb-part{background:var(--emb);color:var(--em);border-color:var(--emd);}
+.rb-org{background:var(--vib);color:var(--vi);border-color:var(--vid);}
+.rb-sh{background:var(--bg3);color:var(--t3);border-color:var(--bm);}
+
+/* ═══════════════════════
+   SHARED ATOMS
+═══════════════════════ */
+.pill{display:inline-flex;align-items:center;font-family:var(--mono);font-size:8px;font-weight:500;letter-spacing:.3px;padding:3px 8px;border-radius:20px;border:1px solid;}
+.p-em{background:var(--emb);color:var(--em);border-color:var(--emd);}
+.p-gd{background:var(--gdb);color:var(--gd);border-color:var(--gdd);}
+.p-co{background:var(--cob);color:var(--co);border-color:var(--cod);}
+.p-sk{background:var(--skb);color:var(--sk);border-color:var(--skd);}
+.p-vi{background:var(--vib);color:var(--vi);border-color:var(--vid);}
+.p-lm{background:var(--lmb);color:var(--lm);border-color:var(--lmd);}
+.p-or{background:var(--orb);color:var(--or);border-color:var(--ord);}
+.p-dim{background:var(--bg3);color:var(--t3);border-color:var(--bm);}
+
+.card{background:var(--bg2);border:1px solid var(--bm);border-radius:var(--r);padding:12px;}
+.card+.card{margin-top:8px;}
+.divider{border:none;border-top:1px solid var(--bs);margin:12px 0;}
+.sr{display:flex;align-items:center;justify-content:space-between;margin-bottom:9px;}
+.sr-t{font-size:11px;font-weight:600;color:var(--t2);}
+.sr-a{font-family:var(--mono);font-size:9px;color:var(--em);cursor:pointer;}
+
+.av{display:flex;align-items:center;justify-content:center;border-radius:50%;font-family:var(--mono);font-weight:600;flex-shrink:0;}
+.av-em{background:var(--emb);color:var(--em);border:1px solid var(--emd);}
+.av-gd{background:var(--gdb);color:var(--gd);border:1px solid var(--gdd);}
+.av-sk{background:var(--skb);color:var(--sk);border:1px solid var(--skd);}
+.av-vi{background:var(--vib);color:var(--vi);border:1px solid var(--vid);}
+.av-or{background:var(--orb);color:var(--or);border:1px solid var(--ord);}
+.av-lm{background:var(--lmb);color:var(--lm);border:1px solid var(--lmd);}
+.av-cr{background:var(--bg3);color:var(--t2);border:1px solid var(--bl);}
+
+.btn{width:100%;padding:13px;border:none;border-radius:9px;font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.3px;cursor:pointer;}
+.btn-em{background:var(--em);color:#03120C;}
+.btn-vi{background:var(--vi);color:#060214;}
+.btn-gd{background:var(--gd);color:#120D00;}
+.btn-or{background:var(--or);color:#120600;}
+.btn-lm{background:var(--lm);color:#081000;}
+.btn-co{background:var(--co);color:#120200;}
+.btn-dim{background:var(--bg3);color:var(--t2);border:1px solid var(--bl);}
+.btn-pair{display:grid;grid-template-columns:1fr 2fr;gap:7px;}
+.btn-sm{padding:9px 12px;font-size:10px;border-radius:8px;width:auto;}
+
+.fl{font-family:var(--mono);font-size:8px;letter-spacing:1.2px;text-transform:uppercase;color:var(--t4);display:block;margin-bottom:5px;}
+.fi{width:100%;background:var(--bg2);border:1px solid var(--bm);border-radius:8px;padding:10px 12px;font-family:var(--sans);font-size:12px;color:var(--t1);outline:none;}
+.fi:focus{border-color:var(--emd);}
+.fi-ta{resize:none;height:60px;line-height:1.5;}
+.fblock{margin-bottom:13px;}
+.char-ct{font-family:var(--mono);text-align:right;font-size:8px;color:var(--t4);margin-top:2px;}
+
+.prog{height:4px;background:var(--bg4);border-radius:2px;overflow:hidden;}
+.prog-f{height:100%;border-radius:2px;}
+
+/* track label strip */
+.tl{display:flex;align-items:center;gap:8px;margin-bottom:14px;}
+.tl-line{height:2px;width:24px;border-radius:1px;}
+.tl-txt{font-family:var(--mono);font-size:8px;letter-spacing:2px;text-transform:uppercase;}
+.tl-part .tl-line{background:var(--em);}
+.tl-part .tl-txt{color:var(--em);}
+.tl-org .tl-line{background:var(--vi);}
+.tl-org .tl-txt{color:var(--vi);}
+.tl-sh .tl-line{background:var(--t4);}
+.tl-sh .tl-txt{color:var(--t4);}
+.tl-game .tl-line{background:var(--lm);}
+.tl-game .tl-txt{color:var(--lm);}
+
+/* ═══════════════════════
+   S01 SPLASH
+═══════════════════════ */
+.splash{height:100%;background:var(--bg0);display:flex;flex-direction:column;}
+.sp-hero{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 18px;}
+.sp-mark{
+  width:72px;height:72px;border-radius:20px;
+  background:var(--bg2);border:1px solid var(--emd);
+  display:flex;align-items:center;justify-content:center;
+  margin-bottom:18px;position:relative;
+}
+.sp-mark::before{content:'';position:absolute;inset:-8px;border-radius:28px;border:1px solid var(--emd);opacity:.3;}
+.sp-mark-t{font-family:var(--serif);font-size:24px;color:var(--em);font-style:italic;}
+.sp-event-badge{font-family:var(--mono);font-size:7px;letter-spacing:1.5px;text-transform:uppercase;background:var(--or);color:var(--orb);padding:3px 10px;border-radius:20px;margin-bottom:10px;}
+.sp-name{font-family:var(--serif);font-size:24px;font-weight:500;font-style:italic;color:var(--t1);margin-bottom:2px;}
+.sp-sub{font-family:var(--mono);font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--em);margin-bottom:10px;}
+.sp-tag{font-size:12px;color:var(--t3);text-align:center;line-height:1.7;font-weight:300;}
+.sp-kpis{display:flex;border:1px solid var(--bm);border-radius:var(--r);overflow:hidden;margin-top:18px;width:100%;}
+.skpi{flex:1;padding:10px 6px;text-align:center;border-right:1px solid var(--bm);}
+.skpi:last-child{border-right:none;}
+.skpi-v{font-family:var(--serif);font-size:18px;color:var(--t1);}
+.skpi-l{font-family:var(--mono);font-size:8px;color:var(--t4);margin-top:2px;letter-spacing:.4px;}
+.sp-actions{padding:0 18px 22px;display:flex;flex-direction:column;gap:8px;}
+.sp-role{border-radius:var(--r);padding:13px;cursor:pointer;}
+.sp-role-part{background:var(--emb);border:1px solid var(--emd);}
+.sp-role-org{background:var(--vib);border:1px solid var(--vid);}
+.sp-role-eye{font-family:var(--mono);font-size:8px;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:3px;}
+.sp-role-eye-part{color:var(--emd);}
+.sp-role-eye-org{color:var(--vid);}
+.sp-role-title{font-size:13px;font-weight:600;}
+.sp-role-title-part{color:var(--em);}
+.sp-role-title-org{color:var(--vi);}
+.sp-role-sub{font-size:10px;margin-top:2px;}
+.sp-role-sub-part{color:var(--emd);}
+.sp-role-sub-org{color:var(--vid);}
+.sp-note{text-align:center;font-family:var(--mono);font-size:8px;color:var(--t5);}
+
+/* ═══════════════════════
+   S01b NAV DRAWER
+═══════════════════════ */
+.drawer-panel{
+  position:absolute;top:0;left:0;bottom:0;
+  width:210px;background:var(--bg1);border-right:1px solid var(--bm);
+  display:flex;flex-direction:column;z-index:40;
+}
+.drawer-overlay{position:absolute;inset:0;background:rgba(0,0,0,.6);border-radius:33px;z-index:39;}
+.dp-head{padding:40px 14px 13px;border-bottom:1px solid var(--bs);}
+.dp-cr{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
+.dp-tag{font-family:var(--mono);font-size:7px;letter-spacing:2px;text-transform:uppercase;color:var(--em);}
+.dp-x{font-family:var(--mono);font-size:16px;color:var(--t3);cursor:pointer;}
+.dp-user{display:flex;align-items:center;gap:8px;}
+.dp-nm{font-size:12px;font-weight:600;color:var(--t1);}
+.dp-rl{font-family:var(--mono);font-size:8px;color:var(--t4);margin-top:1px;}
+.dp-scroll{flex:1;overflow-y:auto;padding:7px 0 12px;scrollbar-width:none;}
+.dp-scroll::-webkit-scrollbar{display:none;}
+.dp-sec{font-family:var(--mono);font-size:7px;letter-spacing:2px;text-transform:uppercase;color:var(--t5);padding:9px 14px 4px;}
+.dp-item{display:flex;align-items:center;gap:8px;padding:9px 14px;cursor:pointer;border-left:2px solid transparent;}
+.dp-item:hover{background:var(--bg2);}
+.dp-item.on-em{background:var(--emb);border-left-color:var(--em);}
+.dp-item.on-vi{background:var(--vib);border-left-color:var(--vi);}
+.dp-item.on-lm{background:var(--lmb);border-left-color:var(--lm);}
+.dp-ic{font-size:14px;width:18px;text-align:center;flex-shrink:0;}
+.dp-lbl{font-size:11px;font-weight:500;color:var(--t2);}
+.dp-item.on-em .dp-lbl{color:var(--em);}
+.dp-item.on-vi .dp-lbl{color:var(--vi);}
+.dp-item.on-lm .dp-lbl{color:var(--lm);}
+.dp-sub{font-size:9px;color:var(--t4);margin-top:1px;}
+.dp-bdg{font-family:var(--mono);font-size:7px;padding:1px 5px;border-radius:8px;}
+.db-or{background:var(--orb);color:var(--or);border:1px solid var(--ord);}
+.db-gd{background:var(--gdb);color:var(--gd);border:1px solid var(--gdd);}
+.dp-foot{padding:10px 14px;border-top:1px solid var(--bs);}
+.dp-fi{display:flex;align-items:center;gap:7px;padding:6px 0;cursor:pointer;}
+.dp-fi-ic{font-size:12px;color:var(--t4);}
+.dp-fi-l{font-size:11px;color:var(--t4);}
+
+/* ═══════════════════════
+   S02 HOME HUB
+═══════════════════════ */
+.hub-greet{padding:12px 14px 10px;border-bottom:1px solid var(--bs);}
+.hg-name{font-family:var(--mono);font-size:8px;letter-spacing:1.5px;text-transform:uppercase;color:var(--t4);margin-bottom:2px;}
+.hg-title{font-family:var(--serif);font-size:17px;font-weight:500;font-style:italic;color:var(--t1);}
+.role-tabs{display:flex;border-bottom:1px solid var(--bs);}
+.rt{flex:1;padding:9px;text-align:center;font-family:var(--mono);font-size:9px;font-weight:600;color:var(--t4);cursor:pointer;border-bottom:2px solid transparent;}
+.rt-part.on{color:var(--em);border-bottom-color:var(--em);}
+.rt-org.on{color:var(--vi);border-bottom-color:var(--vi);}
+.hub-section{padding:9px 12px 4px;}
+.hub-sec-lbl{font-family:var(--mono);font-size:7px;letter-spacing:2px;text-transform:uppercase;color:var(--t5);margin-bottom:7px;}
+.hub-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:5px;}
+.hub-tile{background:var(--bg2);border:1px solid var(--bm);border-radius:var(--r);padding:11px 9px;cursor:pointer;position:relative;transition:border-color .15s;}
+.ht-icon{font-size:18px;margin-bottom:5px;line-height:1;}
+.ht-lbl{font-size:11px;font-weight:600;margin-bottom:2px;line-height:1.2;}
+.ht-sub{font-size:9px;color:var(--t4);line-height:1.3;}
+.ht-badge{position:absolute;top:7px;right:7px;}
+.ht-em{border-color:var(--emd);background:var(--emb);}
+.ht-em .ht-lbl{color:var(--em);}
+.ht-or{border-color:var(--ord);background:var(--orb);}
+.ht-or .ht-lbl{color:var(--or);}
+.ht-lm{border-color:var(--lmd);background:var(--lmb);}
+.ht-lm .ht-lbl{color:var(--lm);}
+.ht-gd{border-color:var(--gdd);background:var(--gdb);}
+.ht-gd .ht-lbl{color:var(--gd);}
+.ht-vi{border-color:var(--vid);background:var(--vib);}
+.ht-vi .ht-lbl{color:var(--vi);}
+.hub-wide{background:var(--bg2);border:1px solid var(--bm);border-radius:var(--r);padding:10px 12px;cursor:pointer;display:flex;align-items:center;gap:10px;margin-bottom:6px;}
+.hw-icon{font-size:16px;flex-shrink:0;}
+.hw-body{flex:1;}
+.hw-lbl{font-size:11px;font-weight:600;color:var(--t1);}
+.hw-sub{font-size:9px;color:var(--t4);margin-top:1px;}
+.hw-arr{font-family:var(--mono);font-size:13px;color:var(--t4);}
+
+/* ═══════════════════════
+   P1 MY ASSIGNMENTS
+═══════════════════════ */
+.asgn-card{background:var(--bg2);border:1px solid var(--bm);border-radius:var(--r);padding:12px;margin-bottom:8px;}
+.asgn-card.due{border-color:var(--emd);}
+.asgn-card.overdue{border-color:var(--cod);}
+.asgn-card.submitted{border-color:var(--emd);opacity:.75;}
+.ac-head{display:flex;align-items:flex-start;gap:8px;margin-bottom:8px;}
+.ac-ic{font-size:18px;flex-shrink:0;}
+.ac-info{flex:1;}
+.ac-title{font-size:12px;font-weight:600;color:var(--t1);}
+.ac-group{font-family:var(--mono);font-size:8px;color:var(--t4);margin-top:2px;}
+.ac-desc{font-size:10px;color:var(--t3);margin-top:3px;line-height:1.5;}
+.ac-meta{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:5px;margin-top:7px;}
+.ac-deadline{font-family:var(--mono);font-size:9px;color:var(--co);}
+.ac-xrdm{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--gd);}
+
+.no-future-notice{background:var(--bg3);border:1px solid var(--bm);border-radius:9px;padding:10px 12px;display:flex;gap:8px;align-items:flex-start;margin-bottom:12px;}
+.nfn-ic{font-size:13px;flex-shrink:0;}
+.nfn-t{font-size:10px;color:var(--t3);line-height:1.5;}
+
+/* ═══════════════════════
+   P2 SUBMIT PROOF
+═══════════════════════ */
+.ctx-card{background:var(--bg2);border:1px solid var(--bm);border-radius:var(--r);padding:12px;margin-bottom:14px;}
+.cc-label{font-family:var(--mono);font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--t4);margin-bottom:4px;}
+.cc-title{font-size:14px;font-weight:600;color:var(--t1);margin-bottom:4px;}
+.cc-meta{display:flex;gap:5px;flex-wrap:wrap;}
+
+.proof-type-row{display:flex;gap:6px;margin-bottom:14px;}
+.pt{flex:1;border:1px solid var(--bm);border-radius:9px;padding:10px 8px;text-align:center;cursor:pointer;transition:all .15s;}
+.pt.on{border-color:var(--emd);background:var(--emb);}
+.pt-ic{font-size:18px;margin-bottom:4px;}
+.pt-l{font-size:10px;font-weight:500;color:var(--t3);}
+.pt.on .pt-l{color:var(--em);}
+
+.url-field{display:flex;gap:6px;margin-bottom:10px;}
+.uf-fi{flex:1;background:var(--bg2);border:1px solid var(--bm);border-radius:8px;padding:10px 12px;font-family:var(--mono);font-size:10px;color:var(--em);outline:none;}
+.uf-fi:focus{border-color:var(--emd);}
+.uf-btn{background:var(--emb);border:1px solid var(--emd);border-radius:8px;padding:10px 10px;font-family:var(--mono);font-size:10px;color:var(--em);cursor:pointer;white-space:nowrap;}
+
+.upload-zone{border:1px dashed var(--bl);border-radius:9px;padding:16px;text-align:center;background:var(--bg3);cursor:pointer;margin-bottom:10px;}
+.uz-ic{font-size:22px;color:var(--t4);}
+.uz-t{font-size:11px;font-weight:500;color:var(--t3);margin-top:5px;}
+.uz-s{font-family:var(--mono);font-size:8px;color:var(--t4);margin-top:2px;}
+
+.file-attached{display:flex;align-items:center;gap:7px;background:var(--emb);border:1px solid var(--emd);border-radius:8px;padding:8px 10px;margin-bottom:7px;}
+.fa-nm{font-size:10px;font-weight:500;color:var(--em);flex:1;}
+.fa-sz{font-family:var(--mono);font-size:8px;color:var(--emd);}
+
+.xrdm-est{background:var(--gdb);border:1px solid var(--gdd);border-radius:9px;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;margin-bottom:13px;}
+.xe-lbl{font-size:11px;color:var(--t3);}
+.xe-val{font-family:var(--serif);font-size:20px;color:var(--gd);}
+.xe-unit{font-family:var(--mono);font-size:9px;color:var(--gdd);margin-left:3px;}
+
+/* ═══════════════════════
+   P3 SPOT CHALLENGES
+═══════════════════════ */
+.challenge-live{background:var(--orb);border:1px solid var(--ord);border-radius:var(--r);padding:13px;margin-bottom:12px;position:relative;overflow:hidden;}
+.cl-glow{position:absolute;top:-20px;right:-20px;width:80px;height:80px;border-radius:50%;background:radial-gradient(circle,rgba(255,136,32,.15),transparent 70%);}
+.cl-head{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
+.cl-live-dot{width:8px;height:8px;border-radius:50%;background:var(--or);animation:pulse 1.4s ease-in-out infinite;}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.6;transform:scale(1.3)}}
+.cl-live-tag{font-family:var(--mono);font-size:8px;font-weight:600;color:var(--or);letter-spacing:1.5px;text-transform:uppercase;}
+.cl-timer{font-family:var(--mono);font-size:10px;color:var(--ord);margin-left:auto;}
+.cl-title{font-family:var(--serif);font-size:16px;font-weight:500;color:var(--or);margin-bottom:3px;}
+.cl-group{font-family:var(--mono);font-size:8px;color:var(--ord);margin-bottom:8px;}
+.cl-desc{font-size:11px;color:var(--t3);line-height:1.6;margin-bottom:9px;}
+.cl-reward{display:flex;align-items:center;justify-content:space-between;}
+.clr-xrdm{font-family:var(--mono);font-size:14px;font-weight:700;color:var(--gd);}
+.clr-nft{font-size:10px;color:var(--gdd);}
+
+.challenge-past{background:var(--bg2);border:1px solid var(--bs);border-radius:var(--r);padding:11px;margin-bottom:7px;display:flex;align-items:center;gap:9px;opacity:.6;}
+.cp-sym{font-size:16px;flex-shrink:0;}
+.cp-info{flex:1;}
+.cp-title{font-size:11px;font-weight:500;color:var(--t2);}
+.cp-group{font-family:var(--mono);font-size:8px;color:var(--t4);margin-top:1px;}
+.cp-right{display:flex;flex-direction:column;align-items:flex-end;gap:3px;}
+.cp-xrdm{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--gd);}
+
+.leaderboard-mini{background:var(--bg3);border:1px solid var(--bm);border-radius:var(--r);padding:11px;margin-top:12px;}
+.lm-head{font-family:var(--mono);font-size:8px;letter-spacing:1.5px;text-transform:uppercase;color:var(--t5);margin-bottom:9px;}
+.lm-row{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
+.lm-row:last-child{margin-bottom:0;}
+.lm-rank{font-family:var(--mono);font-size:11px;font-weight:700;width:16px;color:var(--t4);}
+.lm-bar{flex:1;height:3px;background:var(--bg4);border-radius:2px;overflow:hidden;}
+.lm-fill{height:100%;border-radius:2px;}
+.lm-pts{font-family:var(--mono);font-size:10px;font-weight:600;}
+
+/* ═══════════════════════
+   P4 RESPONSIBLE GAMES
+═══════════════════════ */
+.games-banner{background:var(--lmb);border:1px solid var(--lmd);border-radius:var(--r);padding:13px;margin-bottom:13px;display:flex;align-items:center;gap:12px;}
+.gb-sym{font-size:32px;flex-shrink:0;}
+.gb-title{font-family:var(--serif);font-size:16px;color:var(--lm);margin-bottom:2px;}
+.gb-sub{font-size:10px;color:var(--lmd);line-height:1.5;}
+
+/* Horizontal scroll game cards */
+.games-scroll{overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding-bottom:4px;margin-bottom:13px;}
+.games-scroll::-webkit-scrollbar{display:none;}
+.games-track{display:flex;gap:8px;width:max-content;}
+.game-card{width:130px;border-radius:var(--r);padding:13px;cursor:pointer;position:relative;overflow:hidden;flex-shrink:0;border:1px solid;}
+.gc-lime{background:var(--lmb);border-color:var(--lmd);}
+.gc-sk{background:var(--skb);border-color:var(--skd);}
+.gc-gd{background:var(--gdb);border-color:var(--gdd);}
+.gc-vi{background:var(--vib);border-color:var(--vid);}
+.gc-or{background:var(--orb);border-color:var(--ord);}
+.gc-sym{font-size:28px;display:block;margin-bottom:7px;}
+.gc-name{font-size:11px;font-weight:600;margin-bottom:3px;}
+.gc-lime .gc-name{color:var(--lm);}
+.gc-sk .gc-name{color:var(--sk);}
+.gc-gd .gc-name{color:var(--gd);}
+.gc-vi .gc-name{color:var(--vi);}
+.gc-or .gc-name{color:var(--or);}
+.gc-type{font-family:var(--mono);font-size:8px;color:var(--t4);}
+.gc-time{font-family:var(--mono);font-size:8px;margin-top:7px;}
+.gc-lime .gc-time{color:var(--lmd);}
+.gc-sk .gc-time{color:var(--skd);}
+.gc-gd .gc-time{color:var(--gdd);}
+.gc-vi .gc-time{color:var(--vid);}
+.gc-or .gc-time{color:var(--ord);}
+
+/* Active game modal-ish card */
+.active-game{background:var(--lmb);border:1px solid var(--lmd);border-radius:var(--r);padding:14px;margin-bottom:12px;}
+.ag-head{display:flex;align-items:center;gap:9px;margin-bottom:10px;}
+.ag-sym{font-size:24px;flex-shrink:0;}
+.ag-title{font-family:var(--serif);font-size:15px;color:var(--lm);}
+.ag-sub{font-size:10px;color:var(--lmd);margin-top:2px;}
+.ag-timer-ring{
+  width:56px;height:56px;border-radius:50%;
+  background:conic-gradient(var(--lm) 210deg, var(--lmb) 0deg);
+  display:flex;align-items:center;justify-content:center;
+  position:relative;margin:0 auto 10px;
+}
+.ag-timer-inner{
+  width:44px;height:44px;border-radius:50%;background:var(--lmb);
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--mono);font-size:12px;font-weight:700;color:var(--lm);
+}
+.ag-score{text-align:center;margin-bottom:12px;}
+.ag-score-v{font-family:var(--serif);font-size:26px;color:var(--lm);}
+.ag-score-l{font-family:var(--mono);font-size:9px;color:var(--lmd);margin-top:2px;}
+
+/* ═══════════════════════
+   P5 CERTIFICATES & NFTs
+═══════════════════════ */
+.cert-hero{background:var(--gdb);border:1px solid var(--gdd);border-radius:var(--r);padding:14px;text-align:center;margin-bottom:12px;}
+.ch-sym{font-size:36px;display:block;margin-bottom:7px;color:var(--gd);}
+.ch-name{font-family:var(--serif);font-size:16px;color:var(--gd);margin-bottom:3px;}
+.ch-sub{font-size:10px;color:var(--gdd);font-weight:300;line-height:1.5;}
+
+.nft-shelf{display:flex;gap:7px;overflow-x:auto;padding-bottom:3px;scrollbar-width:none;margin-bottom:12px;}
+.nft-shelf::-webkit-scrollbar{display:none;}
+.nsc{flex-shrink:0;width:74px;background:var(--bg2);border:1px solid var(--bm);border-radius:10px;padding:10px;text-align:center;}
+.nsc-sym{font-size:20px;display:block;}
+.nsc-n{font-family:var(--mono);font-size:8px;font-weight:600;color:var(--t2);margin-top:3px;}
+.nsc-d{font-family:var(--mono);font-size:8px;color:var(--t4);}
+
+.cert-card{background:var(--bg2);border:1px solid var(--bm);border-radius:var(--r);padding:12px;margin-bottom:7px;display:flex;align-items:center;gap:10px;}
+.cert-ic{font-size:22px;flex-shrink:0;}
+.cert-info{flex:1;}
+.cert-nm{font-size:12px;font-weight:600;color:var(--t2);}
+.cert-dt{font-family:var(--mono);font-size:9px;color:var(--t4);margin-top:2px;}
+.cert-dl{font-family:var(--mono);font-size:9px;color:var(--em);cursor:pointer;}
+
+/* ═══════════════════════
+   P6 MY WALLET
+═══════════════════════ */
+.wallet-card{background:var(--bg2);border:1px solid var(--bm);border-radius:var(--r);padding:14px;margin-bottom:12px;}
+.wc-lbl{font-family:var(--mono);font-size:7px;letter-spacing:2px;text-transform:uppercase;color:var(--t4);margin-bottom:5px;}
+.wc-bal{font-family:var(--serif);font-size:32px;color:var(--t1);}
+.wc-unit{font-family:var(--mono);font-size:10px;color:var(--t4);margin-left:4px;}
+.wc-chips{display:flex;gap:6px;margin-top:9px;}
+.wcc{flex:1;background:var(--bg3);border:1px solid var(--bm);border-radius:8px;padding:8px;text-align:center;}
+.wcc-v{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--t2);}
+.wcc-l{font-size:9px;color:var(--t4);margin-top:2px;}
+.act-row{display:flex;align-items:flex-start;gap:7px;padding:9px 0;border-bottom:1px solid var(--bs);}
+.act-row:last-child{border-bottom:none;}
+.a-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:3px;}
+.act-body{flex:1;}
+.act-t{font-size:11px;font-weight:500;color:var(--t2);}
+.act-m{font-family:var(--mono);font-size:8px;color:var(--t4);margin-top:2px;}
+.act-v{font-family:var(--mono);font-size:11px;font-weight:700;}
+.av-pos{color:var(--gd);}
+.av-pend{color:var(--or);}
+.ledger-link{display:flex;align-items:center;gap:10px;background:var(--emb);border:1px solid var(--emd);border-radius:var(--r);padding:12px;cursor:pointer;}
+.ll-t{font-size:12px;font-weight:500;color:var(--em);}
+.ll-s{font-size:9px;color:var(--t4);margin-top:2px;}
+.ll-arr{font-family:var(--mono);font-size:14px;color:var(--emd);margin-left:auto;}
+
+/* ═══════════════════════
+   O1 MANAGE HACK ROOMS
+═══════════════════════ */
+.room-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:12px;}
+.rs-c{background:var(--bg2);border:1px solid var(--bm);border-radius:var(--r);padding:11px;text-align:center;}
+.rs-v{font-family:var(--serif);font-size:20px;color:var(--t1);}
+.rs-l{font-size:9px;color:var(--t4);margin-top:3px;}
+.rs-c.rooms-c{border-color:var(--vid);}
+.rs-c.rooms-c .rs-v{color:var(--vi);}
+
+.room-row{display:flex;align-items:center;gap:9px;padding:11px 0;border-bottom:1px solid var(--bs);cursor:pointer;}
+.room-row:last-child{border-bottom:none;}
+.rr-av{width:36px;height:36px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:11px;font-weight:700;border:1px solid;flex-shrink:0;}
+.rr-av-1{background:var(--vib);color:var(--vi);border-color:var(--vid);}
+.rr-av-2{background:var(--emb);color:var(--em);border-color:var(--emd);}
+.rr-av-3{background:var(--gdb);color:var(--gd);border-color:var(--gdd);}
+.rr-info{flex:1;}
+.rr-nm{font-size:12px;font-weight:600;color:var(--t1);}
+.rr-meta{font-family:var(--mono);font-size:8px;color:var(--t4);margin-top:2px;}
+.rr-right{display:flex;flex-direction:column;align-items:flex-end;gap:3px;}
+.rr-count{font-family:var(--mono);font-size:10px;font-weight:700;}
+.invite-code-mini{font-family:var(--mono);font-size:8px;background:var(--vib);border:1px solid var(--vid);color:var(--vi);padding:2px 7px;border-radius:5px;}
+
+.new-room-btn{display:flex;align-items:center;gap:9px;background:transparent;border:1px dashed var(--vid);border-radius:var(--r);padding:12px 14px;cursor:pointer;width:100%;margin-top:10px;}
+.nrb-ic{font-size:18px;color:var(--vi);flex-shrink:0;}
+.nrb-t{font-size:12px;color:var(--vi);}
+.nrb-s{font-size:10px;color:var(--vid);margin-top:1px;}
+
+/* ═══════════════════════
+   O2 CREATE ASSIGNMENT
+═══════════════════════ */
+.broadcast-toggle{display:flex;background:var(--bg2);border:1px solid var(--bm);border-radius:9px;margin-bottom:13px;overflow:hidden;}
+.bt{flex:1;padding:10px;text-align:center;font-family:var(--mono);font-size:9px;font-weight:600;color:var(--t4);cursor:pointer;border-right:1px solid var(--bm);}
+.bt:last-child{border-right:none;}
+.bt.on-vi{background:var(--vib);color:var(--vi);}
+.bt.on-or{background:var(--orb);color:var(--or);}
+
+.target-rooms{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:13px;}
+.tr-btn{padding:7px 12px;border-radius:20px;font-family:var(--mono);font-size:9px;border:1px solid var(--bm);background:var(--bg2);color:var(--t4);cursor:pointer;}
+.tr-btn.on{border-color:var(--vid);background:var(--vib);color:var(--vi);}
+
+.xrdm-pick{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:9px;}
+.xp-b{padding:10px 4px;border-radius:8px;text-align:center;border:1px solid var(--bm);background:var(--bg2);font-family:var(--mono);font-size:12px;font-weight:700;color:var(--t3);cursor:pointer;}
+.xp-b.sel{background:var(--vib);border-color:var(--vid);color:var(--vi);}
+
+.nft-toggle{display:flex;align-items:center;justify-content:space-between;background:var(--gdb);border:1px solid var(--gdd);border-radius:9px;padding:10px 12px;margin-bottom:10px;}
+.nt-left .nt-lbl{font-size:12px;font-weight:500;color:var(--gd);}
+.nt-left .nt-sub{font-size:9px;color:var(--gdd);margin-top:2px;}
+.toggle{width:36px;height:20px;border-radius:10px;background:var(--gd);border:none;cursor:pointer;position:relative;}
+.toggle::after{content:'';position:absolute;top:2px;right:2px;width:16px;height:16px;border-radius:50%;background:white;}
+.toggle.off{background:var(--bg4);}
+.toggle.off::after{left:2px;right:auto;}
+
+/* ═══════════════════════
+   O3 VERIFY SUBMISSION
+═══════════════════════ */
+.ver-trio{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:12px;}
+.vt{border-radius:var(--r);padding:11px;text-align:center;border:1px solid;}
+.vt-p{background:var(--orb);border-color:var(--ord);}
+.vt-d{background:var(--emb);border-color:var(--emd);}
+.vt-r{background:var(--cob);border-color:var(--cod);}
+.vt-v{font-family:var(--serif);font-size:22px;}
+.vt-p .vt-v{color:var(--or);}
+.vt-d .vt-v{color:var(--em);}
+.vt-r .vt-v{color:var(--co);}
+.vt-lbl{font-size:9px;margin-top:3px;}
+.vt-p .vt-lbl{color:var(--ord);}
+.vt-d .vt-lbl{color:var(--emd);}
+.vt-r .vt-lbl{color:var(--cod);}
+
+.sub-card{background:var(--bg2);border:1px solid var(--emd);border-radius:var(--r);margin-bottom:9px;overflow:hidden;}
+.sc-head{display:flex;align-items:center;gap:8px;padding:11px 12px;}
+.sc-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.scd-p{background:var(--or);}
+.sc-info{flex:1;}
+.sc-nm{font-size:12px;font-weight:600;color:var(--t2);}
+.sc-task{font-size:9px;color:var(--t4);margin-top:1px;}
+.sc-body{padding:0 12px 12px;border-top:1px solid var(--bs);}
+.sc-sec{font-size:10px;font-weight:600;color:var(--t3);margin:9px 0 6px;}
+.proof-row{display:flex;align-items:center;gap:7px;background:var(--bg3);border:1px solid var(--bm);border-radius:7px;padding:8px 10px;margin-bottom:5px;}
+.pr-ic{font-size:12px;}
+.pr-nm{font-size:10px;color:var(--t2);flex:1;font-weight:500;}
+.pr-view{font-family:var(--mono);font-size:8px;color:var(--em);padding:2px 6px;border:1px solid var(--emd);border-radius:4px;cursor:pointer;}
+.url-proof{display:flex;align-items:center;gap:7px;background:var(--emb);border:1px solid var(--emd);border-radius:7px;padding:8px 10px;margin-bottom:5px;}
+.up-url{font-family:var(--mono);font-size:9px;color:var(--em);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.up-open{font-family:var(--mono);font-size:8px;color:var(--em);padding:2px 6px;border:1px solid var(--emd);border-radius:4px;cursor:pointer;white-space:nowrap;}
+
+.citation-fi{width:100%;background:var(--bg2);border:1px solid var(--bm);border-radius:8px;padding:9px 11px;font-family:var(--sans);font-size:10px;color:var(--t3);outline:none;resize:none;height:52px;line-height:1.5;}
+.citation-fi:focus{border-color:var(--emd);}
+.xrdm-award-row{display:flex;align-items:center;gap:7px;background:var(--emb);border:1px solid var(--emd);border-radius:8px;padding:9px 11px;margin:9px 0;}
+.xar-lbl{font-family:var(--mono);font-size:8px;letter-spacing:.8px;text-transform:uppercase;color:var(--emd);flex:1;}
+.xar-fi{width:48px;background:var(--bg2);border:1px solid var(--emd);border-radius:5px;padding:4px 7px;font-family:var(--mono);font-size:13px;font-weight:700;color:var(--em);outline:none;text-align:center;}
+.xar-unit{font-family:var(--mono);font-size:9px;color:var(--emd);}
+.act-pair{display:grid;grid-template-columns:1fr 1fr;gap:6px;}
+.btn-ret{padding:10px;border-radius:8px;border:1px solid var(--cod);background:var(--cob);color:var(--co);font-family:var(--mono);font-size:10px;font-weight:600;cursor:pointer;}
+.btn-ver{padding:10px;border-radius:8px;border:none;background:var(--em);color:#03120C;font-family:var(--mono);font-size:10px;font-weight:600;cursor:pointer;}
+.mini-done{display:flex;align-items:center;gap:7px;background:var(--emb);border:1px solid var(--emd);border-radius:var(--r);padding:9px 11px;margin-bottom:6px;opacity:.7;}
+.md-ic{width:16px;height:16px;border-radius:50%;background:var(--em);display:flex;align-items:center;justify-content:center;font-size:9px;color:#03120C;flex-shrink:0;}
+.md-info{flex:1;}
+.md-nm{font-size:10px;font-weight:500;color:var(--em);}
+.md-task{font-size:8px;color:var(--emd);margin-top:1px;}
+.md-xrdm{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--em);}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════
+   PAGE HEADER
+═══════════════════════════════ -->
+<div class="masthead">
+  <div class="mh-eye">XRDM Corporate · Hack Room</div>
+  <h1>Hackathon Mobile App</h1>
+  <p>12 screens · 4 rows · Participant track (cyan) &nbsp;|&nbsp; Organizer track (violet) &nbsp;|&nbsp; Responsible Games (lime)</p>
+</div>
+
+<div class="nav-map">
+  <div class="nm-title">Navigation map — all screens &amp; roles</div>
+  <div class="nm-row">
+    <div class="nm-col shared"><div class="nm-ch">Shared entry</div>
+      <div class="nm-item">S01 · Splash + role</div>
+      <div class="nm-item">S01b · Nav drawer</div>
+      <div class="nm-item">S02 · Home Hub</div>
+    </div>
+    <div class="nm-col part"><div class="nm-ch">Participant track</div>
+      <div class="nm-item">P1 · My Assignments</div>
+      <div class="nm-item">P2 · Submit Proof</div>
+      <div class="nm-item">P3 · Spot Challenges</div>
+      <div class="nm-item">P4 · Responsible Games</div>
+      <div class="nm-item">P5 · Certificates &amp; NFTs</div>
+      <div class="nm-item">P6 · My Wallet</div>
+    </div>
+    <div class="nm-col org"><div class="nm-ch">Organizer track</div>
+      <div class="nm-item">O1 · Manage Hack Rooms</div>
+      <div class="nm-item">O2 · Create Assignment</div>
+      <div class="nm-item">O3 · Verify Submission</div>
+    </div>
+    <div class="nm-col shared" style="max-width:180px;"><div class="nm-ch">Nav — every screen</div>
+      <div class="nm-item">☰ Drawer — always</div>
+      <div class="nm-item">← Back + destination</div>
+      <div class="nm-item">Breadcrumb always visible</div>
+      <div class="nm-item">Role badge always visible</div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════
+   ROW 1 — SHARED ENTRY
+═══════════════════════════════ -->
+<div class="row-hd row-shared"><div class="rh-l">Row 1 — Shared Entry</div><div class="rh-line"></div><div class="rh-b">S01 · S01b · S02</div></div>
+<div class="grid">
+
+<!-- S01 SPLASH -->
+<div class="pw">
+<div class="pw-lbl">S01 · Splash — role selection</div>
+<div class="phone phone-sh"><div class="inner inner-sh">
+  <div class="notch notch-sh"><div class="np"></div><div class="nd"></div></div>
+  <div class="splash">
+    <div class="sp-hero">
+      <div class="sp-mark"><div class="sp-mark-t">HR</div></div>
+      <div class="sp-event-badge">⚡ Live Hackathon</div>
+      <div class="sp-name">Hack Room</div>
+      <div class="sp-sub">by XRDM Corporate</div>
+      <div class="sp-tag">Assignments · Challenges · Games<br>Proof on-chain · Certificates &amp; XRDM</div>
+      <div class="sp-kpis">
+        <div class="skpi"><div class="skpi-v" style="color:var(--em);">✓</div><div class="skpi-l">Proof</div></div>
+        <div class="skpi"><div class="skpi-v" style="color:var(--or);">⚡</div><div class="skpi-l">Challenges</div></div>
+        <div class="skpi"><div class="skpi-v" style="color:var(--gd);">♦</div><div class="skpi-l">NFT cert</div></div>
+      </div>
+    </div>
+    <div class="sp-actions">
+      <div class="sp-role sp-role-part">
+        <div class="sp-role-eye sp-role-eye-part">I am a Hackathon Participant</div>
+        <div class="sp-role-title sp-role-title-part">Join my Hack Room</div>
+        <div class="sp-role-sub sp-role-sub-part">View assignments · submit proof · earn XRDM</div>
+      </div>
+      <div class="sp-role sp-role-org">
+        <div class="sp-role-eye sp-role-eye-org">I am an Organizer</div>
+        <div class="sp-role-title sp-role-title-org">Manage Hack Rooms</div>
+        <div class="sp-role-sub sp-role-sub-org">Create rooms · assign tasks · verify &amp; award</div>
+      </div>
+      <div class="sp-note">Secured by XRDM · So.Good Ledger</div>
+    </div>
+  </div>
+</div></div>
+</div>
+
+<!-- S01b NAV DRAWER -->
+<div class="pw">
+<div class="pw-lbl">S01b · Nav drawer — ☰ every screen</div>
+<div class="phone phone-part"><div class="inner inner-part" style="overflow:hidden;">
+  <div class="notch notch-part"><div class="np"></div><div class="nd"></div></div>
+  <div style="height:50px;background:#08120C;flex-shrink:0;display:flex;align-items:center;padding:0 13px;gap:8px;border-bottom:1px solid var(--bs);opacity:.35;">
+    <div style="display:flex;flex-direction:column;gap:3.5px;"><div class="tb-bar"></div><div class="tb-bar"></div><div class="tb-bar"></div></div>
+    <div style="flex:1;text-align:center;font-size:12px;font-weight:600;color:var(--t1);">Any Screen</div>
+  </div>
+  <div style="flex:1;position:relative;overflow:hidden;background:var(--bg3);">
+    <div class="drawer-overlay"></div>
+    <div class="drawer-panel">
+      <div class="dp-head">
+        <div class="dp-cr"><div class="dp-tag">Navigation</div><div class="dp-x">✕</div></div>
+        <div class="dp-user">
+          <div class="av av-em" style="width:30px;height:30px;font-size:9px;">RK</div>
+          <div><div class="dp-nm">Riya Kumar</div><div class="dp-rl">Participant · Group-2</div></div>
+        </div>
+        <div style="margin-top:7px;"><span class="pill p-em" style="font-size:7px;">Participant</span>&nbsp;<span style="font-family:var(--mono);font-size:8px;color:var(--t4);">GRP-2024</span></div>
+      </div>
+      <div class="dp-scroll">
+        <div class="dp-sec">Main</div>
+        <div class="dp-item on-em"><div class="dp-ic">🏠</div><div class="dp-info"><div class="dp-lbl">Home Hub</div><div class="dp-sub">Overview &amp; menu</div></div></div>
+        <div class="dp-sec">My Work</div>
+        <div class="dp-item"><div class="dp-ic">📋</div><div class="dp-info"><div class="dp-lbl">My Assignments</div><div class="dp-sub">Due &amp; past tasks</div></div><span class="dp-bdg db-or">2 due</span></div>
+        <div class="dp-item"><div class="dp-ic">📤</div><div class="dp-info"><div class="dp-lbl">Submit Proof</div><div class="dp-sub">URL · Drive · file</div></div></div>
+        <div class="dp-sec">Compete</div>
+        <div class="dp-item"><div class="dp-ic">⚡</div><div class="dp-info"><div class="dp-lbl">Spot Challenges</div><div class="dp-sub">Live group challenges</div></div><span class="dp-bdg db-or">Live!</span></div>
+        <div class="dp-item on-lm"><div class="dp-ic">🎮</div><div class="dp-info"><div class="dp-lbl">Responsible Games</div><div class="dp-sub">Relax &amp; recharge</div></div></div>
+        <div class="dp-sec">My Rewards</div>
+        <div class="dp-item"><div class="dp-ic">🏆</div><div class="dp-info"><div class="dp-lbl">Certificates &amp; NFTs</div><div class="dp-sub">Prizes &amp; proof</div></div></div>
+        <div class="dp-item"><div class="dp-ic">💎</div><div class="dp-info"><div class="dp-lbl">My Wallet</div><div class="dp-sub">XRDM balance</div></div><span class="dp-bdg db-gd">247</span></div>
+      </div>
+      <div class="dp-foot">
+        <div class="dp-fi"><div class="dp-fi-ic">🔔</div><div class="dp-fi-l">Notifications</div></div>
+        <div class="dp-fi"><div class="dp-fi-ic">↩</div><div class="dp-fi-l">Sign out</div></div>
+      </div>
+    </div>
+  </div>
+</div></div>
+</div>
+
+<!-- S02 HOME HUB -->
+<div class="pw">
+<div class="pw-lbl">S02 · Home Hub — central menu</div>
+<div class="phone phone-sh"><div class="inner inner-sh">
+  <div class="notch notch-sh"><div class="np"></div><div class="nd"></div></div>
+  <div class="topbar topbar-sh">
+    <div class="tb-left"><div class="tb-ham"><div class="tb-bar"></div><div class="tb-bar"></div><div class="tb-bar"></div></div></div>
+    <div class="tb-centre"><div class="tb-title">Home Hub</div><div class="tb-bc">Hack Room · GRP-2024</div></div>
+    <div class="tb-right"><span class="role-badge rb-part">Participant</span></div>
+  </div>
+  <div class="scr">
+    <div class="hub-greet"><div class="hg-name">Welcome back</div><div class="hg-title">Riya Kumar</div></div>
+    <div class="role-tabs">
+      <div class="rt rt-part on">👤 As Participant</div>
+      <div class="rt rt-org">🎯 As Organizer</div>
+    </div>
+    <div class="hub-section">
+      <div class="hub-sec-lbl">My work</div>
+      <div class="hub-grid" style="margin-bottom:8px;">
+        <div class="hub-tile ht-em">
+          <div class="ht-icon">📋</div><div class="ht-lbl">My Assignments</div><div class="ht-sub">Due &amp; past</div>
+          <div class="ht-badge"><span class="pill p-or" style="font-size:7px;">2 due</span></div>
+        </div>
+        <div class="hub-tile ht-or">
+          <div class="ht-icon">⚡</div><div class="ht-lbl">Spot Challenge</div><div class="ht-sub">Live now!</div>
+          <div class="ht-badge"><span class="pill p-lm" style="font-size:7px;padding:2px 5px;">●Live</span></div>
+        </div>
+        <div class="hub-tile ht-lm">
+          <div class="ht-icon">🎮</div><div class="ht-lbl">Responsible Games</div><div class="ht-sub">Take a break</div>
+        </div>
+        <div class="hub-tile ht-gd">
+          <div class="ht-icon">🏆</div><div class="ht-lbl">Certificates</div><div class="ht-sub">NFTs &amp; prizes</div>
+        </div>
+      </div>
+    </div>
+    <div style="padding:0 12px;">
+      <div class="hub-sec-lbl">Quick links</div>
+      <div class="hub-wide"><div class="hw-icon">📤</div><div class="hw-body"><div class="hw-lbl">Submit Proof</div><div class="hw-sub">Upload · Drive link · URL</div></div><div class="hw-arr">›</div></div>
+      <div class="hub-wide"><div class="hw-icon">💎</div><div class="hw-body"><div class="hw-lbl">My Wallet</div><div class="hw-sub">247 XRDM · 2 NFTs</div></div><div class="hw-arr">›</div></div>
+    </div>
+    <!-- Live challenge alert -->
+    <div style="margin:8px 12px 0;background:var(--orb);border:1px solid var(--ord);border-radius:var(--r);padding:10px 12px;display:flex;align-items:center;gap:8px;">
+      <div class="cl-live-dot" style="flex-shrink:0;"></div>
+      <div style="flex:1;font-size:10px;color:var(--or);font-weight:500;">Spot Challenge active — 08:43 remaining</div>
+      <div style="font-family:var(--mono);font-size:8px;color:var(--ord);cursor:pointer;">Join →</div>
+    </div>
+  </div>
+</div></div>
+</div>
+
+</div><!-- /row 1 -->
+
+
+<!-- ═══════════════════════════════
+   ROW 2 — PARTICIPANT: WORK
+═══════════════════════════════ -->
+<div class="row-hd row-part"><div class="rh-l">Row 2 — Participant: Work</div><div class="rh-line"></div><div class="rh-b">P1 · P2 · P3</div></div>
+<div class="grid">
+
+<!-- P1 MY ASSIGNMENTS -->
+<div class="pw">
+<div class="pw-lbl">P1 · My assignments</div>
+<div class="phone phone-part"><div class="inner inner-part">
+  <div class="notch notch-part"><div class="np"></div><div class="nd"></div></div>
+  <div class="topbar topbar-part">
+    <div class="tb-left"><div class="tb-back"><span class="tb-back-ic tbi-part">←</span><span>Hub</span></div></div>
+    <div class="tb-centre"><div class="tb-title">My Assignments</div><div class="tb-bc">Hub → My Assignments</div></div>
+    <div class="tb-right"><span class="role-badge rb-part">Participant</span></div>
+  </div>
+  <div class="scr"><div class="bp">
+    <div class="tl tl-part"><div class="tl-line"></div><div class="tl-txt">Participant track</div></div>
+    <div class="no-future-notice">
+      <div class="nfn-ic">ℹ</div>
+      <div class="nfn-t">Only due &amp; past assignments shown. Future assignments appear when due.</div>
+    </div>
+    <div class="sr"><div class="sr-t">Due now</div><div class="sr-a">Filter</div></div>
+    <!-- Assignment 1: due -->
+    <div class="asgn-card due">
+      <div class="ac-head">
+        <div class="ac-ic">🔬</div>
+        <div class="ac-info">
+          <div class="ac-title">Build a working prototype</div>
+          <div class="ac-group">Group-2 · All members</div>
+          <div class="ac-desc">Submit a functional demo of your solution. GitHub link + 2 min video required.</div>
+        </div>
+      </div>
+      <div class="ac-meta">
+        <div class="ac-deadline">⏰ Due: 14 Jun 17:00</div>
+        <div class="ac-xrdm">+20 XRDM</div>
+      </div>
+      <div style="margin-top:8px;"><button class="btn btn-em" style="font-size:10px;padding:9px;">Submit proof →</button></div>
+    </div>
+    <!-- Assignment 2: due -->
+    <div class="asgn-card due">
+      <div class="ac-head">
+        <div class="ac-ic">📊</div>
+        <div class="ac-info">
+          <div class="ac-title">Market analysis slide deck</div>
+          <div class="ac-group">Group-2 · All members</div>
+          <div class="ac-desc">5-slide deck covering problem, TAM, competition &amp; solution differentiator.</div>
+        </div>
+      </div>
+      <div class="ac-meta">
+        <div class="ac-deadline">⏰ Due: 15 Jun 10:00</div>
+        <div class="ac-xrdm">+15 XRDM</div>
+      </div>
+      <div style="margin-top:8px;"><button class="btn btn-em" style="font-size:10px;padding:9px;">Submit proof →</button></div>
+    </div>
+    <div class="divider"></div>
+    <div class="sr"><div class="sr-t">Past (submitted)</div></div>
+    <!-- Assignment 3: submitted -->
+    <div class="asgn-card submitted">
+      <div class="ac-head">
+        <div class="ac-ic">✅</div>
+        <div class="ac-info">
+          <div class="ac-title">Team intro &amp; GitHub setup</div>
+          <div class="ac-group">Group-2 · All members</div>
+          <div class="ac-desc">Repo created, README done, value-added links submitted.</div>
+        </div>
+      </div>
+      <div class="ac-meta">
+        <span class="pill p-em">Verified · +10 XRDM</span>
+        <div style="font-family:var(--mono);font-size:8px;color:var(--t4);">13 Jun</div>
+      </div>
+    </div>
+  </div></div>
+</div></div>
+</div>
+
+<!-- P2 SUBMIT PROOF -->
+<div class="pw">
+<div class="pw-lbl">P2 · Submit proof</div>
+<div class="phone phone-part"><div class="inner inner-part">
+  <div class="notch notch-part"><div class="np"></div><div class="nd"></div></div>
+  <div class="topbar topbar-part">
+    <div class="tb-left"><div class="tb-back"><span class="tb-back-ic tbi-part">←</span><span>Assignments</span></div></div>
+    <div class="tb-centre"><div class="tb-title">Submit Proof</div><div class="tb-bc">Assignments → Submit Proof</div></div>
+    <div class="tb-right"><span class="role-badge rb-part">Participant</span></div>
+  </div>
+  <div class="scr"><div class="bp">
+    <div class="tl tl-part"><div class="tl-line"></div><div class="tl-txt">Participant track</div></div>
+    <!-- Context card -->
+    <div class="ctx-card">
+      <div class="cc-label">Submitting for</div>
+      <div class="cc-title">Build a working prototype</div>
+      <div class="cc-meta">
+        <span class="pill p-dim">Group-2</span>
+        <span class="pill p-or">Due 14 Jun</span>
+        <span class="pill p-gd">+20 XRDM</span>
+      </div>
+    </div>
+    <!-- Proof type selector -->
+    <div class="fblock">
+      <label class="fl">Proof type — choose one or more</label>
+      <div class="proof-type-row">
+        <div class="pt on"><div class="pt-ic">🔗</div><div class="pt-l">GitHub link</div></div>
+        <div class="pt on"><div class="pt-ic">☁</div><div class="pt-l">Google Drive</div></div>
+        <div class="pt"><div class="pt-ic">📁</div><div class="pt-l">File upload</div></div>
+        <div class="pt"><div class="pt-ic">🌐</div><div class="pt-l">URL / other</div></div>
+      </div>
+    </div>
+    <!-- GitHub link field -->
+    <div class="fblock">
+      <label class="fl">GitHub repository URL</label>
+      <div class="url-field">
+        <input type="text" class="uf-fi" placeholder="https://github.com/…" value="https://github.com/riya/hack2024">
+        <button class="uf-btn">Verify ✓</button>
+      </div>
+    </div>
+    <!-- Google Drive link -->
+    <div class="fblock">
+      <label class="fl">Google Drive link</label>
+      <div class="url-field">
+        <input type="text" class="uf-fi" placeholder="https://drive.google.com/…">
+        <button class="uf-btn">Verify ✓</button>
+      </div>
+    </div>
+    <!-- File upload -->
+    <div class="fblock">
+      <label class="fl">Supporting file (optional)</label>
+      <div class="file-attached"><div style="font-size:14px;">🎥</div><div class="fa-nm">demo_prototype_2min.mp4</div><div class="fa-sz">48 MB</div></div>
+      <div class="upload-zone"><div class="uz-ic">⊕</div><div class="uz-t">Add another file</div><div class="uz-s">PDF · image · video · zip — max 100MB</div></div>
+    </div>
+    <!-- Note to organizer -->
+    <div class="fblock">
+      <label class="fl">Note to organizer (optional)</label>
+      <textarea class="fi fi-ta" style="height:52px;">Core feature: real-time AI suggestion engine integrated with the prototype. Live demo in the video at 0:42.</textarea>
+    </div>
+    <!-- XRDM estimate -->
+    <div class="xrdm-est">
+      <div class="xe-lbl">Est. reward on approval</div>
+      <div><span class="xe-val">20</span><span class="xe-unit">XRDM</span></div>
+    </div>
+    <button class="btn btn-em">Submit for organizer review →</button>
+  </div></div>
+</div></div>
+</div>
+
+<!-- P3 SPOT CHALLENGES -->
+<div class="pw">
+<div class="pw-lbl">P3 · Spot challenges</div>
+<div class="phone phone-part"><div class="inner inner-part">
+  <div class="notch notch-part"><div class="np"></div><div class="nd"></div></div>
+  <div class="topbar topbar-part">
+    <div class="tb-left"><div class="tb-back"><span class="tb-back-ic tbi-part">←</span><span>Hub</span></div></div>
+    <div class="tb-centre"><div class="tb-title">Spot Challenges</div><div class="tb-bc">Hub → Spot Challenges</div></div>
+    <div class="tb-right"><span class="role-badge rb-part">Participant</span></div>
+  </div>
+  <div class="scr"><div class="bp">
+    <div class="tl tl-part"><div class="tl-line"></div><div class="tl-txt">Participant track</div></div>
+    <!-- LIVE challenge card -->
+    <div class="challenge-live">
+      <div class="cl-glow"></div>
+      <div class="cl-head"><div class="cl-live-dot"></div><div class="cl-live-tag">Live challenge</div><div class="cl-timer">⏱ 08:43</div></div>
+      <div class="cl-title">Design Sprint: Fix the UX</div>
+      <div class="cl-group">Random group · All teams competing</div>
+      <div class="cl-desc">Organizer has pushed a broken user flow. Find the top 3 UX issues and submit a quick fix wireframe. Winner gets bonus XRDM + surprise NFT.</div>
+      <div class="cl-reward">
+        <div><div class="clr-xrdm">+50 XRDM</div><div class="clr-nft">Winner + NFT "Quick Fix ⚡"</div></div>
+        <button class="btn btn-or" style="width:auto;padding:9px 14px;font-size:10px;">Accept →</button>
+      </div>
+    </div>
+    <!-- Mini leaderboard -->
+    <div class="leaderboard-mini">
+      <div class="lm-head">Live challenge scoreboard</div>
+      <div class="lm-row"><div class="lm-rank" style="color:var(--gd);">1</div><div class="av av-gd" style="width:22px;height:22px;font-size:7px;">G3</div><div style="flex:1;font-size:10px;color:var(--t2);margin-left:6px;">Group-3 · 92 pts</div><div class="lm-bar"><div class="lm-fill" style="width:100%;background:var(--gd);"></div></div><div class="lm-pts" style="color:var(--gd);">92</div></div>
+      <div class="lm-row"><div class="lm-rank">2</div><div class="av av-em" style="width:22px;height:22px;font-size:7px;">G2</div><div style="flex:1;font-size:10px;color:var(--em);margin-left:6px;">Group-2 (you) · 78 pts</div><div class="lm-bar"><div class="lm-fill" style="width:84%;background:var(--em);"></div></div><div class="lm-pts" style="color:var(--em);">78</div></div>
+      <div class="lm-row"><div class="lm-rank">3</div><div class="av av-sk" style="width:22px;height:22px;font-size:7px;">G1</div><div style="flex:1;font-size:10px;color:var(--t2);margin-left:6px;">Group-1 · 55 pts</div><div class="lm-bar"><div class="lm-fill" style="width:60%;background:var(--sk);"></div></div><div class="lm-pts" style="color:var(--sk);">55</div></div>
+    </div>
+    <!-- Past challenges -->
+    <div class="divider"></div>
+    <div class="sr"><div class="sr-t">Past challenges</div></div>
+    <div class="challenge-past"><div class="cp-sym">🧩</div><div class="cp-info"><div class="cp-title">API Puzzle: Connect the dots</div><div class="cp-group">Random group · 13 Jun</div></div><div class="cp-right"><div class="cp-xrdm">+30 XRDM</div><span class="pill p-em" style="font-size:7px;">Won</span></div></div>
+    <div class="challenge-past"><div class="cp-sym">🎨</div><div class="cp-info"><div class="cp-title">Brand identity in 10 min</div><div class="cp-group">All teams · 12 Jun</div></div><div class="cp-right"><div class="cp-xrdm">+0</div><span class="pill p-dim" style="font-size:7px;">Missed</span></div></div>
+  </div></div>
+</div></div>
+</div>
+
+</div><!-- /row 2 -->
+
+
+<!-- ═══════════════════════════════
+   ROW 3 — PARTICIPANT: GAMES & REWARDS / ORGANIZER
+═══════════════════════════════ -->
+<div class="row-hd row-games"><div class="rh-l">Row 3 — Games, Rewards &amp; Organizer</div><div class="rh-line"></div><div class="rh-b">P4 · P5 + P6 · O1</div></div>
+<div class="grid">
+
+<!-- P4 RESPONSIBLE GAMES -->
+<div class="pw">
+<div class="pw-lbl">P4 · Responsible games</div>
+<div class="phone phone-game"><div class="inner inner-game">
+  <div class="notch notch-game"><div class="np"></div><div class="nd"></div></div>
+  <div class="topbar topbar-game">
+    <div class="tb-left"><div class="tb-back"><span class="tb-back-ic tbi-game">←</span><span>Hub</span></div></div>
+    <div class="tb-centre"><div class="tb-title">Responsible Games</div><div class="tb-bc">Hub → Responsible Games</div></div>
+    <div class="tb-right"><span class="role-badge rb-sh">Relax</span></div>
+  </div>
+  <div class="scr"><div class="bp">
+    <div class="tl tl-game"><div class="tl-line"></div><div class="tl-txt">Relaxation module</div></div>
+    <div class="games-banner">
+      <div class="gb-sym">🎮</div>
+      <div>
+        <div class="gb-title">Take a mindful break</div>
+        <div class="gb-sub">Short timed games to recharge between sprints. All games are &lt; 5 min.</div>
+      </div>
+    </div>
+    <!-- Horizontal game cards -->
+    <div class="sr"><div class="sr-t">Play now</div><div class="sr-a" style="color:var(--lm);">See all</div></div>
+    <div class="games-scroll">
+      <div class="games-track">
+        <div class="game-card gc-lime"><span class="gc-sym">🧠</span><div class="gc-name">Memory Match</div><div class="gc-type">Cognitive · Solo</div><div class="gc-time">⏱ 3 min</div></div>
+        <div class="game-card gc-sk"><span class="gc-sym">🌬️</span><div class="gc-name">Breath Timer</div><div class="gc-type">Mindfulness · Solo</div><div class="gc-time">⏱ 2 min</div></div>
+        <div class="game-card gc-gd"><span class="gc-sym">🔢</span><div class="gc-name">Quick Maths</div><div class="gc-type">Focus · Solo</div><div class="gc-time">⏱ 2 min</div></div>
+        <div class="game-card gc-vi"><span class="gc-sym">🎯</span><div class="gc-name">Word Sprint</div><div class="gc-type">Vocab · Solo</div><div class="gc-time">⏱ 4 min</div></div>
+        <div class="game-card gc-or"><span class="gc-sym">🎨</span><div class="gc-name">Pixel Doodle</div><div class="gc-type">Creative · Solo</div><div class="gc-time">⏱ 5 min</div></div>
+      </div>
+    </div>
+    <!-- Active game -->
+    <div class="sr"><div class="sr-t">Playing now</div></div>
+    <div class="active-game">
+      <div class="ag-head">
+        <div class="ag-sym">🧠</div>
+        <div><div class="ag-title">Memory Match</div><div class="ag-sub">Level 2 · 6 pairs remaining</div></div>
+      </div>
+      <div class="ag-timer-ring"><div class="ag-timer-inner">1:42</div></div>
+      <div class="ag-score"><div class="ag-score-v">8</div><div class="ag-score-l">Matches found</div></div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-bottom:10px;">
+        <div style="height:32px;border-radius:6px;background:var(--lmb);border:1px solid var(--emd);display:flex;align-items:center;justify-content:center;font-size:14px;">🌳</div>
+        <div style="height:32px;border-radius:6px;background:var(--bg3);border:1px solid var(--bm);display:flex;align-items:center;justify-content:center;font-size:14px;"></div>
+        <div style="height:32px;border-radius:6px;background:var(--bg3);border:1px solid var(--bm);display:flex;align-items:center;justify-content:center;font-size:14px;"></div>
+        <div style="height:32px;border-radius:6px;background:var(--lmb);border:1px solid var(--emd);display:flex;align-items:center;justify-content:center;font-size:14px;">🌳</div>
+      </div>
+      <button class="btn btn-lm" style="font-size:10px;padding:10px;">Continue game</button>
+    </div>
+  </div></div>
+</div></div>
+</div>
+
+<!-- P5 CERTIFICATES & NFTs (combined with P6 wallet peek) -->
+<div class="pw">
+<div class="pw-lbl">P5 · Certificates &amp; NFTs</div>
+<div class="phone phone-part"><div class="inner inner-part">
+  <div class="notch notch-part"><div class="np"></div><div class="nd"></div></div>
+  <div class="topbar topbar-part">
+    <div class="tb-left"><div class="tb-back"><span class="tb-back-ic tbi-part">←</span><span>Hub</span></div></div>
+    <div class="tb-centre"><div class="tb-title">Certificates &amp; NFTs</div><div class="tb-bc">Hub → Certificates</div></div>
+    <div class="tb-right"><span class="role-badge rb-part">Participant</span></div>
+  </div>
+  <div class="scr"><div class="bp">
+    <div class="tl tl-part"><div class="tl-line"></div><div class="tl-txt">Participant track</div></div>
+    <div class="cert-hero">
+      <span class="ch-sym">🏆</span>
+      <div class="ch-name">XRDM Hackathon 2024</div>
+      <div class="ch-sub">Participant certificate + NFT issued on So.Good Ledger. Permanent, verifiable proof of contribution.</div>
+      <div style="margin-top:9px;"><span class="pill p-gd">Issued — on-chain</span></div>
+    </div>
+    <!-- NFT shelf -->
+    <div class="sr"><div class="sr-t">My NFT badges</div><div class="sr-a">View all</div></div>
+    <div class="nft-shelf">
+      <div class="nsc"><span class="nsc-sym" style="color:var(--gd);">🏆</span><div class="nsc-n">Participant</div><div class="nsc-d">Jun 2024</div></div>
+      <div class="nsc"><span class="nsc-sym" style="color:var(--or);">⚡</span><div class="nsc-n">Quick Fix</div><div class="nsc-d">Jun 2024</div></div>
+      <div class="nsc"><span class="nsc-sym" style="color:var(--em);">🔬</span><div class="nsc-n">Builder</div><div class="nsc-d">Pending</div></div>
+      <div class="nsc" style="border-style:dashed;cursor:pointer;"><span class="nsc-sym" style="color:var(--t5);">+</span><div class="nsc-n" style="color:var(--t4);">Earn more</div></div>
+    </div>
+    <!-- Certificates list -->
+    <div class="sr"><div class="sr-t">Certificates</div></div>
+    <div class="cert-card"><div class="cert-ic">📜</div><div class="cert-info"><div class="cert-nm">Participant Certificate</div><div class="cert-dt">XRDM Hackathon 2024 · 14 Jun</div></div><div class="cert-dl">Download ↓</div></div>
+    <div class="cert-card"><div class="cert-ic">🎖</div><div class="cert-info"><div class="cert-nm">Challenge Winner · Quick Fix</div><div class="cert-dt">Issued by Organizer · 13 Jun</div></div><div class="cert-dl">Download ↓</div></div>
+    <div class="cert-card" style="opacity:.6;"><div class="cert-ic">⏳</div><div class="cert-info"><div class="cert-nm">Prototype Builder</div><div class="cert-dt">Pending organizer verification</div></div><span class="pill p-or" style="font-size:7px;">Pending</span></div>
+    <!-- Wallet snapshot -->
+    <div class="divider"></div>
+    <div class="wallet-card">
+      <div class="wc-lbl">My XRDM balance</div>
+      <div><span class="wc-bal">247</span><span class="wc-unit">XRDM</span></div>
+      <div class="wc-chips">
+        <div class="wcc"><div class="wcc-v">+40</div><div class="wcc-l">Hackathon</div></div>
+        <div class="wcc"><div class="wcc-v">+20</div><div class="wcc-l">Pending</div></div>
+        <div class="wcc"><div class="wcc-v">3</div><div class="wcc-l">NFTs</div></div>
+      </div>
+    </div>
+    <div class="ledger-link"><div style="font-size:18px;">◈</div><div><div class="ll-t">So.Good Ledger</div><div class="ll-s">Verified career record · replaces background checks</div></div><div class="ll-arr">›</div></div>
+  </div></div>
+</div></div>
+</div>
+
+<!-- O1 MANAGE HACK ROOMS -->
+<div class="pw">
+<div class="pw-lbl">O1 · Manage hack rooms — organizer</div>
+<div class="phone phone-org"><div class="inner inner-org">
+  <div class="notch notch-org"><div class="np"></div><div class="nd"></div></div>
+  <div class="topbar topbar-org">
+    <div class="tb-left"><div class="tb-back"><span class="tb-back-ic tbi-org">←</span><span>Hub</span></div></div>
+    <div class="tb-centre"><div class="tb-title">Manage Hack Rooms</div><div class="tb-bc">Hub → Hack Rooms</div></div>
+    <div class="tb-right"><span class="role-badge rb-org">Organizer</span></div>
+  </div>
+  <div class="scr"><div class="bp">
+    <div class="tl tl-org"><div class="tl-line"></div><div class="tl-txt">Organizer track</div></div>
+    <div class="room-summary">
+      <div class="rs-c rooms-c"><div class="rs-v">3</div><div class="rs-l">Hack Rooms</div></div>
+      <div class="rs-c"><div class="rs-v" style="color:var(--em);">24</div><div class="rs-l">Teams active</div></div>
+      <div class="rs-c"><div class="rs-v" style="color:var(--gd);">12</div><div class="rs-l">Pending verify</div></div>
+    </div>
+    <div class="sr"><div class="sr-t">Active Hack Rooms</div><div class="sr-a" style="color:var(--vi);">+ New room</div></div>
+    <div class="card">
+      <!-- Room 1 -->
+      <div class="room-row">
+        <div class="rr-av rr-av-1">G1</div>
+        <div class="rr-info"><div class="rr-nm">Hack Room · Group-1</div><div class="rr-meta">8 members · 3 assignments</div></div>
+        <div class="rr-right"><div class="rr-count" style="color:var(--or);">5 pending</div><div class="invite-code-mini">GRP-G1-24</div></div>
+      </div>
+      <!-- Room 2 -->
+      <div class="room-row">
+        <div class="rr-av rr-av-2">G2</div>
+        <div class="rr-info"><div class="rr-nm">Hack Room · Group-2</div><div class="rr-meta">7 members · 3 assignments</div></div>
+        <div class="rr-right"><div class="rr-count" style="color:var(--or);">4 pending</div><div class="invite-code-mini">GRP-G2-24</div></div>
+      </div>
+      <!-- Room 3 -->
+      <div class="room-row">
+        <div class="rr-av rr-av-3">G3</div>
+        <div class="rr-info"><div class="rr-nm">Hack Room · Group-3</div><div class="rr-meta">9 members · 3 assignments</div></div>
+        <div class="rr-right"><div class="rr-count" style="color:var(--em);">3 verified</div><div class="invite-code-mini">GRP-G3-24</div></div>
+      </div>
+    </div>
+    <!-- Spot challenge button -->
+    <div style="margin-top:12px;background:var(--orb);border:1px solid var(--ord);border-radius:var(--r);padding:12px;">
+      <div style="font-size:11px;font-weight:600;color:var(--or);margin-bottom:3px;">⚡ Spot Challenge</div>
+      <div style="font-size:9px;color:var(--ord);margin-bottom:9px;">Press start to push a random challenge to all groups. Winners earn bonus XRDM + NFT.</div>
+      <button class="btn btn-or" style="font-size:10px;padding:10px;">Start challenge now →</button>
+    </div>
+    <!-- Add new room button -->
+    <button class="new-room-btn" style="background:transparent;border-style:dashed;border-color:var(--vid);">
+      <div class="nrb-ic">⊕</div>
+      <div><div class="nrb-t">Add new Hack Room</div><div class="nrb-s">Or add Group-4, Group-5 section to existing room</div></div>
+    </button>
+  </div></div>
+</div></div>
+</div>
+
+</div><!-- /row 3 -->
+
+
+<!-- ═══════════════════════════════
+   ROW 4 — ORGANIZER: ASSIGN & VERIFY
+═══════════════════════════════ -->
+<div class="row-hd row-org"><div class="rh-l">Row 4 — Organizer: Create &amp; Verify</div><div class="rh-line"></div><div class="rh-b">O2 · O3 · ← back to Hub</div></div>
+<div class="grid">
+
+<!-- O2 CREATE ASSIGNMENT -->
+<div class="pw">
+<div class="pw-lbl">O2 · Create assignment — organizer</div>
+<div class="phone phone-org"><div class="inner inner-org">
+  <div class="notch notch-org"><div class="np"></div><div class="nd"></div></div>
+  <div class="topbar topbar-org">
+    <div class="tb-left"><div class="tb-back"><span class="tb-back-ic tbi-org">←</span><span>Rooms</span></div></div>
+    <div class="tb-centre"><div class="tb-title">Create Assignment</div><div class="tb-bc">Rooms → New Assignment</div></div>
+    <div class="tb-right"><span class="role-badge rb-org">Organizer</span></div>
+  </div>
+  <div class="scr"><div class="bp">
+    <div class="tl tl-org"><div class="tl-line"></div><div class="tl-txt">Organizer track</div></div>
+    <!-- Assignment type -->
+    <div class="fblock">
+      <label class="fl">Assignment type</label>
+      <div class="broadcast-toggle">
+        <div class="bt on-vi">📋 Regular task</div>
+        <div class="bt">⚡ Spot challenge</div>
+      </div>
+    </div>
+    <!-- Target rooms -->
+    <div class="fblock">
+      <label class="fl">Send to — select rooms or all</label>
+      <div class="target-rooms">
+        <div class="tr-btn on">All rooms</div>
+        <div class="tr-btn">Group-1</div>
+        <div class="tr-btn">Group-2</div>
+        <div class="tr-btn">Group-3</div>
+      </div>
+    </div>
+    <div class="fblock"><label class="fl">Assignment title</label><input class="fi" type="text" value="Build a working prototype"></div>
+    <div class="fblock"><label class="fl">Description (200 chars)</label><textarea class="fi fi-ta" style="height:56px;">Submit a functional demo of your solution. GitHub link + 2 min video required. Must show core feature in action.</textarea><div class="char-ct">114 / 200</div></div>
+    <!-- Proof types expected -->
+    <div class="fblock">
+      <label class="fl">Expected proof types</label>
+      <div class="proof-type-row" style="gap:5px;">
+        <div class="pt on"><div class="pt-ic">🔗</div><div class="pt-l">GitHub</div></div>
+        <div class="pt on"><div class="pt-ic">🎥</div><div class="pt-l">Video</div></div>
+        <div class="pt"><div class="pt-ic">📁</div><div class="pt-l">File</div></div>
+        <div class="pt"><div class="pt-ic">🌐</div><div class="pt-l">URL</div></div>
+      </div>
+    </div>
+    <!-- Due date -->
+    <div class="fblock"><label class="fl">Due date &amp; time</label><input class="fi" type="text" value="14 Jun 2024 · 17:00 IST"></div>
+    <!-- XRDM reward -->
+    <div class="fblock">
+      <label class="fl">XRDM reward on verification</label>
+      <div class="xrdm-pick">
+        <div class="xp-b">5</div><div class="xp-b">10</div><div class="xp-b">15</div><div class="xp-b sel">20</div>
+        <div class="xp-b">25</div><div class="xp-b">30</div><div class="xp-b">50</div><div class="xp-b" style="font-size:9px;color:var(--t4);">Custom ✎</div>
+      </div>
+    </div>
+    <!-- NFT prize toggle -->
+    <div class="nft-toggle">
+      <div class="nt-left"><div class="nt-lbl">Include NFT prize</div><div class="nt-sub">Award a pre-minted NFT to top submission</div></div>
+      <button class="toggle"></button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 2fr;gap:7px;">
+      <button class="btn btn-dim" style="font-size:10px;padding:12px;">Save draft</button>
+      <button class="btn btn-vi">Publish to all rooms →</button>
+    </div>
+  </div></div>
+</div></div>
+</div>
+
+<!-- O3 VERIFY SUBMISSION -->
+<div class="pw">
+<div class="pw-lbl">O3 · Verify submission — organizer</div>
+<div class="phone phone-org"><div class="inner inner-org">
+  <div class="notch notch-org"><div class="np"></div><div class="nd"></div></div>
+  <div class="topbar topbar-org">
+    <div class="tb-left"><div class="tb-back"><span class="tb-back-ic tbi-org">←</span><span>Rooms</span></div></div>
+    <div class="tb-centre"><div class="tb-title">Verify Submission</div><div class="tb-bc">Rooms → Verify</div></div>
+    <div class="tb-right"><span class="role-badge rb-org">Organizer</span></div>
+  </div>
+  <div class="scr"><div class="bp">
+    <div class="tl tl-org"><div class="tl-line"></div><div class="tl-txt">Organizer track</div></div>
+    <!-- Status trio -->
+    <div class="ver-trio">
+      <div class="vt vt-p"><div class="vt-v">12</div><div class="vt-lbl">Pending</div></div>
+      <div class="vt vt-d"><div class="vt-v">8</div><div class="vt-lbl">Verified</div></div>
+      <div class="vt vt-r"><div class="vt-v">2</div><div class="vt-lbl">Returned</div></div>
+    </div>
+    <!-- Filter -->
+    <div style="display:flex;gap:5px;margin-bottom:12px;flex-wrap:wrap;">
+      <div class="pill p-or" style="cursor:pointer;">All 22</div>
+      <div class="pill p-dim" style="cursor:pointer;">Pending 12</div>
+      <div class="pill p-dim" style="cursor:pointer;">Verified 8</div>
+    </div>
+    <!-- Expanded submission: Riya -->
+    <div class="sub-card">
+      <div class="sc-head">
+        <div class="sc-dot scd-p"></div>
+        <div class="av av-em" style="width:28px;height:28px;font-size:8px;">RK</div>
+        <div class="sc-info"><div class="sc-nm">Riya · Group-2</div><div class="sc-task">Build a working prototype</div></div>
+        <span class="pill p-or" style="font-size:7px;">Pending</span>
+      </div>
+      <div class="sc-body">
+        <div class="sc-sec">Submitted proof</div>
+        <div class="url-proof"><div style="font-size:12px;">🔗</div><div class="up-url">github.com/riya/hack2024</div><div class="up-open">Open</div></div>
+        <div class="url-proof"><div style="font-size:12px;">☁</div><div class="up-url">drive.google.com/…demo_v2</div><div class="up-open">Open</div></div>
+        <div class="proof-row"><div class="pr-ic">🎥</div><div class="pr-nm">demo_prototype_2min.mp4</div><div class="pr-view">View</div></div>
+        <div class="sc-sec">Organizer note (required)</div>
+        <textarea class="citation-fi" placeholder="Add a citation or feedback note for the So.Good Ledger…">Well-structured AI integration. Core feature demo was impressive — real-time suggestion engine works smoothly.</textarea>
+        <!-- XRDM -->
+        <div class="xrdm-award-row"><div class="xar-lbl">XRDM to award</div><input class="xar-fi" type="number" value="20"><div class="xar-unit">XRDM</div></div>
+        <!-- Actions -->
+        <div class="act-pair">
+          <button class="btn-ret">✗ Return</button>
+          <button class="btn-ver">✓ Verify &amp; Award</button>
+        </div>
+      </div>
+    </div>
+    <!-- Done rows -->
+    <div class="mini-done"><div class="md-ic">✓</div><div class="md-info"><div class="md-nm">Arjun · Group-1 — verified</div><div class="md-task">Team intro &amp; GitHub setup</div></div><div class="md-xrdm">+10</div></div>
+    <div class="mini-done"><div class="md-ic">✓</div><div class="md-info"><div class="md-nm">Sana · Group-3 — verified</div><div class="md-task">Market analysis deck</div></div><div class="md-xrdm">+15</div></div>
+  </div></div>
+</div></div>
+</div>
+
+<!-- HUB RETURN REMINDER (3rd cell in row 4) -->
+<div class="pw">
+<div class="pw-lbl">← All screens return to Hub · Nav always available</div>
+<div class="phone phone-org" style="border-color:var(--vid);"><div class="inner inner-org" style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;gap:0;">
+  <div style="font-size:40px;margin-bottom:16px;">🗺</div>
+  <div style="font-family:var(--serif);font-size:18px;font-weight:500;font-style:italic;color:var(--vi);text-align:center;margin-bottom:12px;">Navigation rules</div>
+  <div style="font-size:11px;color:var(--t3);line-height:1.8;text-align:center;margin-bottom:20px;">Every screen carries a ← Back arrow naming its destination, a breadcrumb, a role badge, and ☰ drawer access.<br><br>Developers: no screen is more than 2 taps from Hub.</div>
+  <div style="display:flex;flex-direction:column;gap:7px;width:100%;">
+    <div style="background:var(--emb);border:1px solid var(--emd);border-radius:9px;padding:10px 12px;"><div style="font-family:var(--mono);font-size:8px;color:var(--em);font-weight:600;">PARTICIPANT FLOW</div><div style="font-size:10px;color:var(--emd);margin-top:3px;">Splash → Hub → Assignments → Submit Proof → Confirmation</div></div>
+    <div style="background:var(--vib);border:1px solid var(--vid);border-radius:9px;padding:10px 12px;"><div style="font-family:var(--mono);font-size:8px;color:var(--vi);font-weight:600;">ORGANIZER FLOW</div><div style="font-size:10px;color:var(--vid);margin-top:3px;">Splash → Hub → Hack Rooms → Create Assignment / Verify</div></div>
+    <div style="background:var(--orb);border:1px solid var(--ord);border-radius:9px;padding:10px 12px;"><div style="font-family:var(--mono);font-size:8px;color:var(--or);font-weight:600;">SPOT CHALLENGE FLOW</div><div style="font-size:10px;color:var(--ord);margin-top:3px;">Organizer pushes → All participants notified → Accept → Submit → Verify</div></div>
+    <div style="background:var(--lmb);border:1px solid var(--lmd);border-radius:9px;padding:10px 12px;"><div style="font-family:var(--mono);font-size:8px;color:var(--lm);font-weight:600;">GAMES FLOW</div><div style="font-size:10px;color:var(--lmd);margin-top:3px;">Hub → Responsible Games → Select game → Play → Return to Hub</div></div>
+  </div>
+</div></div>
+</div>
+
+</div><!-- /row 4 -->
+
+<script>
+/* Quality / filter interactivity */
+document.querySelectorAll('.pt').forEach(function(b){b.addEventListener('click',function(){b.classList.toggle('on');});});
+document.querySelectorAll('.tr-btn').forEach(function(b){b.addEventListener('click',function(){b.parentElement.querySelectorAll('.tr-btn').forEach(function(x){x.classList.remove('on');});b.classList.add('on');});});
+document.querySelectorAll('.xp-b').forEach(function(b){b.addEventListener('click',function(){b.parentElement.querySelectorAll('.xp-b').forEach(function(x){x.classList.remove('sel');});b.classList.add('sel');});});
+document.querySelectorAll('.bt').forEach(function(b){b.addEventListener('click',function(){b.parentElement.querySelectorAll('.bt').forEach(function(x){x.classList.remove('on-vi','on-or');});b.classList.add(b.textContent.includes('Spot')?'on-or':'on-vi');});});
+document.querySelectorAll('.toggle').forEach(function(t){t.addEventListener('click',function(){t.classList.toggle('off');});});
+document.querySelectorAll('.rt').forEach(function(r){r.addEventListener('click',function(){r.parentElement.querySelectorAll('.rt').forEach(function(x){x.classList.remove('on');});r.classList.add('on');});});
+</script>
+</body>
+</html>
