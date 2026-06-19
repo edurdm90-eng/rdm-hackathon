@@ -1,0 +1,3 @@
+{
+  "extends": "@rdm-hack/config/tsconfig.base.json"
+}
