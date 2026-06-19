@@ -9,6 +9,7 @@ import {
   Image,
   KeyboardAvoidingView,
   Linking,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -465,10 +466,11 @@ function ProfileDashboard({ user }: { user: SessionUser }) {
   );
 }
 
-function HackRoomDashboard({ user }: { user: SessionUser }) {
+function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
   const dashboard = useQuery(trpc.hackRoom.dashboard.queryOptions());
   const [roomForm, setRoomForm] = useState(emptyRoomForm);
   const [inviteCode, setInviteCode] = useState("");
+  const [createRoomModalOpen, setCreateRoomModalOpen] = useState(false);
   const [selectedRoomId, setSelectedRoomId] = useState("");
   const [activeRoomTab, setActiveRoomTab] = useState<RoomTab>("participants");
   const [activeParticipantTab, setActiveParticipantTab] =
@@ -570,6 +572,7 @@ function HackRoomDashboard({ user }: { user: SessionUser }) {
       onError: (error) => setMessage({ text: error.message, tone: "red" }),
       onSuccess: async (room) => {
         setRoomForm(emptyRoomForm);
+        setCreateRoomModalOpen(false);
         setSelectedRoomId(room._id);
         setActiveRoomTab("participants");
         setMessage({ text: `Created ${room.name} with invite ${room.inviteCode}`, tone: "violet" });
@@ -758,47 +761,18 @@ function HackRoomDashboard({ user }: { user: SessionUser }) {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.dashboardHero}>
-          <Text style={styles.dashboardHeadline}>Good to see you, {firstName(user.name)}.</Text>
-          <Text style={styles.dashboardCopy}>
-            Host rooms with invite codes, review verifiable proof, or join a sprint and ship your
-            submission.
-          </Text>
-
-          <View style={styles.profileCard}>
-            <Avatar name={user.name} tone="cyan" />
-            <View style={styles.profileText}>
-              <Text style={styles.profileName}>{user.name}</Text>
-              <Text style={styles.profileEmail}>{user.email}</Text>
-            </View>
-            {isBusy ? <ActivityIndicator color={theme.award} /> : null}
+        {isBusy ? (
+          <View style={styles.compactBusyRow}>
+            <ActivityIndicator color={theme.award} />
+            <Text style={styles.mutedText}>Syncing Hack Room...</Text>
           </View>
+        ) : null}
 
-          <View style={styles.metricsGrid}>
-            <MetricCard
-              icon="shield-checkmark-outline"
-              label="Hosted"
-              tone="violet"
-              value={dashboard.data?.stats.activeRooms ?? 0}
-            />
-            <MetricCard
-              icon="enter-outline"
-              label="Joined"
-              tone="cyan"
-              value={dashboard.data?.stats.joinedRooms ?? 0}
-            />
-            <MetricCard
-              icon="hourglass-outline"
-              label="Reviews"
-              tone="gold"
-              value={dashboard.data?.stats.pendingSubmissions ?? 0}
-            />
-          </View>
-        </View>
 
         <RoomCommandCenter
           allRooms={allRooms}
           createRoomPending={createRoom.isPending}
+          createRoomModalOpen={createRoomModalOpen}
           inviteCode={inviteCode}
           joinRoomPending={joinRoom.isPending}
           onCreateRoom={() => createRoom.mutate(roomForm)}
@@ -806,6 +780,7 @@ function HackRoomDashboard({ user }: { user: SessionUser }) {
           onJoinRoom={() => joinRoom.mutate({ inviteCode })}
           onRoomFormChange={setRoomForm}
           onSelectRoom={setSelectedRoomId}
+          onSetCreateRoomModalOpen={setCreateRoomModalOpen}
           onShareRoom={handleShareCode}
           roomForm={roomForm}
           selectedRoomId={selectedRoomId}
@@ -870,14 +845,7 @@ function HackRoomDashboard({ user }: { user: SessionUser }) {
             taskKind={taskKind}
             winnerSubmissions={winnerSubmissions}
           />
-        ) : (
-          <Panel eyebrow="Room" icon="flash-outline" title="Choose a Hack Room" tone="cyan">
-            <EmptyState
-              icon="key-outline"
-              text="Enter an invite code or create a hack room to open the internal workspace."
-            />
-          </Panel>
-        )}
+        ) : null}
       </ScrollView>
     </View>
   );
@@ -886,6 +854,7 @@ function HackRoomDashboard({ user }: { user: SessionUser }) {
 function RoomCommandCenter({
   allRooms,
   createRoomPending,
+  createRoomModalOpen,
   inviteCode,
   joinRoomPending,
   onCreateRoom,
@@ -893,12 +862,14 @@ function RoomCommandCenter({
   onJoinRoom,
   onRoomFormChange,
   onSelectRoom,
+  onSetCreateRoomModalOpen,
   onShareRoom,
   roomForm,
   selectedRoomId,
 }: {
   allRooms: Array<{ role: Role; room: HackRoom }>;
   createRoomPending: boolean;
+  createRoomModalOpen: boolean;
   inviteCode: string;
   joinRoomPending: boolean;
   onCreateRoom: () => void;
@@ -906,104 +877,157 @@ function RoomCommandCenter({
   onJoinRoom: () => void;
   onRoomFormChange: React.Dispatch<React.SetStateAction<typeof emptyRoomForm>>;
   onSelectRoom: (roomId: string) => void;
+  onSetCreateRoomModalOpen: (open: boolean) => void;
   onShareRoom: (room: HackRoom) => void;
   roomForm: typeof emptyRoomForm;
   selectedRoomId: string;
 }) {
   return (
-    <Panel eyebrow="Lobby" icon="key-outline" title="Join or Create Hack Room" tone="cyan">
-      <View style={styles.inviteJoinRow}>
-        <View style={styles.inviteInputColumn}>
-          <Text style={styles.fieldLabel}>Enter invite code</Text>
-          <HackTextInput
-            autoCapitalize="characters"
-            onChangeText={onInviteCodeChange}
-            placeholder="HR-ABC123"
-            value={inviteCode}
-          />
-        </View>
-        <Pressable
-          accessibilityRole="button"
-          disabled={!inviteCode.trim() || joinRoomPending}
-          onPress={onJoinRoom}
-          style={({ pressed }) => [
-            styles.joinTightButton,
-            (!inviteCode.trim() || joinRoomPending) && styles.disabled,
-            pressed && styles.pressed,
-          ]}
-        >
-          {joinRoomPending ? (
-            <ActivityIndicator color="#03120c" />
-          ) : (
-            <>
-              <Ionicons name="enter-outline" size={18} color="#03120c" />
-              <Text style={styles.joinTightText}>Join</Text>
-            </>
-          )}
-        </Pressable>
-      </View>
-
-      <View style={styles.createRoomCard}>
-        <View style={styles.sectionHeadingRow}>
-          <View>
-            <Text style={styles.sectionEyebrow}>Host</Text>
-            <Text style={styles.sectionTitleSmall}>Create Hack Room</Text>
-          </View>
-          <StatusPill label="Host owns room" tone="violet" />
-        </View>
-        <Field label="Room name">
-          <HackTextInput
-            onChangeText={(value) => onRoomFormChange((current) => ({ ...current, name: value }))}
-            placeholder="AI Agents Sprint"
-            value={roomForm.name}
-          />
-        </Field>
-        <Field label="Room brief">
-          <HackTextInput
-            multiline
-            onChangeText={(value) =>
-              onRoomFormChange((current) => ({ ...current, description: value }))
-            }
-            placeholder="Participants build and submit working demos by deadline."
-            style={styles.textArea}
-            value={roomForm.description}
-          />
-        </Field>
-        <HackButton
-          disabled={!roomForm.name.trim() || createRoomPending}
-          icon="add-outline"
-          label="Create Room"
-          loading={createRoomPending}
-          onPress={onCreateRoom}
-          tone="violet"
-        />
-      </View>
-
-      <View style={styles.roomShelfHeader}>
-        <Text style={styles.sectionEyebrow}>Your rooms</Text>
-        <CounterLabel label={`${allRooms.length} active`} />
-      </View>
-      {allRooms.length ? (
-        <ScrollView
-          contentContainerStyle={styles.roomShelf}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-        >
-          {allRooms.map(({ role, room }) => (
-            <SelectableRoomCard
-              key={room._id}
-              onPress={() => onSelectRoom(room._id)}
-              onShare={() => onShareRoom(room)}
-              role={role}
-              room={room}
-              selected={selectedRoomId === room._id}
+    <>
+      <Panel
+        action={
+          <Pressable
+            accessibilityLabel="Create hack room"
+            accessibilityRole="button"
+            onPress={() => onSetCreateRoomModalOpen(true)}
+            style={({ pressed }) => [styles.createRoomTrigger, pressed && styles.pressed]}
+          >
+            <Ionicons name="add-outline" size={18} color="#060214" />
+            <Text style={styles.createRoomTriggerText}>Create</Text>
+          </Pressable>
+        }
+        eyebrow="Lobby"
+        icon="key-outline"
+        title="Join Hack Room"
+        tone="cyan"
+      >
+        <View style={styles.inviteJoinRow}>
+          <View style={styles.inviteInputColumn}>
+            <Text style={styles.fieldLabel}>Enter invite code</Text>
+            <HackTextInput
+              autoCapitalize="characters"
+              onChangeText={onInviteCodeChange}
+              placeholder="HR-ABC123"
+              value={inviteCode}
             />
-          ))}
-        </ScrollView>
-      ) : (
-        <EmptyState icon="flash-outline" text="No rooms yet. Join with a code or create one." />
-      )}
-    </Panel>
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            disabled={!inviteCode.trim() || joinRoomPending}
+            onPress={onJoinRoom}
+            style={({ pressed }) => [
+              styles.joinTightButton,
+              (!inviteCode.trim() || joinRoomPending) && styles.disabled,
+              pressed && styles.pressed,
+            ]}
+          >
+            {joinRoomPending ? (
+              <ActivityIndicator color="#03120c" />
+            ) : (
+              <>
+                <Ionicons name="enter-outline" size={18} color="#03120c" />
+                <Text style={styles.joinTightText}>Join</Text>
+              </>
+            )}
+          </Pressable>
+        </View>
+
+        <View style={styles.roomShelfHeader}>
+          <Text style={styles.sectionEyebrow}>Your rooms</Text>
+          <CounterLabel label={`${allRooms.length} active`} />
+        </View>
+        {allRooms.length ? (
+          <ScrollView
+            contentContainerStyle={styles.roomShelf}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+          >
+            {allRooms.map(({ role, room }) => (
+              <SelectableRoomCard
+                key={room._id}
+                onPress={() => onSelectRoom(room._id)}
+                onShare={() => onShareRoom(room)}
+                role={role}
+                room={room}
+                selected={selectedRoomId === room._id}
+              />
+            ))}
+          </ScrollView>
+        ) : (
+          <EmptyState icon="flash-outline" text="No rooms yet. Join with a code or create one." />
+        )}
+      </Panel>
+
+      <Modal
+        animationType="fade"
+        onRequestClose={() => onSetCreateRoomModalOpen(false)}
+        transparent
+        visible={createRoomModalOpen}
+      >
+        <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
+            style={styles.modalKeyboardView}
+          >
+            <View style={styles.modalCard}>
+              <View style={styles.modalHeader}>
+                <View style={styles.modalTitleBlock}>
+                  <Text style={styles.sectionEyebrow}>Host</Text>
+                  <Text style={styles.modalTitle}>Create Hack Room</Text>
+                </View>
+                <Pressable
+                  accessibilityLabel="Close create room"
+                  accessibilityRole="button"
+                  onPress={() => onSetCreateRoomModalOpen(false)}
+                  style={({ pressed }) => [styles.modalCloseButton, pressed && styles.pressed]}
+                >
+                  <Ionicons name="close-outline" size={22} color={theme.text} />
+                </Pressable>
+              </View>
+
+              <StatusPill label="Host owns room" tone="violet" />
+
+              <Field label="Room name">
+                <HackTextInput
+                  onChangeText={(value) =>
+                    onRoomFormChange((current) => ({ ...current, name: value }))
+                  }
+                  placeholder="AI Agents Sprint"
+                  value={roomForm.name}
+                />
+              </Field>
+              <Field label="Room brief">
+                <HackTextInput
+                  multiline
+                  onChangeText={(value) =>
+                    onRoomFormChange((current) => ({ ...current, description: value }))
+                  }
+                  placeholder="Participants build and submit working demos by deadline."
+                  style={styles.textArea}
+                  value={roomForm.description}
+                />
+              </Field>
+              <View style={styles.modalActions}>
+                <HackButton
+                  disabled={createRoomPending}
+                  label="Cancel"
+                  onPress={() => onSetCreateRoomModalOpen(false)}
+                  tone="red"
+                />
+                <HackButton
+                  disabled={!roomForm.name.trim() || createRoomPending}
+                  icon="add-outline"
+                  label="Create Room"
+                  loading={createRoomPending}
+                  onPress={onCreateRoom}
+                  tone="violet"
+                />
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
+    </>
   );
 }
 
@@ -3089,6 +3113,16 @@ const styles = StyleSheet.create({
     gap: 10,
     justifyContent: "space-between",
   },
+  compactBusyRow: {
+    alignItems: "center",
+    backgroundColor: theme.panel,
+    borderColor: theme.border,
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 10,
+    padding: 12,
+  },
   counterLabel: {
     color: theme.muted,
     fontFamily: Platform.select({ default: "monospace" }),
@@ -3200,6 +3234,20 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     gap: 12,
     padding: 12,
+  },
+  createRoomTrigger: {
+    alignItems: "center",
+    backgroundColor: theme.host,
+    borderRadius: 8,
+    flexDirection: "row",
+    gap: 5,
+    minHeight: 36,
+    paddingHorizontal: 10,
+  },
+  createRoomTriggerText: {
+    color: "#060214",
+    fontSize: 12,
+    fontWeight: "900",
   },
   headerIconButton: {
     alignItems: "center",
@@ -3414,6 +3462,58 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
     marginTop: 14,
+  },
+  modalActions: {
+    flexDirection: "row",
+    gap: 10,
+    justifyContent: "flex-end",
+  },
+  modalCard: {
+    backgroundColor: theme.panel,
+    borderColor: theme.border,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 14,
+    maxWidth: 430,
+    padding: 16,
+    width: "100%",
+  },
+  modalCloseButton: {
+    alignItems: "center",
+    backgroundColor: theme.panelStrong,
+    borderColor: theme.border,
+    borderRadius: 8,
+    borderWidth: 1,
+    height: 40,
+    justifyContent: "center",
+    width: 40,
+  },
+  modalHeader: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    gap: 12,
+    justifyContent: "space-between",
+  },
+  modalKeyboardView: {
+    justifyContent: "center",
+    width: "100%",
+  },
+  modalOverlay: {
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.72)",
+    flex: 1,
+    justifyContent: "center",
+    padding: 18,
+  },
+  modalTitle: {
+    color: theme.text,
+    fontSize: 21,
+    fontWeight: "800",
+    letterSpacing: 0,
+  },
+  modalTitleBlock: {
+    flex: 1,
+    gap: 4,
   },
   miniStat: {
     backgroundColor: theme.backgroundAlt,
