@@ -35,7 +35,16 @@ type HackRoom = DashboardData["hostedRooms"][number];
 type HackSubmission = DashboardData["hostSubmissions"][number];
 type Role = "participant" | "host";
 type TaskKind = "task" | "challenge" | "game";
-type RoomTab = "participants" | "assign" | "history" | "challenges" | "winners";
+type RoomTab =
+  | "assign"
+  | "badges"
+  | "challenges"
+  | "history"
+  | "leaderboard"
+  | "participants"
+  | "profile"
+  | "verify"
+  | "winners";
 type ParticipantTab = "assignments" | "proof" | "winners";
 type SubmissionStatus = DashboardData["mySubmissions"][number]["status"];
 type AuthMode = "sign-in" | "sign-up";
@@ -1417,6 +1426,48 @@ function HostRoomWorkspace({
   winnerSubmissions: DashboardData["hostSubmissions"];
 }) {
   const challengeTasks = roomTasks.filter((task) => task.kind === "challenge" || task.kind === "game");
+  const leaderboardRows = winnerSubmissions
+    .reduce<
+      Array<{
+        awardXrdm: number;
+        email: string;
+        id: string;
+        name: string;
+        wins: number;
+      }>
+    >((rows, submission) => {
+      const existing = rows.find((row) => row.id === submission.participantId);
+      const award = submission.awardXrdm ?? submission.rewardXrdm ?? 0;
+
+      if (existing) {
+        existing.awardXrdm += award;
+        existing.wins += 1;
+      } else {
+        rows.push({
+          awardXrdm: award,
+          email: submission.participantEmail,
+          id: submission.participantId,
+          name: submission.participantName,
+          wins: 1,
+        });
+      }
+
+      return rows;
+    }, [])
+    .sort((left, right) => right.awardXrdm - left.awardXrdm);
+  const hostQuickActions: Array<{
+    id: RoomTab;
+    label: string;
+  }> = [
+    { id: "assign", label: "Manage Assignments" },
+    { id: "participants", label: "Manage Members" },
+    { id: "verify", label: "Verify" },
+    { id: "history", label: "History" },
+    { id: "winners", label: "Award XRDM" },
+    { id: "badges", label: "Assign Badges" },
+    { id: "leaderboard", label: "Leaderboard" },
+    { id: "profile", label: "Profile" },
+  ];
   const hostTabs: Array<{
     icon: React.ComponentProps<typeof Ionicons>["name"];
     id: RoomTab;
@@ -1424,13 +1475,31 @@ function HostRoomWorkspace({
   }> = [
     { icon: "people-outline", id: "participants", label: "Participants" },
     { icon: "clipboard-outline", id: "assign", label: "Assign Task" },
+    { icon: "ribbon-outline", id: "verify", label: "Verify" },
     { icon: "time-outline", id: "history", label: "History" },
     { icon: "game-controller-outline", id: "challenges", label: "Challenges" },
     { icon: "trophy-outline", id: "winners", label: "Winners" },
+    { icon: "medal-outline", id: "badges", label: "Badges" },
+    { icon: "podium-outline", id: "leaderboard", label: "Leaderboard" },
+    { icon: "person-circle-outline", id: "profile", label: "Profile" },
   ];
 
   return (
     <View style={styles.trackStack}>
+      <View style={styles.quickActionsSection}>
+        <Text style={styles.quickActionsTitle}>Quick Actions</Text>
+        <View style={styles.quickActionGrid}>
+          {hostQuickActions.map((action) => (
+            <QuickActionTile
+              active={activeRoomTab === action.id}
+              key={action.id}
+              label={action.label}
+              onPress={() => onRoomTabChange(action.id)}
+            />
+          ))}
+        </View>
+      </View>
+
       <ScrollView
         contentContainerStyle={styles.roomTabs}
         horizontal
@@ -1496,6 +1565,48 @@ function HostRoomWorkspace({
           taskForm={taskForm}
           title="Assign Task"
         />
+      ) : null}
+
+      {activeRoomTab === "verify" ? (
+        <Panel
+          action={<CounterLabel label={`${pendingSubmissions.length} pending`} />}
+          eyebrow="Verification"
+          icon="ribbon-outline"
+          title="Review Queue"
+          tone="violet"
+        >
+          <View style={styles.listStack}>
+            {pendingSubmissions.length ? (
+              pendingSubmissions.map((submission) => (
+                <SubmissionReviewCard
+                  approveSubmissionPending={approveSubmissionPending}
+                  feedback={
+                    feedbackBySubmission[submission._id] ??
+                    submission.hostFeedback ??
+                    "Approved. Clear proof and solid contribution."
+                  }
+                  key={submission._id}
+                  mode="review"
+                  onApprove={() => onApproveSubmission(submission)}
+                  onFeedbackChange={(value) =>
+                    setFeedbackBySubmission((current) => ({
+                      ...current,
+                      [submission._id]: value,
+                    }))
+                  }
+                  onReturn={() => onReturnSubmission(submission)}
+                  returnSubmissionPending={returnSubmissionPending}
+                  submission={submission}
+                />
+              ))
+            ) : (
+              <EmptyState
+                icon="ribbon-outline"
+                text="Participant proof waiting for host review will appear here."
+              />
+            )}
+          </View>
+        </Panel>
       ) : null}
 
       {activeRoomTab === "history" ? (
@@ -1634,45 +1745,99 @@ function HostRoomWorkspace({
         </Panel>
       ) : null}
 
-      <Panel
-        action={<CounterLabel label={`${pendingSubmissions.length} pending`} />}
-        eyebrow="Verification"
-        icon="ribbon-outline"
-        title="Review Queue"
-        tone="violet"
-      >
-        <View style={styles.listStack}>
-          {pendingSubmissions.length ? (
-            pendingSubmissions.map((submission) => (
-              <SubmissionReviewCard
-                approveSubmissionPending={approveSubmissionPending}
-                feedback={
-                  feedbackBySubmission[submission._id] ??
-                  submission.hostFeedback ??
-                  "Approved. Clear proof and solid contribution."
-                }
-                key={submission._id}
-                mode="review"
-                onApprove={() => onApproveSubmission(submission)}
-                onFeedbackChange={(value) =>
-                  setFeedbackBySubmission((current) => ({
-                    ...current,
-                    [submission._id]: value,
-                  }))
-                }
-                onReturn={() => onReturnSubmission(submission)}
-                returnSubmissionPending={returnSubmissionPending}
-                submission={submission}
+      {activeRoomTab === "badges" ? (
+        <Panel
+          action={<CounterLabel label={`${room.participants.length} members`} />}
+          eyebrow="Recognition"
+          icon="medal-outline"
+          title="Assign Badges"
+          tone="violet"
+        >
+          <View style={styles.badgeGrid}>
+            {room.participants.length ? (
+              room.participants.map((participant) => {
+                const approvedCount = historySubmissions.filter(
+                  (submission) => submission.participantId === participant.userId,
+                ).length;
+                const winCount = winnerSubmissions.filter(
+                  (submission) => submission.participantId === participant.userId,
+                ).length;
+                return (
+                  <View key={participant.userId} style={styles.badgeMemberCard}>
+                    <ParticipantListItem participant={participant} />
+                    <View style={styles.badgeChipRow}>
+                      <StatusPill label="Builder" tone="cyan" />
+                      <StatusPill
+                        label={approvedCount ? "Verified" : "Needs Proof"}
+                        tone={approvedCount ? "violet" : "orange"}
+                      />
+                      <StatusPill
+                        label={winCount ? "Winner" : "Nominate"}
+                        tone={winCount ? "gold" : "cyan"}
+                      />
+                    </View>
+                  </View>
+                );
+              })
+            ) : (
+              <EmptyState
+                icon="medal-outline"
+                text="Members will appear here when participants join the room."
               />
-            ))
-          ) : (
-            <EmptyState
-              icon="ribbon-outline"
-              text="Participant proof waiting for host review will appear here."
-            />
-          )}
-        </View>
-      </Panel>
+            )}
+          </View>
+        </Panel>
+      ) : null}
+
+      {activeRoomTab === "leaderboard" ? (
+        <Panel
+          action={<CounterLabel label={`${leaderboardRows.length} ranked`} />}
+          eyebrow="Room Rank"
+          icon="podium-outline"
+          title="Leaderboard"
+          tone="gold"
+        >
+          <View style={styles.listStack}>
+            {leaderboardRows.length ? (
+              leaderboardRows.map((row, index) => (
+                <View key={row.id} style={styles.leaderboardRow}>
+                  <Text style={styles.leaderboardRank}>#{index + 1}</Text>
+                  <View style={styles.profileText}>
+                    <Text style={styles.profileName}>{row.name}</Text>
+                    <Text style={styles.profileEmail}>{row.email}</Text>
+                  </View>
+                  <View style={styles.leaderboardScore}>
+                    <Text style={styles.awardText}>+{row.awardXrdm} XRDM</Text>
+                    <Text style={styles.cardMeta}>{row.wins} wins</Text>
+                  </View>
+                </View>
+              ))
+            ) : (
+              <EmptyState
+                icon="podium-outline"
+                text="Announced winners will create the room leaderboard."
+              />
+            )}
+          </View>
+        </Panel>
+      ) : null}
+
+      {activeRoomTab === "profile" ? (
+        <Panel eyebrow="Room" icon="person-circle-outline" title="Profile" tone="violet">
+          <View style={styles.profileDetails}>
+            <ProfileRow label="Room name" value={room.name} />
+            <ProfileRow label="Host" value={room.hostName} />
+            <ProfileRow label="Invite code" value={room.inviteCode} />
+            <ProfileRow label="Status" value={room.status} />
+          </View>
+          <HackButton
+            icon="share-outline"
+            label="Share Invite"
+            onPress={() => onShareRoom(room)}
+            tone="violet"
+          />
+        </Panel>
+      ) : null}
     </View>
   );
 }
@@ -2061,6 +2226,38 @@ function SubmissionReviewCard({
         />
       ) : null}
     </View>
+  );
+}
+
+function QuickActionTile({
+  active,
+  label,
+  onPress,
+}: {
+  active: boolean;
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={active ? { selected: true } : undefined}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.quickActionTile,
+        active && styles.quickActionTileActive,
+        pressed && styles.pressed,
+      ]}
+    >
+      <Text
+        numberOfLines={2}
+        adjustsFontSizeToFit
+        minimumFontScale={0.78}
+        style={[styles.quickActionText, active && styles.quickActionTextActive]}
+      >
+        {label}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -3198,6 +3395,22 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
   },
+  badgeChipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 10,
+  },
+  badgeGrid: {
+    gap: 10,
+  },
+  badgeMemberCard: {
+    backgroundColor: theme.backgroundAlt,
+    borderColor: theme.border,
+    borderRadius: 8,
+    borderWidth: 1,
+    padding: 10,
+  },
   button: {
     alignItems: "center",
     borderRadius: 8,
@@ -3558,6 +3771,26 @@ const styles = StyleSheet.create({
     fontFamily: Platform.select({ default: "monospace" }),
     fontSize: 11,
   },
+  leaderboardRank: {
+    color: theme.award,
+    fontFamily: Platform.select({ default: "monospace" }),
+    fontSize: 15,
+    fontWeight: "900",
+    width: 38,
+  },
+  leaderboardRow: {
+    alignItems: "center",
+    backgroundColor: theme.awardDark,
+    borderColor: theme.awardBorder,
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 10,
+    padding: 12,
+  },
+  leaderboardScore: {
+    alignItems: "flex-end",
+  },
   listStack: {
     gap: 10,
     marginTop: 12,
@@ -3838,6 +4071,49 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 6,
     marginTop: 10,
+  },
+  quickActionGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  quickActionsSection: {
+    gap: 10,
+  },
+  quickActionsTitle: {
+    color: theme.muted,
+    fontFamily: Platform.select({ default: "monospace" }),
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0,
+    textTransform: "uppercase",
+  },
+  quickActionText: {
+    color: theme.text,
+    fontSize: 16,
+    fontWeight: "700",
+    letterSpacing: 0,
+    textAlign: "center",
+  },
+  quickActionTextActive: {
+    color: theme.host,
+  },
+  quickActionTile: {
+    alignItems: "center",
+    backgroundColor: theme.panelStrong,
+    borderColor: theme.border,
+    borderRadius: 8,
+    borderWidth: 1,
+    flexBasis: "47.8%",
+    flexGrow: 1,
+    justifyContent: "center",
+    minHeight: 76,
+    paddingHorizontal: 10,
+    paddingVertical: 12,
+  },
+  quickActionTileActive: {
+    backgroundColor: theme.hostDark,
+    borderColor: theme.host,
   },
   reviewActions: {
     flexDirection: "row",
