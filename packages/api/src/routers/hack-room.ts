@@ -6,6 +6,15 @@ import { protectedProcedure, router } from "../index";
 
 const proofTypeSchema = z.enum(["github", "drive", "file", "url", "video", "deck"]);
 const taskKindSchema = z.enum(["task", "challenge", "game"]);
+const rewardKindSchema = z.enum([
+  "participant_certificate",
+  "winner_certificate",
+  "winner_nft_badge",
+]);
+const proofItemSchema = z.object({
+  type: proofTypeSchema,
+  value: z.string().trim().min(3).max(500),
+});
 
 type ParticipantRecord = {
   userId: string;
@@ -48,6 +57,7 @@ type HackSubmissionRecord = {
   participantId: string;
   participantName: string;
   participantEmail: string;
+  proofItems?: Array<z.infer<typeof proofItemSchema>>;
   proofUrl: string;
   notes: string;
   status: "submitted" | "approved" | "winner" | "returned";
@@ -58,9 +68,36 @@ type HackSubmissionRecord = {
   updatedAt: string;
 };
 
+type RewardRecipientRecord = {
+  userId: string;
+  name: string;
+  email: string;
+};
+
+type HackRewardRecord = {
+  _id: string;
+  roomId: string;
+  hostId: string;
+  hostName: string;
+  kind: z.infer<typeof rewardKindSchema>;
+  title: string;
+  description: string;
+  awardXrdm: number;
+  ledgerNote: string;
+  recipients: RewardRecipientRecord[];
+  sourceSubmissionId?: string;
+  sourceSubmissionTitle?: string;
+  teamName?: string;
+  status: "issued";
+  issuedAt: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 const roomCollection = () => client.collection<HackRoomRecord>("hack_rooms");
 const taskCollection = () => client.collection<HackTaskRecord>("hack_tasks");
 const submissionCollection = () => client.collection<HackSubmissionRecord>("hack_submissions");
+const rewardCollection = () => client.collection<HackRewardRecord>("hack_rewards");
 
 function now() {
   return new Date().toISOString();
@@ -116,6 +153,27 @@ function byNewest<T extends { createdAt?: string; submittedAt?: string }>(left: 
   return rightDate.localeCompare(leftDate);
 }
 
+function normalizeProofItems(submission: HackSubmissionRecord) {
+  if (submission.proofItems?.length) {
+    return submission.proofItems;
+  }
+
+  return submission.proofUrl
+    ? [
+        {
+          type: "url" as const,
+          value: submission.proofUrl,
+        },
+      ]
+    : [];
+}
+
+function rewardLabel(kind: z.infer<typeof rewardKindSchema>) {
+  if (kind === "participant_certificate") return "Participant Certificate";
+  if (kind === "winner_certificate") return "Winner Certificate";
+  return "Winner NFT Badge";
+}
+
 export const hackRoomRouter = router({
   dashboard: protectedProcedure.query(async ({ ctx }) => {
     const user = ctx.session.user;
@@ -128,7 +186,7 @@ export const hackRoomRouter = router({
     const joinedRoomIds = joinedRooms.map((room) => room._id);
     const visibleRoomIds = [...new Set([...hostedRoomIds, ...joinedRoomIds])];
 
-    const [visibleTasks, mySubmissions, hostSubmissions, visibleWinnerSubmissions] =
+    const [visibleTasks, mySubmissions, hostSubmissions, visibleWinnerSubmissions, visibleRewards] =
       await Promise.all([
         visibleRoomIds.length
           ? taskCollection().find({ roomId: { $in: visibleRoomIds } }).toArray()
@@ -142,6 +200,16 @@ export const hackRoomRouter = router({
               .find({ roomId: { $in: visibleRoomIds }, status: "winner" })
               .toArray()
           : [],
+        visibleRoomIds.length
+          ? rewardCollection()
+              .find({
+                $or: [
+                  { roomId: { $in: hostedRoomIds } },
+                  { "recipients.userId": user.id },
+                ],
+              })
+              .toArray()
+          : [],
       ]);
 
     const roomById = new Map([...hostedRooms, ...joinedRooms].map((room) => [room._id, room]));
@@ -152,6 +220,7 @@ export const hackRoomRouter = router({
       const room = roomById.get(submission.roomId);
       return {
         ...submission,
+        proofItems: normalizeProofItems(submission),
         roomName: room?.name ?? "Hack room",
         taskTitle: task?.title ?? "Hack task",
         rewardXrdm: task?.rewardXrdm ?? submission.awardXrdm ?? 0,
@@ -172,6 +241,7 @@ export const hackRoomRouter = router({
         const room = roomById.get(submission.roomId);
         return {
           ...submission,
+          proofItems: normalizeProofItems(submission),
           roomName: room?.name ?? "Hack room",
           taskTitle: task?.title ?? "Hack task",
           rewardXrdm: task?.rewardXrdm ?? submission.awardXrdm ?? 0,
@@ -179,6 +249,12 @@ export const hackRoomRouter = router({
       }),
       hostSubmissions: hostSubmissions.map(withSubmissionContext).sort(byNewest),
       visibleWinners: visibleWinnerSubmissions.map(withSubmissionContext).sort(byNewest),
+      rewards: visibleRewards.sort(byNewest).map((reward) => ({
+        ...reward,
+        label: rewardLabel(reward.kind),
+        recipientCount: reward.recipients.length,
+        roomName: roomById.get(reward.roomId)?.name ?? reward.teamName ?? "Hack room",
+      })),
       stats: {
         activeRooms: hostedRooms.length,
         joinedRooms: joinedRooms.length,
@@ -296,7 +372,8 @@ export const hackRoomRouter = router({
       z.object({
         roomId: z.string().min(1),
         taskId: z.string().min(1),
-        proofUrl: z.string().trim().min(8).max(500),
+        proofItems: z.array(proofItemSchema).max(6).default([]),
+        proofUrl: z.string().trim().max(500).default(""),
         notes: z.string().trim().max(700).default(""),
       }),
     )
@@ -324,6 +401,38 @@ export const hackRoomRouter = router({
         });
       }
 
+      const cleanProofItems = input.proofItems.filter((item) => item.value.trim());
+      const legacyProofItem = input.proofUrl.trim()
+        ? [
+            {
+              type: "url" as const,
+              value: input.proofUrl.trim(),
+            },
+          ]
+        : [];
+      const proofItems = cleanProofItems.length ? cleanProofItems : legacyProofItem;
+
+      if (!proofItems.length) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Submit at least one proof link",
+        });
+      }
+
+      if (cleanProofItems.length) {
+        const submittedProofTypes = new Set(proofItems.map((item) => item.type));
+        const missingProofTypes = task.proofTypes.filter(
+          (proofType) => !submittedProofTypes.has(proofType),
+        );
+
+        if (missingProofTypes.length) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: `Missing required proof: ${missingProofTypes.join(", ")}`,
+          });
+        }
+      }
+
       const timestamp = now();
       const existing = await submissionCollection().findOne({
         taskId: input.taskId,
@@ -335,7 +444,8 @@ export const hackRoomRouter = router({
           { _id: existing._id },
           {
             $set: {
-              proofUrl: input.proofUrl,
+              proofItems,
+              proofUrl: proofItems[0]?.value ?? input.proofUrl,
               notes: input.notes,
               status: "submitted",
               submittedAt: timestamp,
@@ -359,7 +469,8 @@ export const hackRoomRouter = router({
         participantId: ctx.session.user.id,
         participantName: ctx.session.user.name,
         participantEmail: ctx.session.user.email,
-        proofUrl: input.proofUrl,
+        proofItems,
+        proofUrl: proofItems[0]?.value ?? input.proofUrl,
         notes: input.notes,
         status: "submitted",
         submittedAt: timestamp,
@@ -480,5 +591,96 @@ export const hackRoomRouter = router({
 
       const updatedSubmission = await submissionCollection().findOne({ _id: input.submissionId });
       return updatedSubmission ?? submission;
+    }),
+
+  issueReward: protectedProcedure
+    .input(
+      z.object({
+        roomId: z.string().min(1),
+        kind: rewardKindSchema,
+        title: z.string().trim().max(100).default(""),
+        description: z.string().trim().max(500).default(""),
+        awardXrdm: z.coerce.number().int().min(0).max(1000).default(0),
+        ledgerNote: z.string().trim().max(500).default(""),
+        sourceSubmissionId: z.string().trim().optional(),
+        recipientIds: z.array(z.string().trim().min(1)).max(250).default([]),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const room = await requireHostedRoom(input.roomId, ctx.session.user.id);
+      const timestamp = now();
+      let sourceSubmission: HackSubmissionRecord | null = null;
+      let sourceTask: HackTaskRecord | null = null;
+      let recipients: RewardRecipientRecord[] = [];
+
+      if (input.kind === "participant_certificate") {
+        const recipientIds = input.recipientIds.length
+          ? new Set(input.recipientIds)
+          : new Set(room.participants.map((participant) => participant.userId));
+        recipients = room.participants
+          .filter((participant) => recipientIds.has(participant.userId))
+          .map(({ email, name, userId }) => ({ email, name, userId }));
+      } else {
+        if (!input.sourceSubmissionId) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Choose an announced winner before issuing this reward",
+          });
+        }
+
+        sourceSubmission = await submissionCollection().findOne({
+          _id: input.sourceSubmissionId,
+          roomId: room._id,
+          status: "winner",
+        });
+
+        if (!sourceSubmission) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Winner submission not found",
+          });
+        }
+
+        sourceTask = await taskCollection().findOne({
+          _id: sourceSubmission.taskId,
+          roomId: room._id,
+        });
+
+        recipients = room.participants.map(({ email, name, userId }) => ({
+          email,
+          name,
+          userId,
+        }));
+      }
+
+      if (!recipients.length) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Select at least one reward recipient",
+        });
+      }
+
+      const reward: HackRewardRecord = {
+        _id: makeId("reward"),
+        awardXrdm: input.awardXrdm,
+        createdAt: timestamp,
+        description: input.description,
+        hostId: ctx.session.user.id,
+        hostName: ctx.session.user.name,
+        issuedAt: timestamp,
+        kind: input.kind,
+        ledgerNote: input.ledgerNote,
+        recipients,
+        roomId: room._id,
+        sourceSubmissionId: sourceSubmission?._id,
+        sourceSubmissionTitle: sourceTask?.title,
+        status: "issued",
+        teamName: room.name,
+        title: input.title || rewardLabel(input.kind),
+        updatedAt: timestamp,
+      };
+
+      await rewardCollection().insertOne(reward);
+      return reward;
     }),
 });

@@ -949,11 +949,13 @@ function Badge({
   tone,
 }: {
   children: React.ReactNode;
-  tone: "submitted" | "winner" | "returned" | "gold" | string;
+  tone: "submitted" | "approved" | "winner" | "returned" | "gold" | string;
 }) {
   const className =
     tone === "winner"
       ? "border-[#8a6a00] bg-[#241a00] text-[#f0c040]"
+      : tone === "approved"
+        ? "border-[#0b8060] bg-[#061f18] text-[#1eeab0]"
       : tone === "returned"
         ? "border-[#901e14] bg-[#280a08] text-[#ff5a4a]"
         : tone === "submitted"
@@ -986,7 +988,7 @@ function ProofCard({
     taskTitle: string;
     roomName: string;
     proofUrl: string;
-    status: "submitted" | "winner" | "returned";
+    status: "submitted" | "approved" | "winner" | "returned";
     awardXrdm?: number;
     rewardXrdm?: number;
     hostFeedback?: string;

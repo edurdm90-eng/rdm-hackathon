@@ -1,5 +1,6 @@
 import type { AppRouter } from "@rdm-hack/api/routers/index";
 import { Ionicons } from "@expo/vector-icons";
+import DateTimePicker, { type DateTimePickerEvent } from "@react-native-community/datetimepicker";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import type { inferRouterOutputs } from "@trpc/server";
 import { useNavigation, useRouter } from "expo-router";
@@ -33,22 +34,30 @@ type DashboardData = RouterOutputs["hackRoom"]["dashboard"];
 type HackTask = DashboardData["tasks"][number];
 type HackRoom = DashboardData["hostedRooms"][number];
 type HackSubmission = DashboardData["hostSubmissions"][number];
+type HackReward = DashboardData["rewards"][number];
 type Role = "participant" | "host";
 type TaskKind = "task" | "challenge" | "game";
 type RoomTab =
   | "assign"
   | "badges"
+  | "certificates"
   | "challenges"
   | "history"
   | "leaderboard"
+  | "nfts"
   | "participants"
   | "profile"
   | "verify"
   | "winners";
-type ParticipantTab = "assignments" | "proof" | "winners";
+type ParticipantTab = "assignments" | "certificates" | "proof" | "winners";
 type SubmissionStatus = DashboardData["mySubmissions"][number]["status"];
 type AuthMode = "sign-in" | "sign-up";
 type ProofType = "github" | "drive" | "file" | "url" | "video" | "deck";
+type RewardKind = HackReward["kind"];
+type SubmissionProofItem = {
+  type: ProofType;
+  value: string;
+};
 type Tone = "cyan" | "violet" | "gold" | "orange" | "red";
 type SessionUser = {
   email: string;
@@ -64,6 +73,8 @@ const proofTypeOptions: Array<{ label: string; value: ProofType }> = [
   { label: "File", value: "file" },
   { label: "URL", value: "url" },
 ];
+const defaultRegularProofTypes: Array<ProofType> = ["github", "drive"];
+const defaultSpotProofTypes: Array<ProofType> = ["url"];
 
 const signInSchema = z.object({
   email: z.string().trim().min(1, "Email is required").email("Enter a valid email address"),
@@ -86,10 +97,37 @@ const emptyTaskForm = {
   title: "",
 };
 
-const emptySubmitForm = {
-  notes: "",
-  proofUrl: "",
-};
+function makeEmptyRewardForm() {
+  return {
+    awardXrdm: "0",
+    description: "",
+    ledgerNote: "",
+    recipientIds: [] as Array<string>,
+    sourceSubmissionId: "",
+    title: "",
+  };
+}
+
+function makeEmptyProofItems(): Record<ProofType, string> {
+  return {
+    deck: "",
+    drive: "",
+    file: "",
+    github: "",
+    url: "",
+    video: "",
+  };
+}
+
+function makeEmptySubmitForm() {
+  return {
+    notes: "",
+    proofItems: makeEmptyProofItems(),
+    proofUrl: "",
+  };
+}
+
+const emptySubmitForm = makeEmptySubmitForm();
 
 export function NativeHomeScreen() {
   return <AuthenticatedRoute>{(user) => <HomeDashboard user={user} />}</AuthenticatedRoute>;
@@ -623,7 +661,7 @@ function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
 
 function HackRoomDetailDashboard({
   roomId,
-  user: _user,
+  user,
 }: {
   roomId: string;
   user: SessionUser;
@@ -634,10 +672,11 @@ function HackRoomDetailDashboard({
   const [activeParticipantTab, setActiveParticipantTab] =
     useState<ParticipantTab>("assignments");
   const [taskForm, setTaskForm] = useState(emptyTaskForm);
-  const [taskKind, setTaskKind] = useState<TaskKind>("challenge");
-  const [proofTypes, setProofTypes] = useState<Array<ProofType>>(["github", "video"]);
+  const [taskKind, setTaskKind] = useState<TaskKind>("task");
+  const [proofTypes, setProofTypes] = useState<Array<ProofType>>(defaultRegularProofTypes);
   const [selectedTaskId, setSelectedTaskId] = useState("");
   const [submitForm, setSubmitForm] = useState(emptySubmitForm);
+  const [rewardForm, setRewardForm] = useState(makeEmptyRewardForm());
   const [message, setMessage] = useState<{ text: string; tone: Tone } | null>(null);
   const [feedbackBySubmission, setFeedbackBySubmission] = useState<Record<string, string>>({});
   const [awardBySubmission, setAwardBySubmission] = useState<Record<string, string>>({});
@@ -648,6 +687,7 @@ function HackRoomDetailDashboard({
   const mySubmissions = dashboard.data?.mySubmissions ?? [];
   const hostSubmissions = dashboard.data?.hostSubmissions ?? [];
   const visibleWinners = dashboard.data?.visibleWinners ?? [];
+  const rewards = dashboard.data?.rewards ?? [];
   const allRooms = useMemo(() => {
     const seen = new Set<string>();
     const rooms: Array<{ role: Role; room: HackRoom }> = [];
@@ -683,6 +723,16 @@ function HackRoomDetailDashboard({
     () => visibleWinners.filter((submission) => submission.roomId === roomId),
     [roomId, visibleWinners],
   );
+  const roomRewards = useMemo(
+    () => rewards.filter((reward) => reward.roomId === roomId),
+    [rewards, roomId],
+  );
+  const myRoomRewards = useMemo(
+    () => roomRewards.filter((reward) =>
+      reward.recipients.some((recipient) => recipient.userId === user.id),
+    ),
+    [roomRewards, user.id],
+  );
   const selectedTask = roomTasks.find((task) => task._id === selectedTaskId);
   const pendingHostSubmissions = roomSubmissions.filter(
     (submission) => submission.status === "submitted",
@@ -717,7 +767,7 @@ function HackRoomDetailDashboard({
       onError: (error) => setMessage({ text: error.message, tone: "red" }),
       onSuccess: async () => {
         setTaskForm(emptyTaskForm);
-        setProofTypes(["github", "video"]);
+        setProofTypes(defaultRegularProofTypes);
         setMessage({ text: "Room assignment published for all participants", tone: "violet" });
         await invalidateDashboard();
       },
@@ -728,7 +778,7 @@ function HackRoomDetailDashboard({
     trpc.hackRoom.submitProof.mutationOptions({
       onError: (error) => setMessage({ text: error.message, tone: "red" }),
       onSuccess: async () => {
-        setSubmitForm(emptySubmitForm);
+        setSubmitForm(makeEmptySubmitForm());
         setMessage({ text: "Proof submitted for host review", tone: "cyan" });
         await invalidateDashboard();
       },
@@ -739,7 +789,7 @@ function HackRoomDetailDashboard({
     trpc.hackRoom.approveSubmission.mutationOptions({
       onError: (error) => setMessage({ text: error.message, tone: "red" }),
       onSuccess: async () => {
-        setMessage({ text: "Proof approved and added to room history", tone: "cyan" });
+        setMessage({ text: "Proof verified and added to room history", tone: "cyan" });
         await invalidateDashboard();
       },
     }),
@@ -765,12 +815,24 @@ function HackRoomDetailDashboard({
     }),
   );
 
+  const issueReward = useMutation(
+    trpc.hackRoom.issueReward.mutationOptions({
+      onError: (error) => setMessage({ text: error.message, tone: "red" }),
+      onSuccess: async () => {
+        setRewardForm(makeEmptyRewardForm());
+        setMessage({ text: "Reward issued to the in-app ledger", tone: "gold" });
+        await invalidateDashboard();
+      },
+    }),
+  );
+
   const isBusy =
     createTask.isPending ||
     submitProof.isPending ||
     approveSubmission.isPending ||
     selectWinner.isPending ||
-    returnSubmission.isPending;
+    returnSubmission.isPending ||
+    issueReward.isPending;
 
   const handleSignOut = async () => {
     await authClient.signOut();
@@ -783,15 +845,6 @@ function HackRoomDetailDashboard({
 
   const handleBackToRooms = () => {
     router.replace("/hack-room");
-  };
-
-  const toggleProofType = (proofType: ProofType) => {
-    setProofTypes((current) => {
-      if (current.includes(proofType)) {
-        return current.length === 1 ? current : current.filter((item) => item !== proofType);
-      }
-      return [...current, proofType];
-    });
   };
 
   const handleShareCode = async (room: HackRoom) => {
@@ -811,11 +864,13 @@ function HackRoomDetailDashboard({
       return;
     }
 
+    const taskProofTypes = normalizeTaskProofTypes(kind, proofTypes);
+
     createTask.mutate({
       description: taskForm.description,
       dueAt: taskForm.dueAt,
       kind,
-      proofTypes,
+      proofTypes: taskProofTypes,
       rewardXrdm: Number(taskForm.rewardXrdm),
       roomId: selectedRoom._id,
       title: taskForm.title,
@@ -828,9 +883,20 @@ function HackRoomDetailDashboard({
       return;
     }
 
+    const proofItems = buildProofItemsForTask(selectedTask, submitForm);
+    const missingProofTypes = proofItems
+      .filter((item) => !item.value.trim())
+      .map((item) => proofTypeLabel(item.type));
+
+    if (missingProofTypes.length) {
+      setMessage({ text: `Add required proof: ${missingProofTypes.join(", ")}`, tone: "red" });
+      return;
+    }
+
     submitProof.mutate({
       notes: submitForm.notes,
-      proofUrl: submitForm.proofUrl,
+      proofItems,
+      proofUrl: proofItems[0]?.value ?? "",
       roomId: selectedTask.roomId,
       taskId: selectedTask._id,
     });
@@ -840,7 +906,7 @@ function HackRoomDetailDashboard({
     const feedback =
       feedbackBySubmission[submission._id] ||
       submission.hostFeedback ||
-      "Approved. Clear proof and solid contribution.";
+      "Verified. Clear proof and solid contribution.";
     approveSubmission.mutate({
       hostFeedback: feedback,
       submissionId: submission._id,
@@ -870,6 +936,33 @@ function HackRoomDetailDashboard({
       awardXrdm: award,
       hostFeedback: feedback,
       submissionId: submission._id,
+    });
+  };
+
+  const handleIssueReward = (kind: RewardKind) => {
+    if (!selectedRoom) {
+      setMessage({ text: "Room is still loading", tone: "red" });
+      return;
+    }
+    if (selectedRoomRole !== "host") {
+      setMessage({ text: "Only the host can issue room rewards", tone: "red" });
+      return;
+    }
+
+    const sourceSubmissionId =
+      kind === "participant_certificate"
+        ? undefined
+        : rewardForm.sourceSubmissionId || winnerSubmissions[0]?._id;
+
+    issueReward.mutate({
+      awardXrdm: Number(rewardForm.awardXrdm || 0),
+      description: rewardForm.description,
+      kind,
+      ledgerNote: rewardForm.ledgerNote,
+      recipientIds: kind === "participant_certificate" ? rewardForm.recipientIds : [],
+      roomId: selectedRoom._id,
+      sourceSubmissionId,
+      title: rewardForm.title || defaultRewardTitle(kind),
     });
   };
 
@@ -930,6 +1023,7 @@ function HackRoomDetailDashboard({
             onParticipantTabChange={setActiveParticipantTab}
             onReturnSubmission={handleReturnSubmission}
             onRoomTabChange={setActiveRoomTab}
+            onIssueReward={handleIssueReward}
             onSelectTask={setSelectedTaskId}
             onSelectWinner={handleSelectWinner}
             onShareRoom={handleShareCode}
@@ -937,6 +1031,8 @@ function HackRoomDetailDashboard({
             pendingSubmissions={pendingHostSubmissions}
             proofTypes={proofTypes}
             returnSubmissionPending={returnSubmission.isPending}
+            rewardForm={rewardForm}
+            rewards={selectedRoomRole === "host" ? roomRewards : myRoomRewards}
             room={selectedRoom}
             roomRole={selectedRoomRole}
             roomTasks={roomTasks}
@@ -944,9 +1040,11 @@ function HackRoomDetailDashboard({
             selectedTask={selectedTask}
             selectedTaskId={selectedTaskId}
             selectWinnerPending={selectWinner.isPending}
+            issueRewardPending={issueReward.isPending}
             setAwardBySubmission={setAwardBySubmission}
             setFeedbackBySubmission={setFeedbackBySubmission}
-            setProofTypes={toggleProofType}
+            setProofTypes={setProofTypes}
+            setRewardForm={setRewardForm}
             setSubmitForm={setSubmitForm}
             setTaskForm={setTaskForm}
             setTaskKind={setTaskKind}
@@ -1224,9 +1322,11 @@ function RoomWorkspace({
   createTaskPending,
   feedbackBySubmission,
   historySubmissions,
+  issueRewardPending,
   mySubmissions,
   onApproveSubmission,
   onCreateTask,
+  onIssueReward,
   onParticipantTabChange,
   onReturnSubmission,
   onRoomTabChange,
@@ -1237,6 +1337,8 @@ function RoomWorkspace({
   pendingSubmissions,
   proofTypes,
   returnSubmissionPending,
+  rewardForm,
+  rewards,
   room,
   roomRole,
   roomTasks,
@@ -1247,6 +1349,7 @@ function RoomWorkspace({
   setAwardBySubmission,
   setFeedbackBySubmission,
   setProofTypes,
+  setRewardForm,
   setSubmitForm,
   setTaskForm,
   setTaskKind,
@@ -1264,9 +1367,11 @@ function RoomWorkspace({
   createTaskPending: boolean;
   feedbackBySubmission: Record<string, string>;
   historySubmissions: DashboardData["hostSubmissions"];
+  issueRewardPending: boolean;
   mySubmissions: DashboardData["mySubmissions"];
   onApproveSubmission: (submission: HackSubmission) => void;
   onCreateTask: (kind: TaskKind) => void;
+  onIssueReward: (kind: RewardKind) => void;
   onParticipantTabChange: (tab: ParticipantTab) => void;
   onReturnSubmission: (submission: HackSubmission) => void;
   onRoomTabChange: (tab: RoomTab | null) => void;
@@ -1277,6 +1382,8 @@ function RoomWorkspace({
   pendingSubmissions: DashboardData["hostSubmissions"];
   proofTypes: Array<ProofType>;
   returnSubmissionPending: boolean;
+  rewardForm: ReturnType<typeof makeEmptyRewardForm>;
+  rewards: Array<HackReward>;
   room: HackRoom;
   roomRole: Role;
   roomTasks: DashboardData["tasks"];
@@ -1286,7 +1393,8 @@ function RoomWorkspace({
   selectWinnerPending: boolean;
   setAwardBySubmission: React.Dispatch<React.SetStateAction<Record<string, string>>>;
   setFeedbackBySubmission: React.Dispatch<React.SetStateAction<Record<string, string>>>;
-  setProofTypes: (proofType: ProofType) => void;
+  setProofTypes: React.Dispatch<React.SetStateAction<Array<ProofType>>>;
+  setRewardForm: React.Dispatch<React.SetStateAction<ReturnType<typeof makeEmptyRewardForm>>>;
   setSubmitForm: React.Dispatch<React.SetStateAction<typeof emptySubmitForm>>;
   setTaskForm: React.Dispatch<React.SetStateAction<typeof emptyTaskForm>>;
   setTaskKind: React.Dispatch<React.SetStateAction<TaskKind>>;
@@ -1327,8 +1435,10 @@ function RoomWorkspace({
           createTaskPending={createTaskPending}
           feedbackBySubmission={feedbackBySubmission}
           historySubmissions={historySubmissions}
+          issueRewardPending={issueRewardPending}
           onApproveSubmission={onApproveSubmission}
           onCreateTask={onCreateTask}
+          onIssueReward={onIssueReward}
           onReturnSubmission={onReturnSubmission}
           onRoomTabChange={onRoomTabChange}
           onSelectWinner={onSelectWinner}
@@ -1336,12 +1446,15 @@ function RoomWorkspace({
           pendingSubmissions={pendingSubmissions}
           proofTypes={proofTypes}
           returnSubmissionPending={returnSubmissionPending}
+          rewardForm={rewardForm}
+          rewards={rewards}
           room={room}
           roomTasks={roomTasks}
           selectWinnerPending={selectWinnerPending}
           setAwardBySubmission={setAwardBySubmission}
           setFeedbackBySubmission={setFeedbackBySubmission}
           setProofTypes={setProofTypes}
+          setRewardForm={setRewardForm}
           setTaskForm={setTaskForm}
           setTaskKind={setTaskKind}
           taskForm={taskForm}
@@ -1357,6 +1470,7 @@ function RoomWorkspace({
           onSubmitProof={onSubmitProof}
           roomTasks={roomTasks}
           roomWinners={roomWinners}
+          rewards={rewards}
           selectedTask={selectedTask}
           selectedTaskId={selectedTaskId}
           setSubmitForm={setSubmitForm}
@@ -1376,8 +1490,10 @@ function HostRoomWorkspace({
   createTaskPending,
   feedbackBySubmission,
   historySubmissions,
+  issueRewardPending,
   onApproveSubmission,
   onCreateTask,
+  onIssueReward,
   onReturnSubmission,
   onRoomTabChange,
   onSelectWinner,
@@ -1385,12 +1501,15 @@ function HostRoomWorkspace({
   pendingSubmissions,
   proofTypes,
   returnSubmissionPending,
+  rewardForm,
+  rewards,
   room,
   roomTasks,
   selectWinnerPending,
   setAwardBySubmission,
   setFeedbackBySubmission,
   setProofTypes,
+  setRewardForm,
   setTaskForm,
   setTaskKind,
   taskForm,
@@ -1404,8 +1523,10 @@ function HostRoomWorkspace({
   createTaskPending: boolean;
   feedbackBySubmission: Record<string, string>;
   historySubmissions: DashboardData["hostSubmissions"];
+  issueRewardPending: boolean;
   onApproveSubmission: (submission: HackSubmission) => void;
   onCreateTask: (kind: TaskKind) => void;
+  onIssueReward: (kind: RewardKind) => void;
   onReturnSubmission: (submission: HackSubmission) => void;
   onRoomTabChange: (tab: RoomTab | null) => void;
   onSelectWinner: (submission: HackSubmission) => void;
@@ -1413,12 +1534,15 @@ function HostRoomWorkspace({
   pendingSubmissions: DashboardData["hostSubmissions"];
   proofTypes: Array<ProofType>;
   returnSubmissionPending: boolean;
+  rewardForm: ReturnType<typeof makeEmptyRewardForm>;
+  rewards: Array<HackReward>;
   room: HackRoom;
   roomTasks: DashboardData["tasks"];
   selectWinnerPending: boolean;
   setAwardBySubmission: React.Dispatch<React.SetStateAction<Record<string, string>>>;
   setFeedbackBySubmission: React.Dispatch<React.SetStateAction<Record<string, string>>>;
-  setProofTypes: (proofType: ProofType) => void;
+  setProofTypes: React.Dispatch<React.SetStateAction<Array<ProofType>>>;
+  setRewardForm: React.Dispatch<React.SetStateAction<ReturnType<typeof makeEmptyRewardForm>>>;
   setTaskForm: React.Dispatch<React.SetStateAction<typeof emptyTaskForm>>;
   setTaskKind: React.Dispatch<React.SetStateAction<TaskKind>>;
   taskForm: typeof emptyTaskForm;
@@ -1465,6 +1589,8 @@ function HostRoomWorkspace({
     { id: "history", label: "History" },
     { id: "winners", label: "Award XRDM" },
     { id: "badges", label: "Assign Badges" },
+    { id: "certificates", label: "Certificates" },
+    { id: "nfts", label: "NFT Badges" },
     { id: "challenges", label: "Challenges/Games" },
     { id: "leaderboard", label: "Leaderboard" },
     { id: "profile", label: "Profile" },
@@ -1550,13 +1676,22 @@ function HostRoomWorkspace({
       {activeRoomTab === "assign" ? (
         <AssignmentComposer
           createTaskPending={createTaskPending}
-          fixedKind="task"
+          fixedKind={taskKind === "challenge" ? "challenge" : "task"}
+          onKindChange={(kind) => {
+            setTaskKind(kind);
+            setProofTypes(kind === "task" ? defaultRegularProofTypes : defaultSpotProofTypes);
+            setTaskForm({
+              ...emptyTaskForm,
+              rewardXrdm: kind === "task" ? "20" : "10",
+            });
+          }}
           onCreateTask={onCreateTask}
           proofTypes={proofTypes}
           setProofTypes={setProofTypes}
           setTaskForm={setTaskForm}
+          showAssignmentToggle
           taskForm={taskForm}
-          title="Assign Task"
+          title="Create Assignment"
         />
       ) : null}
 
@@ -1576,7 +1711,7 @@ function HostRoomWorkspace({
                   feedback={
                     feedbackBySubmission[submission._id] ??
                     submission.hostFeedback ??
-                    "Approved. Clear proof and solid contribution."
+                    "Verified. Clear proof and solid contribution."
                   }
                   key={submission._id}
                   mode="review"
@@ -1604,8 +1739,8 @@ function HostRoomWorkspace({
 
       {activeRoomTab === "history" ? (
         <Panel
-          action={<CounterLabel label={`${historySubmissions.length} approved`} />}
-          eyebrow="Approved Proof"
+          action={<CounterLabel label={`${historySubmissions.length} verified`} />}
+          eyebrow="Verified Proof"
           icon="time-outline"
           title="History"
           tone="gold"
@@ -1622,7 +1757,7 @@ function HostRoomWorkspace({
             ) : (
               <EmptyState
                 icon="time-outline"
-                text="Approved proof and winner records will collect here."
+                text="Verified proof and winner records will collect here."
               />
             )}
           </View>
@@ -1717,7 +1852,7 @@ function HostRoomWorkspace({
             ) : (
               <EmptyState
                 icon="trophy-outline"
-                text="Approve proof from the review queue before announcing winners."
+                text="Verify proof from the review queue before announcing winners."
               />
             )}
           </View>
@@ -1782,6 +1917,30 @@ function HostRoomWorkspace({
         </Panel>
       ) : null}
 
+      {activeRoomTab === "certificates" ? (
+        <HostCertificatesPanel
+          issueRewardPending={issueRewardPending}
+          onIssueReward={onIssueReward}
+          rewardForm={rewardForm}
+          rewards={rewards}
+          room={room}
+          setRewardForm={setRewardForm}
+          winnerSubmissions={winnerSubmissions}
+        />
+      ) : null}
+
+      {activeRoomTab === "nfts" ? (
+        <HostNftBadgesPanel
+          issueRewardPending={issueRewardPending}
+          onIssueReward={onIssueReward}
+          rewardForm={rewardForm}
+          rewards={rewards}
+          room={room}
+          setRewardForm={setRewardForm}
+          winnerSubmissions={winnerSubmissions}
+        />
+      ) : null}
+
       {activeRoomTab === "leaderboard" ? (
         <Panel
           action={<CounterLabel label={`${leaderboardRows.length} ranked`} />}
@@ -1843,6 +2002,7 @@ function ParticipantRoomWorkspace({
   onSubmitProof,
   roomTasks,
   roomWinners,
+  rewards,
   selectedTask,
   selectedTaskId,
   setSubmitForm,
@@ -1856,6 +2016,7 @@ function ParticipantRoomWorkspace({
   onSubmitProof: () => void;
   roomTasks: DashboardData["tasks"];
   roomWinners: DashboardData["visibleWinners"];
+  rewards: Array<HackReward>;
   selectedTask?: HackTask;
   selectedTaskId: string;
   setSubmitForm: React.Dispatch<React.SetStateAction<typeof emptySubmitForm>>;
@@ -1869,6 +2030,7 @@ function ParticipantRoomWorkspace({
   }> = [
     { icon: "clipboard-outline", id: "assignments", label: "Tasks" },
     { icon: "checkmark-circle-outline", id: "proof", label: "My Proof" },
+    { icon: "ribbon-outline", id: "certificates", label: "Certificates" },
     { icon: "trophy-outline", id: "winners", label: "Winners" },
   ];
 
@@ -1934,17 +2096,11 @@ function ParticipantRoomWorkspace({
               ) : null}
             </View>
 
-            <Field label="Proof link">
-              <HackTextInput
-                autoCapitalize="none"
-                keyboardType="url"
-                onChangeText={(value) =>
-                  setSubmitForm((current) => ({ ...current, proofUrl: value }))
-                }
-                placeholder="https://github.com/team/project"
-                value={submitForm.proofUrl}
-              />
-            </Field>
+            <ProofRequirementFields
+              selectedTask={selectedTask}
+              setSubmitForm={setSubmitForm}
+              submitForm={submitForm}
+            />
 
             <Field label="Note to host">
               <HackTextInput
@@ -1959,7 +2115,11 @@ function ParticipantRoomWorkspace({
             </Field>
 
             <HackButton
-              disabled={!selectedTask || !submitForm.proofUrl.trim() || submitProofPending}
+              disabled={
+                !selectedTask ||
+                !hasRequiredProofItems(selectedTask, submitForm) ||
+                submitProofPending
+              }
               icon="send-outline"
               label="Submit Proof"
               loading={submitProofPending}
@@ -1986,11 +2146,15 @@ function ParticipantRoomWorkspace({
             ) : (
               <EmptyState
                 icon="checkmark-circle-outline"
-                text="Submitted proof will appear here with returned, approved, or winner status."
+                text="Submitted proof will appear here with returned, verified, or winner status."
               />
             )}
           </View>
         </Panel>
+      ) : null}
+
+      {activeParticipantTab === "certificates" ? (
+        <ParticipantCertificatesPanel rewards={rewards} roomWinners={roomWinners} />
       ) : null}
 
       {activeParticipantTab === "winners" ? (
@@ -2019,80 +2183,656 @@ function ParticipantRoomWorkspace({
   );
 }
 
+function HostCertificatesPanel({
+  issueRewardPending,
+  onIssueReward,
+  rewardForm,
+  rewards,
+  room,
+  setRewardForm,
+  winnerSubmissions,
+}: {
+  issueRewardPending: boolean;
+  onIssueReward: (kind: RewardKind) => void;
+  rewardForm: ReturnType<typeof makeEmptyRewardForm>;
+  rewards: Array<HackReward>;
+  room: HackRoom;
+  setRewardForm: React.Dispatch<React.SetStateAction<ReturnType<typeof makeEmptyRewardForm>>>;
+  winnerSubmissions: DashboardData["hostSubmissions"];
+}) {
+  const certificateRewards = rewards.filter((reward) => reward.kind !== "winner_nft_badge");
+  const selectedRecipientIds = rewardForm.recipientIds.length
+    ? rewardForm.recipientIds
+    : room.participants.map((participant) => participant.userId);
+
+  return (
+    <View style={styles.trackStack}>
+      <Panel
+        action={<CounterLabel label={`${room.participants.length} members`} />}
+        eyebrow="Issue"
+        icon="ribbon-outline"
+        title="Participant Certificates"
+        tone="gold"
+      >
+        <Field label="Certificate title">
+          <HackTextInput
+            onChangeText={(value) =>
+              setRewardForm((current) => ({ ...current, title: value }))
+            }
+            placeholder="Participant Certificate"
+            value={rewardForm.title}
+          />
+        </Field>
+        <Field label="Certificate note">
+          <HackTextInput
+            multiline
+            onChangeText={(value) =>
+              setRewardForm((current) => ({ ...current, description: value }))
+            }
+            placeholder="Issued for verified participation in this hack room."
+            style={styles.textArea}
+            value={rewardForm.description}
+          />
+        </Field>
+        <Field label="XRDM attached">
+          <HackTextInput
+            keyboardType="number-pad"
+            onChangeText={(value) =>
+              setRewardForm((current) => ({ ...current, awardXrdm: value }))
+            }
+            placeholder="0"
+            value={rewardForm.awardXrdm}
+          />
+        </Field>
+        <RewardRecipientSelector
+          room={room}
+          selectedRecipientIds={selectedRecipientIds}
+          setRewardForm={setRewardForm}
+        />
+        <HackButton
+          disabled={!room.participants.length || issueRewardPending}
+          icon="ribbon-outline"
+          label="Issue Participant Certificates"
+          loading={issueRewardPending}
+          onPress={() => onIssueReward("participant_certificate")}
+          tone="gold"
+        />
+      </Panel>
+
+      <Panel
+        action={<CounterLabel label={`${winnerSubmissions.length} winners`} />}
+        eyebrow="Team Award"
+        icon="trophy-outline"
+        title="Winner Certificates"
+        tone="violet"
+      >
+        <WinnerSourceSelector
+          rewardForm={rewardForm}
+          setRewardForm={setRewardForm}
+          winnerSubmissions={winnerSubmissions}
+        />
+        <Field label="Winner certificate title">
+          <HackTextInput
+            onChangeText={(value) =>
+              setRewardForm((current) => ({ ...current, title: value }))
+            }
+            placeholder="Winner Certificate"
+            value={rewardForm.title}
+          />
+        </Field>
+        <Field label="XRDM attached">
+          <HackTextInput
+            keyboardType="number-pad"
+            onChangeText={(value) =>
+              setRewardForm((current) => ({ ...current, awardXrdm: value }))
+            }
+            placeholder="50"
+            value={rewardForm.awardXrdm}
+          />
+        </Field>
+        <Field label="Ledger note">
+          <HackTextInput
+            multiline
+            onChangeText={(value) =>
+              setRewardForm((current) => ({ ...current, ledgerNote: value }))
+            }
+            placeholder="Team winner certificate issued by host."
+            style={styles.textArea}
+            value={rewardForm.ledgerNote}
+          />
+        </Field>
+        <HackButton
+          disabled={!winnerSubmissions.length || issueRewardPending}
+          icon="trophy-outline"
+          label="Issue Winner Certificate"
+          loading={issueRewardPending}
+          onPress={() => onIssueReward("winner_certificate")}
+          tone="violet"
+        />
+      </Panel>
+
+      <Panel
+        action={<CounterLabel label={`${certificateRewards.length} issued`} />}
+        eyebrow="Ledger"
+        icon="document-text-outline"
+        title="Issued Certificates"
+        tone="cyan"
+      >
+        <View style={styles.listStack}>
+          {certificateRewards.length ? (
+            certificateRewards.map((reward) => <RewardCard key={reward._id} reward={reward} />)
+          ) : (
+            <EmptyState
+              icon="document-text-outline"
+              text="Issued participant and winner certificates will appear here."
+            />
+          )}
+        </View>
+      </Panel>
+    </View>
+  );
+}
+
+function HostNftBadgesPanel({
+  issueRewardPending,
+  onIssueReward,
+  rewardForm,
+  rewards,
+  room,
+  setRewardForm,
+  winnerSubmissions,
+}: {
+  issueRewardPending: boolean;
+  onIssueReward: (kind: RewardKind) => void;
+  rewardForm: ReturnType<typeof makeEmptyRewardForm>;
+  rewards: Array<HackReward>;
+  room: HackRoom;
+  setRewardForm: React.Dispatch<React.SetStateAction<ReturnType<typeof makeEmptyRewardForm>>>;
+  winnerSubmissions: DashboardData["hostSubmissions"];
+}) {
+  const nftRewards = rewards.filter((reward) => reward.kind === "winner_nft_badge");
+
+  return (
+    <View style={styles.trackStack}>
+      <Panel
+        action={<CounterLabel label={`${room.participants.length} team members`} />}
+        eyebrow="Winner NFT"
+        icon="diamond-outline"
+        title="NFT Badges"
+        tone="gold"
+      >
+        <WinnerSourceSelector
+          rewardForm={rewardForm}
+          setRewardForm={setRewardForm}
+          winnerSubmissions={winnerSubmissions}
+        />
+        <Field label="NFT badge name">
+          <HackTextInput
+            onChangeText={(value) =>
+              setRewardForm((current) => ({ ...current, title: value }))
+            }
+            placeholder="Quick Fix Winner"
+            value={rewardForm.title}
+          />
+        </Field>
+        <Field label="Badge description">
+          <HackTextInput
+            multiline
+            onChangeText={(value) =>
+              setRewardForm((current) => ({ ...current, description: value }))
+            }
+            placeholder="Awarded to the winning team for standout hackathon impact."
+            style={styles.textArea}
+            value={rewardForm.description}
+          />
+        </Field>
+        <Field label="XRDM attached">
+          <HackTextInput
+            keyboardType="number-pad"
+            onChangeText={(value) =>
+              setRewardForm((current) => ({ ...current, awardXrdm: value }))
+            }
+            placeholder="50"
+            value={rewardForm.awardXrdm}
+          />
+        </Field>
+        <Field label="Ledger note">
+          <HackTextInput
+            multiline
+            onChangeText={(value) =>
+              setRewardForm((current) => ({ ...current, ledgerNote: value }))
+            }
+            placeholder="In-app NFT badge record. External minting can consume this later."
+            style={styles.textArea}
+            value={rewardForm.ledgerNote}
+          />
+        </Field>
+        <HackButton
+          disabled={!winnerSubmissions.length || issueRewardPending}
+          icon="diamond-outline"
+          label="Issue NFT Badge"
+          loading={issueRewardPending}
+          onPress={() => onIssueReward("winner_nft_badge")}
+          tone="gold"
+        />
+      </Panel>
+
+      <Panel
+        action={<CounterLabel label={`${nftRewards.length} issued`} />}
+        eyebrow="Ledger"
+        icon="diamond-outline"
+        title="Issued NFT Badges"
+        tone="cyan"
+      >
+        <View style={styles.listStack}>
+          {nftRewards.length ? (
+            nftRewards.map((reward) => <RewardCard key={reward._id} reward={reward} />)
+          ) : (
+            <EmptyState
+              icon="diamond-outline"
+              text="Winner NFT badge records will appear here after the host issues them."
+            />
+          )}
+        </View>
+      </Panel>
+    </View>
+  );
+}
+
+function ParticipantCertificatesPanel({
+  rewards,
+  roomWinners,
+}: {
+  rewards: Array<HackReward>;
+  roomWinners: DashboardData["visibleWinners"];
+}) {
+  const certificateRewards = rewards.filter((reward) => reward.kind !== "winner_nft_badge");
+  const nftRewards = rewards.filter((reward) => reward.kind === "winner_nft_badge");
+  const xrdmTotal =
+    rewards.reduce((total, reward) => total + (reward.awardXrdm ?? 0), 0) +
+    roomWinners.reduce(
+      (total, submission) => total + (submission.awardXrdm ?? submission.rewardXrdm ?? 0),
+      0,
+    );
+
+  return (
+    <View style={styles.trackStack}>
+      <View style={styles.certificateHero}>
+        <View style={styles.certificateHeroIcon}>
+          <Ionicons name="trophy-outline" size={30} color={theme.award} />
+        </View>
+        <Text style={styles.certificateHeroTitle}>Certificates & NFTs</Text>
+        <Text style={styles.certificateHeroText}>
+          Participant proof, winner certificates, and NFT badges issued on the in-app So.Good
+          Ledger.
+        </Text>
+        <StatusPill label={rewards.length ? "Issued - ledger" : "Awaiting issue"} tone="gold" />
+      </View>
+
+      <Panel
+        action={<CounterLabel label={`${nftRewards.length} badges`} />}
+        eyebrow="P5"
+        icon="diamond-outline"
+        title="My NFT Badges"
+        tone="gold"
+      >
+        {nftRewards.length ? (
+          <ScrollView
+            contentContainerStyle={styles.nftShelf}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+          >
+            {nftRewards.map((reward) => (
+              <NftBadgeCard key={reward._id} reward={reward} />
+            ))}
+          </ScrollView>
+        ) : (
+          <EmptyState icon="diamond-outline" text="Winner NFT badges will appear here." />
+        )}
+      </Panel>
+
+      <Panel
+        action={<CounterLabel label={`${certificateRewards.length} certs`} />}
+        eyebrow="Proof"
+        icon="document-text-outline"
+        title="Certificates"
+        tone="cyan"
+      >
+        <View style={styles.listStack}>
+          {certificateRewards.length ? (
+            certificateRewards.map((reward) => <RewardCard key={reward._id} reward={reward} />)
+          ) : (
+            <EmptyState
+              icon="document-text-outline"
+              text="Participant and winner certificates will appear here after the host issues them."
+            />
+          )}
+        </View>
+      </Panel>
+
+      <View style={styles.walletCard}>
+        <Text style={styles.walletLabel}>My XRDM balance</Text>
+        <View style={styles.walletBalanceRow}>
+          <Text style={styles.walletBalance}>{xrdmTotal}</Text>
+          <Text style={styles.walletUnit}>XRDM</Text>
+        </View>
+        <View style={styles.walletChipRow}>
+          <WalletChip label="Certificates" value={certificateRewards.length} />
+          <WalletChip label="NFTs" value={nftRewards.length} />
+          <WalletChip label="Wins" value={roomWinners.length} />
+        </View>
+      </View>
+
+      <View style={styles.ledgerLinkCard}>
+        <Ionicons name="shield-checkmark-outline" size={20} color={theme.participant} />
+        <View style={styles.profileText}>
+          <Text style={styles.ledgerTitle}>So.Good Ledger</Text>
+          <Text style={styles.ledgerText}>Verified career record inside this hack room.</Text>
+        </View>
+        <Ionicons name="chevron-forward-outline" size={17} color={theme.participantBorder} />
+      </View>
+    </View>
+  );
+}
+
+function RewardRecipientSelector({
+  room,
+  selectedRecipientIds,
+  setRewardForm,
+}: {
+  room: HackRoom;
+  selectedRecipientIds: Array<string>;
+  setRewardForm: React.Dispatch<React.SetStateAction<ReturnType<typeof makeEmptyRewardForm>>>;
+}) {
+  const allRecipientIds = room.participants.map((participant) => participant.userId);
+
+  const toggleRecipient = (userId: string) => {
+    setRewardForm((current) => {
+      const currentIds = current.recipientIds.length ? current.recipientIds : allRecipientIds;
+      const nextIds = currentIds.includes(userId)
+        ? currentIds.filter((id) => id !== userId)
+        : [...currentIds, userId];
+      return { ...current, recipientIds: nextIds };
+    });
+  };
+
+  return (
+    <Field label="Recipients">
+      <View style={styles.rewardSelectorGrid}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() =>
+            setRewardForm((current) => ({ ...current, recipientIds: allRecipientIds }))
+          }
+          style={({ pressed }) => [
+            styles.rewardSelectorChip,
+            selectedRecipientIds.length === allRecipientIds.length && styles.rewardSelectorChipActive,
+            pressed && styles.pressed,
+          ]}
+        >
+          <Text
+            style={[
+              styles.rewardSelectorText,
+              selectedRecipientIds.length === allRecipientIds.length &&
+                styles.rewardSelectorTextActive,
+            ]}
+          >
+            All participants
+          </Text>
+        </Pressable>
+        {room.participants.map((participant) => {
+          const active = selectedRecipientIds.includes(participant.userId);
+          return (
+            <Pressable
+              accessibilityRole="button"
+              key={participant.userId}
+              onPress={() => toggleRecipient(participant.userId)}
+              style={({ pressed }) => [
+                styles.rewardSelectorChip,
+                active && styles.rewardSelectorChipActive,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Text style={[styles.rewardSelectorText, active && styles.rewardSelectorTextActive]}>
+                {participant.name}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </Field>
+  );
+}
+
+function WinnerSourceSelector({
+  rewardForm,
+  setRewardForm,
+  winnerSubmissions,
+}: {
+  rewardForm: ReturnType<typeof makeEmptyRewardForm>;
+  setRewardForm: React.Dispatch<React.SetStateAction<ReturnType<typeof makeEmptyRewardForm>>>;
+  winnerSubmissions: DashboardData["hostSubmissions"];
+}) {
+  const selectedWinnerId = rewardForm.sourceSubmissionId || winnerSubmissions[0]?._id || "";
+
+  return (
+    <Field label="Winner source">
+      <View style={styles.rewardSelectorGrid}>
+        {winnerSubmissions.length ? (
+          winnerSubmissions.map((submission) => {
+            const active = selectedWinnerId === submission._id;
+            return (
+              <Pressable
+                accessibilityRole="button"
+                key={submission._id}
+                onPress={() =>
+                  setRewardForm((current) => ({
+                    ...current,
+                    sourceSubmissionId: submission._id,
+                  }))
+                }
+                style={({ pressed }) => [
+                  styles.rewardSelectorChip,
+                  active && styles.rewardSelectorChipActive,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Text
+                  numberOfLines={1}
+                  style={[styles.rewardSelectorText, active && styles.rewardSelectorTextActive]}
+                >
+                  {submission.taskTitle}
+                </Text>
+              </Pressable>
+            );
+          })
+        ) : (
+          <EmptyState
+            icon="trophy-outline"
+            text="Announce a winner before issuing winner certificates or NFT badges."
+          />
+        )}
+      </View>
+    </Field>
+  );
+}
+
+function RewardCard({ reward }: { reward: HackReward }) {
+  return (
+    <View style={styles.rewardCard}>
+      <View style={styles.cardTopRow}>
+        <View style={styles.rewardIcon}>
+          <Ionicons name={rewardKindIcon(reward.kind)} size={18} color={theme.award} />
+        </View>
+        <View style={styles.taskTitleBlock}>
+          <Text style={styles.cardTitle}>{reward.title}</Text>
+          <Text style={styles.cardMeta}>
+            {reward.roomName} - {formatDate(reward.issuedAt)}
+          </Text>
+        </View>
+        <StatusPill label={rewardKindLabel(reward.kind)} tone={rewardKindTone(reward.kind)} />
+      </View>
+      {reward.description ? (
+        <Text numberOfLines={3} style={styles.cardDescription}>
+          {reward.description}
+        </Text>
+      ) : null}
+      <View style={styles.rewardMetaRow}>
+        <Text style={styles.rewardMetaText}>{reward.recipientCount} recipients</Text>
+        {reward.awardXrdm ? (
+          <Text style={styles.awardText}>+{reward.awardXrdm} XRDM</Text>
+        ) : null}
+      </View>
+      {reward.ledgerNote ? <Text style={styles.feedbackText}>{reward.ledgerNote}</Text> : null}
+    </View>
+  );
+}
+
+function NftBadgeCard({ reward }: { reward: HackReward }) {
+  return (
+    <View style={styles.nftBadgeCard}>
+      <Ionicons name="diamond-outline" size={23} color={theme.award} />
+      <Text numberOfLines={2} style={styles.nftBadgeName}>
+        {reward.title}
+      </Text>
+      <Text style={styles.nftBadgeDate}>{formatDate(reward.issuedAt)}</Text>
+    </View>
+  );
+}
+
+function WalletChip({ label, value }: { label: string; value: number }) {
+  return (
+    <View style={styles.walletChip}>
+      <Text style={styles.walletChipValue}>{value}</Text>
+      <Text style={styles.walletChipLabel}>{label}</Text>
+    </View>
+  );
+}
+
 function AssignmentComposer({
   createTaskPending,
   fixedKind,
+  onKindChange,
   onCreateTask,
   proofTypes,
   setProofTypes,
   setTaskForm,
+  showAssignmentToggle = false,
   taskForm,
   title,
 }: {
   createTaskPending: boolean;
   fixedKind: TaskKind;
+  onKindChange?: (kind: TaskKind) => void;
   onCreateTask: (kind: TaskKind) => void;
   proofTypes: Array<ProofType>;
-  setProofTypes: (proofType: ProofType) => void;
+  setProofTypes: React.Dispatch<React.SetStateAction<Array<ProofType>>>;
   setTaskForm: React.Dispatch<React.SetStateAction<typeof emptyTaskForm>>;
+  showAssignmentToggle?: boolean;
   taskForm: typeof emptyTaskForm;
   title: string;
 }) {
+  const isRegularTask = fixedKind === "task";
+  const isSpotChallenge = fixedKind === "challenge";
+  const effectiveProofTypes = normalizeTaskProofTypes(fixedKind, proofTypes);
+
+  const handleProofTypePress = (proofType: ProofType) => {
+    const locked = isRegularTask && defaultRegularProofTypes.includes(proofType);
+
+    if (locked) {
+      return;
+    }
+
+    setProofTypes((current) => {
+      const base = isRegularTask ? defaultRegularProofTypes : [];
+      if (current.includes(proofType)) {
+        const next = current.filter((item) => item !== proofType);
+        return [...new Set([...base, ...next])];
+      }
+      return [...new Set([...base, ...current, proofType])];
+    });
+  };
+
   return (
     <View style={styles.assignmentComposer}>
       <View style={styles.sectionHeadingRow}>
         <View>
-          <Text style={styles.sectionEyebrow}>{kindLabel(fixedKind)}</Text>
+          <Text style={styles.sectionEyebrow}>Organizer Track</Text>
           <Text style={styles.sectionTitleSmall}>{title}</Text>
         </View>
         <StatusPill label="All participants" tone="violet" />
       </View>
 
-      <Field label={`${kindLabel(fixedKind)} title`}>
+      {showAssignmentToggle ? (
+        <View style={styles.kindSwitchRow}>
+          <KindButton
+            active={isRegularTask}
+            icon="clipboard-outline"
+            label="Regular Task"
+            onPress={() => onKindChange?.("task")}
+          />
+          <KindButton
+            active={isSpotChallenge}
+            icon="flash-outline"
+            label="Spot Challenge"
+            onPress={() => onKindChange?.("challenge")}
+          />
+        </View>
+      ) : null}
+
+      <Field label={isSpotChallenge ? "Challenge name" : "Assignment title"}>
         <HackTextInput
           onChangeText={(value) => setTaskForm((current) => ({ ...current, title: value }))}
           placeholder={
             fixedKind === "game"
               ? "Bug bash arena"
               : fixedKind === "challenge"
-                ? "Ship the fastest demo"
+                ? "10-minute UX fix sprint"
                 : "Build a working prototype"
           }
           value={taskForm.title}
         />
       </Field>
-      <Field label="Due date">
-        <HackTextInput
-          onChangeText={(value) => setTaskForm((current) => ({ ...current, dueAt: value }))}
-          placeholder="Tonight 9:00 PM"
-          value={taskForm.dueAt}
-        />
-      </Field>
-      <Field label="Brief and rules">
+      <DateTimeField
+        label={isSpotChallenge ? "Challenge date and time" : "Due date and time"}
+        onChange={(value) => setTaskForm((current) => ({ ...current, dueAt: value }))}
+        value={taskForm.dueAt}
+      />
+      <Field label={isSpotChallenge ? "Rules / brief" : "Description"}>
         <HackTextInput
           multiline
           onChangeText={(value) =>
             setTaskForm((current) => ({ ...current, description: value }))
           }
-          placeholder="Write the task, rules, proof requirement, and scoring signal."
+          placeholder={
+            isSpotChallenge
+              ? "Describe the fun challenge, who can join, and how winners will be picked."
+              : "Submit a functional demo. GitHub and Drive proof are mandatory."
+          }
           style={styles.textAreaLarge}
           value={taskForm.description}
         />
       </Field>
 
-      <Field label="Expected proof">
+      <Field label={isRegularTask ? "Expected proof" : "Challenge proof"}>
         <View style={styles.proofGrid}>
           {proofTypeOptions.map((option) => {
-            const active = proofTypes.includes(option.value);
+            const active = effectiveProofTypes.includes(option.value);
+            const locked = isRegularTask && defaultRegularProofTypes.includes(option.value);
             return (
               <Pressable
                 accessibilityRole="button"
                 key={option.value}
-                onPress={() => setProofTypes(option.value)}
-                style={[styles.proofChip, active && styles.proofChipActive]}
+                onPress={() => handleProofTypePress(option.value)}
+                style={[
+                  styles.proofChip,
+                  active && styles.proofChipActive,
+                  locked && styles.proofChipLocked,
+                ]}
               >
                 <Text style={[styles.proofChipText, active && styles.proofChipTextActive]}>
                   {option.label}
+                  {locked ? " required" : ""}
                 </Text>
               </Pressable>
             );
@@ -2116,11 +2856,11 @@ function AssignmentComposer({
           !taskForm.dueAt.trim() ||
           createTaskPending
         }
-        icon="send-outline"
-        label={`Publish ${kindLabel(fixedKind)}`}
+        icon={isSpotChallenge ? "flash-outline" : "send-outline"}
+        label={isSpotChallenge ? "Create Spot Challenge" : "Publish Regular Task"}
         loading={createTaskPending}
         onPress={() => onCreateTask(fixedKind)}
-        tone="violet"
+        tone={isSpotChallenge ? "orange" : "violet"}
       />
     </View>
   );
@@ -2163,17 +2903,21 @@ function SubmissionReviewCard({
             {submission.roomName} - {submission.taskTitle}
           </Text>
         </View>
-        <StatusPill label={submission.status} tone={statusTone(submission.status)} />
+        <StatusPill
+          label={submissionStatusLabel(submission.status)}
+          tone={statusTone(submission.status)}
+        />
       </View>
 
-      <LinkRow url={submission.proofUrl} />
+      <ProofItemsList proofItems={getSubmissionProofItems(submission)} />
       {submission.notes ? <Text style={styles.notesText}>{submission.notes}</Text> : null}
 
       {mode !== "history" ? (
-        <Field label="Host feedback">
+        <Field label={mode === "review" ? "Organizer note (required)" : "Host feedback"}>
           <HackTextInput
             multiline
             onChangeText={onFeedbackChange}
+            placeholder="Add a citation, decision note, or return reason."
             style={styles.textArea}
             value={feedback}
           />
@@ -2200,7 +2944,7 @@ function SubmissionReviewCard({
           <HackButton
             disabled={approveSubmissionPending}
             icon="checkmark-circle-outline"
-            label="Approve"
+            label="Verify Proof"
             loading={approveSubmissionPending}
             onPress={onApprove ?? (() => {})}
             tone="cyan"
@@ -2750,7 +3494,10 @@ function HostTrack({
                         {submission.roomName} · {submission.taskTitle}
                       </Text>
                     </View>
-                    <StatusPill label={submission.status} tone={statusTone(submission.status)} />
+                    <StatusPill
+                      label={submissionStatusLabel(submission.status)}
+                      tone={statusTone(submission.status)}
+                    />
                   </View>
 
                   <LinkRow url={submission.proofUrl} />
@@ -2970,6 +3717,182 @@ function HackTextInput({
   );
 }
 
+function DateTimeField({
+  label,
+  onChange,
+  value,
+}: {
+  label: string;
+  onChange: (value: string) => void;
+  value: string;
+}) {
+  const [pickerMode, setPickerMode] = useState<"date" | "time" | null>(null);
+  const pickerDate = parseDateTimeValue(value);
+
+  const handlePickerChange = (_event: DateTimePickerEvent, selectedDate?: Date) => {
+    if (Platform.OS !== "ios") {
+      setPickerMode(null);
+    }
+
+    if (!selectedDate || !pickerMode) {
+      return;
+    }
+
+    const baseDate = parseDateTimeValue(value);
+    const nextDate =
+      pickerMode === "date"
+        ? mergeDateParts(baseDate, selectedDate)
+        : mergeTimeParts(baseDate, selectedDate);
+
+    onChange(nextDate.toISOString());
+  };
+
+  if (Platform.OS === "web") {
+    return (
+      <Field label={label}>
+        <HackTextInput
+          onChangeText={onChange}
+          placeholder="2026-06-20T17:00:00.000Z"
+          value={value}
+        />
+      </Field>
+    );
+  }
+
+  return (
+    <Field label={label}>
+      <View style={styles.datePickerCard}>
+        <Text style={styles.datePickerValue}>
+          {value ? formatDateTimeValue(value) : "Select date and time"}
+        </Text>
+        <View style={styles.datePickerActions}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => setPickerMode("date")}
+            style={({ pressed }) => [styles.datePickerButton, pressed && styles.pressed]}
+          >
+            <Ionicons name="calendar-outline" size={16} color={theme.host} />
+            <Text style={styles.datePickerButtonText}>Date</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => setPickerMode("time")}
+            style={({ pressed }) => [styles.datePickerButton, pressed && styles.pressed]}
+          >
+            <Ionicons name="time-outline" size={16} color={theme.host} />
+            <Text style={styles.datePickerButtonText}>Time</Text>
+          </Pressable>
+        </View>
+      </View>
+
+      {pickerMode ? (
+        <View style={styles.nativePickerWrap}>
+          <DateTimePicker
+            display={Platform.OS === "ios" ? "spinner" : "default"}
+            mode={pickerMode}
+            onChange={handlePickerChange}
+            value={pickerDate}
+          />
+          {Platform.OS === "ios" ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => setPickerMode(null)}
+              style={({ pressed }) => [styles.dateDoneButton, pressed && styles.pressed]}
+            >
+              <Text style={styles.dateDoneText}>Done</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
+    </Field>
+  );
+}
+
+function ProofRequirementFields({
+  selectedTask,
+  setSubmitForm,
+  submitForm,
+}: {
+  selectedTask?: HackTask;
+  setSubmitForm: React.Dispatch<React.SetStateAction<typeof emptySubmitForm>>;
+  submitForm: typeof emptySubmitForm;
+}) {
+  if (!selectedTask) {
+    return <EmptyState icon="clipboard-outline" text="Select an assignment to see required proof." />;
+  }
+
+  const requiredProofTypes = getTaskProofTypes(selectedTask);
+
+  return (
+    <View style={styles.proofRequirementStack}>
+      {requiredProofTypes.map((proofType) => (
+        <Field key={proofType} label={`${proofTypeLabel(proofType)} proof`}>
+          <HackTextInput
+            autoCapitalize="none"
+            keyboardType="url"
+            onChangeText={(value) =>
+              setSubmitForm((current) => ({
+                ...current,
+                proofItems: {
+                  ...current.proofItems,
+                  [proofType]: value,
+                },
+                proofUrl: proofType === requiredProofTypes[0] ? value : current.proofUrl,
+              }))
+            }
+            placeholder={proofTypePlaceholder(proofType)}
+            value={submitForm.proofItems[proofType] ?? ""}
+          />
+        </Field>
+      ))}
+    </View>
+  );
+}
+
+function ProofItemsList({ proofItems }: { proofItems: Array<SubmissionProofItem> }) {
+  if (!proofItems.length) {
+    return <EmptyState icon="link-outline" text="No proof links were attached." />;
+  }
+
+  return (
+    <View style={styles.proofItemList}>
+      <Text style={styles.proofItemSectionLabel}>Submitted proof</Text>
+      {proofItems.map((proofItem, index) => (
+        <ProofItemRow index={index} key={`${proofItem.type}-${index}`} proofItem={proofItem} />
+      ))}
+    </View>
+  );
+}
+
+function ProofItemRow({
+  index,
+  proofItem,
+}: {
+  index: number;
+  proofItem: SubmissionProofItem;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="link"
+      onPress={() => Linking.openURL(proofItem.value)}
+      style={({ pressed }) => [styles.proofItemRow, pressed && styles.pressed]}
+    >
+      <View style={styles.proofItemIcon}>
+        <Ionicons name={proofTypeIcon(proofItem.type)} size={15} color={theme.participant} />
+      </View>
+      <View style={styles.proofItemTextBlock}>
+        <Text style={styles.proofItemType}>
+          {proofTypeLabel(proofItem.type)} {index + 1}
+        </Text>
+        <Text numberOfLines={1} style={styles.proofItemValue}>
+          {proofItem.value}
+        </Text>
+      </View>
+      <Text style={styles.proofItemOpen}>Open</Text>
+    </Pressable>
+  );
+}
+
 function HackButton({
   disabled,
   icon,
@@ -3147,7 +4070,10 @@ function TaskCard({
             {task.roomName} · Due {task.dueAt}
           </Text>
         </View>
-        <StatusPill label={status ?? `+${task.rewardXrdm} XRDM`} tone={statusTone(status)} />
+        <StatusPill
+          label={status ? submissionStatusLabel(status) : `+${task.rewardXrdm} XRDM`}
+          tone={statusTone(status)}
+        />
       </View>
       <Text numberOfLines={3} style={styles.cardDescription}>
         {task.description}
@@ -3179,9 +4105,12 @@ function SubmissionCard({
           <Text style={styles.cardTitle}>{submission.taskTitle}</Text>
           <Text style={styles.cardMeta}>{submission.roomName}</Text>
         </View>
-        <StatusPill label={submission.status} tone={statusTone(submission.status)} />
+        <StatusPill
+          label={submissionStatusLabel(submission.status)}
+          tone={statusTone(submission.status)}
+        />
       </View>
-      <LinkRow url={submission.proofUrl} />
+      <ProofItemsList proofItems={getSubmissionProofItems(submission)} />
       <View style={styles.awardRow}>
         <Text style={styles.cardMeta}>{formatDate(submission.submittedAt)}</Text>
         <Text style={styles.awardText}>
@@ -3304,6 +4233,104 @@ function getToneColors(tone: Tone) {
   };
 }
 
+function normalizeTaskProofTypes(kind: TaskKind, proofTypes: Array<ProofType>) {
+  if (kind === "task") {
+    return [...new Set([...defaultRegularProofTypes, ...proofTypes])];
+  }
+
+  return proofTypes.length ? [...new Set(proofTypes)] : defaultSpotProofTypes;
+}
+
+function getTaskProofTypes(task?: Pick<HackTask, "proofTypes">) {
+  return task?.proofTypes?.length ? task.proofTypes : defaultSpotProofTypes;
+}
+
+function buildProofItemsForTask(
+  task: HackTask,
+  submitForm: typeof emptySubmitForm,
+): Array<SubmissionProofItem> {
+  return getTaskProofTypes(task).map((proofType, index) => ({
+    type: proofType,
+    value: (submitForm.proofItems[proofType] || (index === 0 ? submitForm.proofUrl : "")).trim(),
+  }));
+}
+
+function hasRequiredProofItems(task: HackTask, submitForm: typeof emptySubmitForm) {
+  return buildProofItemsForTask(task, submitForm).every((proofItem) => proofItem.value.trim());
+}
+
+function getSubmissionProofItems(submission: {
+  proofItems?: Array<SubmissionProofItem>;
+  proofUrl: string;
+}) {
+  if (submission.proofItems?.length) {
+    return submission.proofItems;
+  }
+
+  return submission.proofUrl
+    ? [
+        {
+          type: "url" as const,
+          value: submission.proofUrl,
+        },
+      ]
+    : [];
+}
+
+function proofTypeLabel(proofType: ProofType) {
+  return proofTypeOptions.find((option) => option.value === proofType)?.label ?? proofType;
+}
+
+function proofTypePlaceholder(proofType: ProofType) {
+  if (proofType === "github") return "https://github.com/team/project";
+  if (proofType === "drive") return "https://drive.google.com/...";
+  if (proofType === "video") return "https://loom.com/share/demo";
+  if (proofType === "deck") return "https://docs.google.com/presentation/...";
+  if (proofType === "file") return "https://drive.google.com/file/...";
+  return "https://your-proof-link";
+}
+
+function proofTypeIcon(proofType: ProofType): React.ComponentProps<typeof Ionicons>["name"] {
+  if (proofType === "github") return "logo-github";
+  if (proofType === "drive") return "cloud-outline";
+  if (proofType === "video") return "videocam-outline";
+  if (proofType === "deck") return "easel-outline";
+  if (proofType === "file") return "document-attach-outline";
+  return "link-outline";
+}
+
+function defaultRewardTitle(kind: RewardKind) {
+  if (kind === "participant_certificate") return "Participant Certificate";
+  if (kind === "winner_certificate") return "Winner Certificate";
+  return "Winner NFT Badge";
+}
+
+function rewardKindLabel(kind: RewardKind) {
+  if (kind === "participant_certificate") return "Participant";
+  if (kind === "winner_certificate") return "Winner Cert";
+  return "NFT Badge";
+}
+
+function rewardKindIcon(kind: RewardKind): React.ComponentProps<typeof Ionicons>["name"] {
+  if (kind === "participant_certificate") return "ribbon-outline";
+  if (kind === "winner_certificate") return "trophy-outline";
+  return "diamond-outline";
+}
+
+function rewardKindTone(kind: RewardKind): Tone {
+  if (kind === "winner_nft_badge") return "gold";
+  if (kind === "winner_certificate") return "violet";
+  return "cyan";
+}
+
+function submissionStatusLabel(status: SubmissionStatus) {
+  if (status === "approved") return "Verified";
+  if (status === "submitted") return "Submitted";
+  if (status === "returned") return "Returned";
+  if (status === "winner") return "Winner";
+  return status;
+}
+
 function statusTone(status?: SubmissionStatus) {
   if (status === "winner") return "gold";
   if (status === "approved") return "cyan";
@@ -3336,6 +4363,36 @@ function firstName(name: string) {
 function formatDate(value: string) {
   return new Date(value).toLocaleDateString(undefined, {
     day: "numeric",
+    month: "short",
+  });
+}
+
+function parseDateTimeValue(value: string) {
+  const parsedDate = value ? new Date(value) : new Date();
+  if (Number.isNaN(parsedDate.getTime())) {
+    return new Date();
+  }
+  return parsedDate;
+}
+
+function mergeDateParts(baseDate: Date, selectedDate: Date) {
+  const nextDate = new Date(baseDate);
+  nextDate.setFullYear(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
+  return nextDate;
+}
+
+function mergeTimeParts(baseDate: Date, selectedDate: Date) {
+  const nextDate = new Date(baseDate);
+  nextDate.setHours(selectedDate.getHours(), selectedDate.getMinutes(), 0, 0);
+  return nextDate;
+}
+
+function formatDateTimeValue(value: string) {
+  const date = parseDateTimeValue(value);
+  return date.toLocaleString(undefined, {
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
     month: "short",
   });
 }
@@ -3478,6 +4535,38 @@ const styles = StyleSheet.create({
     gap: 10,
     justifyContent: "space-between",
   },
+  certificateHero: {
+    alignItems: "center",
+    backgroundColor: theme.awardDark,
+    borderColor: theme.awardBorder,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 9,
+    padding: 16,
+  },
+  certificateHeroIcon: {
+    alignItems: "center",
+    backgroundColor: theme.backgroundAlt,
+    borderColor: theme.awardBorder,
+    borderRadius: 8,
+    borderWidth: 1,
+    height: 54,
+    justifyContent: "center",
+    width: 54,
+  },
+  certificateHeroText: {
+    color: theme.muted,
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: "center",
+  },
+  certificateHeroTitle: {
+    color: theme.award,
+    fontSize: 18,
+    fontWeight: "800",
+    letterSpacing: 0,
+    textAlign: "center",
+  },
   compactBusyRow: {
     alignItems: "center",
     backgroundColor: theme.panel,
@@ -3518,6 +4607,53 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     padding: 16,
+  },
+  dateDoneButton: {
+    alignItems: "center",
+    alignSelf: "flex-end",
+    backgroundColor: theme.host,
+    borderRadius: 8,
+    minHeight: 36,
+    paddingHorizontal: 14,
+    justifyContent: "center",
+  },
+  dateDoneText: {
+    color: "#060214",
+    fontSize: 12,
+    fontWeight: "900",
+  },
+  datePickerActions: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  datePickerButton: {
+    alignItems: "center",
+    backgroundColor: theme.hostDark,
+    borderColor: theme.hostBorder,
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 6,
+    minHeight: 38,
+    paddingHorizontal: 10,
+  },
+  datePickerButtonText: {
+    color: theme.host,
+    fontSize: 12,
+    fontWeight: "900",
+  },
+  datePickerCard: {
+    backgroundColor: theme.backgroundAlt,
+    borderColor: theme.border,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 10,
+    padding: 10,
+  },
+  datePickerValue: {
+    color: theme.text,
+    fontSize: 14,
+    fontWeight: "700",
   },
   detailBackButton: {
     alignItems: "center",
@@ -3819,6 +4955,26 @@ const styles = StyleSheet.create({
   leaderboardScore: {
     alignItems: "flex-end",
   },
+  ledgerLinkCard: {
+    alignItems: "center",
+    backgroundColor: theme.participantDark,
+    borderColor: theme.participantBorder,
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 10,
+    padding: 12,
+  },
+  ledgerText: {
+    color: theme.muted,
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  ledgerTitle: {
+    color: theme.participant,
+    fontSize: 13,
+    fontWeight: "800",
+  },
   listStack: {
     gap: 10,
     marginTop: 12,
@@ -3951,6 +5107,40 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     marginTop: 10,
   },
+  nativePickerWrap: {
+    backgroundColor: theme.panelStrong,
+    borderColor: theme.border,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 8,
+    padding: 8,
+  },
+  nftBadgeCard: {
+    alignItems: "center",
+    backgroundColor: theme.panelStrong,
+    borderColor: theme.awardBorder,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 6,
+    minHeight: 106,
+    padding: 10,
+    width: 96,
+  },
+  nftBadgeDate: {
+    color: theme.dim,
+    fontFamily: Platform.select({ default: "monospace" }),
+    fontSize: 9,
+  },
+  nftBadgeName: {
+    color: theme.text,
+    fontSize: 11,
+    fontWeight: "800",
+    textAlign: "center",
+  },
+  nftShelf: {
+    gap: 8,
+    paddingBottom: 2,
+  },
   panel: {
     borderRadius: 8,
     borderWidth: 1,
@@ -4069,6 +5259,9 @@ const styles = StyleSheet.create({
     backgroundColor: theme.hostDark,
     borderColor: theme.host,
   },
+  proofChipLocked: {
+    borderColor: theme.award,
+  },
   proofChipText: {
     color: theme.muted,
     fontFamily: Platform.select({ default: "monospace" }),
@@ -4081,6 +5274,59 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
+  },
+  proofItemIcon: {
+    alignItems: "center",
+    backgroundColor: theme.participantDark,
+    borderColor: theme.participantBorder,
+    borderRadius: 8,
+    borderWidth: 1,
+    height: 34,
+    justifyContent: "center",
+    width: 34,
+  },
+  proofItemList: {
+    gap: 7,
+    marginTop: 10,
+  },
+  proofItemOpen: {
+    color: theme.participant,
+    fontFamily: Platform.select({ default: "monospace" }),
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  proofItemRow: {
+    alignItems: "center",
+    backgroundColor: theme.backgroundAlt,
+    borderColor: theme.border,
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 9,
+    padding: 9,
+  },
+  proofItemSectionLabel: {
+    color: theme.dim,
+    fontFamily: Platform.select({ default: "monospace" }),
+    fontSize: 10,
+    textTransform: "uppercase",
+  },
+  proofItemTextBlock: {
+    flex: 1,
+    gap: 2,
+  },
+  proofItemType: {
+    color: theme.text,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  proofItemValue: {
+    color: theme.muted,
+    fontFamily: Platform.select({ default: "monospace" }),
+    fontSize: 10,
+  },
+  proofRequirementStack: {
+    gap: 10,
   },
   proofTypeLabel: {
     backgroundColor: theme.backgroundAlt,
@@ -4142,6 +5388,63 @@ const styles = StyleSheet.create({
   quickActionTileActive: {
     backgroundColor: theme.hostDark,
     borderColor: theme.host,
+  },
+  rewardCard: {
+    backgroundColor: theme.panelStrong,
+    borderColor: theme.border,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 10,
+    padding: 12,
+  },
+  rewardIcon: {
+    alignItems: "center",
+    backgroundColor: theme.awardDark,
+    borderColor: theme.awardBorder,
+    borderRadius: 8,
+    borderWidth: 1,
+    height: 38,
+    justifyContent: "center",
+    width: 38,
+  },
+  rewardMetaRow: {
+    alignItems: "center",
+    borderTopColor: theme.borderSoft,
+    borderTopWidth: 1,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingTop: 10,
+  },
+  rewardMetaText: {
+    color: theme.dim,
+    fontFamily: Platform.select({ default: "monospace" }),
+    fontSize: 10,
+    textTransform: "uppercase",
+  },
+  rewardSelectorChip: {
+    backgroundColor: theme.panelStrong,
+    borderColor: theme.border,
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingHorizontal: 11,
+    paddingVertical: 9,
+  },
+  rewardSelectorChipActive: {
+    backgroundColor: theme.awardDark,
+    borderColor: theme.award,
+  },
+  rewardSelectorGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  rewardSelectorText: {
+    color: theme.muted,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  rewardSelectorTextActive: {
+    color: theme.award,
   },
   reviewActions: {
     flexDirection: "row",
@@ -4453,5 +5756,59 @@ const styles = StyleSheet.create({
   },
   trackStack: {
     gap: 16,
+  },
+  walletBalance: {
+    color: theme.text,
+    fontSize: 34,
+    fontWeight: "800",
+    letterSpacing: 0,
+  },
+  walletBalanceRow: {
+    alignItems: "flex-end",
+    flexDirection: "row",
+    gap: 5,
+  },
+  walletCard: {
+    backgroundColor: theme.panelStrong,
+    borderColor: theme.border,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 10,
+    padding: 14,
+  },
+  walletChip: {
+    backgroundColor: theme.backgroundAlt,
+    borderColor: theme.border,
+    borderRadius: 8,
+    borderWidth: 1,
+    flex: 1,
+    padding: 9,
+  },
+  walletChipLabel: {
+    color: theme.dim,
+    fontSize: 10,
+    marginTop: 2,
+  },
+  walletChipRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  walletChipValue: {
+    color: theme.award,
+    fontFamily: Platform.select({ default: "monospace" }),
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  walletLabel: {
+    color: theme.dim,
+    fontFamily: Platform.select({ default: "monospace" }),
+    fontSize: 10,
+    textTransform: "uppercase",
+  },
+  walletUnit: {
+    color: theme.dim,
+    fontFamily: Platform.select({ default: "monospace" }),
+    fontSize: 11,
+    marginBottom: 6,
   },
 });
