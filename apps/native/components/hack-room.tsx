@@ -49,14 +49,27 @@ type RoomTab =
   | "profile"
   | "verify"
   | "winners";
-type ParticipantTab = "assignments" | "certificates" | "proof" | "winners";
+type ParticipantTab = "games" | "history" | "submit" | "wallet";
 type SubmissionStatus = DashboardData["mySubmissions"][number]["status"];
 type AuthMode = "sign-in" | "sign-up";
-type ProofType = "github" | "drive" | "file" | "url" | "video" | "deck";
+type ProofType = "github" | "drive" | "file" | "url" | "video" | "deck" | "game_score";
 type RewardKind = HackReward["kind"];
+type GameType = "memory_match" | "breath_timer" | "quick_maths";
 type SubmissionProofItem = {
   type: ProofType;
   value: string;
+};
+type MiniGameResult = {
+  gameType: GameType;
+  notes: string;
+  proofValue: string;
+  score: number;
+  title: string;
+};
+type MiniGameSession = {
+  mode: "assignment" | "practice";
+  task?: HackTask;
+  type: GameType;
 };
 type Tone = "cyan" | "violet" | "gold" | "orange" | "red";
 type SessionUser = {
@@ -72,9 +85,36 @@ const proofTypeOptions: Array<{ label: string; value: ProofType }> = [
   { label: "Deck", value: "deck" },
   { label: "File", value: "file" },
   { label: "URL", value: "url" },
+  { label: "Game Score", value: "game_score" },
 ];
 const defaultRegularProofTypes: Array<ProofType> = ["github", "drive"];
 const defaultSpotProofTypes: Array<ProofType> = ["url"];
+const defaultGameProofTypes: Array<ProofType> = ["game_score"];
+const gameTypeOptions: Array<{
+  description: string;
+  icon: React.ComponentProps<typeof Ionicons>["name"];
+  label: string;
+  value: GameType;
+}> = [
+  {
+    description: "Find matching XRDM cards before your moves stack up.",
+    icon: "albums-outline",
+    label: "Memory Match",
+    value: "memory_match",
+  },
+  {
+    description: "A calm timed breathing loop for between sprint pushes.",
+    icon: "leaf-outline",
+    label: "Breath Timer",
+    value: "breath_timer",
+  },
+  {
+    description: "Answer quick arithmetic rounds against the clock.",
+    icon: "calculator-outline",
+    label: "Quick Maths",
+    value: "quick_maths",
+  },
+];
 
 const signInSchema = z.object({
   email: z.string().trim().min(1, "Email is required").email("Enter a valid email address"),
@@ -93,6 +133,7 @@ const emptyRoomForm = {
 const emptyTaskForm = {
   description: "",
   dueAt: "",
+  gameType: "memory_match" as GameType,
   rewardXrdm: "20",
   title: "",
 };
@@ -113,6 +154,7 @@ function makeEmptyProofItems(): Record<ProofType, string> {
     deck: "",
     drive: "",
     file: "",
+    game_score: "",
     github: "",
     url: "",
     video: "",
@@ -669,8 +711,7 @@ function HackRoomDetailDashboard({
   const router = useRouter();
   const dashboard = useQuery(trpc.hackRoom.dashboard.queryOptions());
   const [activeRoomTab, setActiveRoomTab] = useState<RoomTab | null>(null);
-  const [activeParticipantTab, setActiveParticipantTab] =
-    useState<ParticipantTab>("assignments");
+  const [activeParticipantTab, setActiveParticipantTab] = useState<ParticipantTab | null>(null);
   const [taskForm, setTaskForm] = useState(emptyTaskForm);
   const [taskKind, setTaskKind] = useState<TaskKind>("task");
   const [proofTypes, setProofTypes] = useState<Array<ProofType>>(defaultRegularProofTypes);
@@ -869,6 +910,7 @@ function HackRoomDetailDashboard({
     createTask.mutate({
       description: taskForm.description,
       dueAt: taskForm.dueAt,
+      gameType: kind === "game" ? taskForm.gameType : undefined,
       kind,
       proofTypes: taskProofTypes,
       rewardXrdm: Number(taskForm.rewardXrdm),
@@ -1359,7 +1401,7 @@ function RoomWorkspace({
   taskKind,
   winnerSubmissions,
 }: {
-  activeParticipantTab: ParticipantTab;
+  activeParticipantTab: ParticipantTab | null;
   activeRoomTab: RoomTab | null;
   approvedSubmissions: DashboardData["hostSubmissions"];
   approveSubmissionPending: boolean;
@@ -1372,7 +1414,7 @@ function RoomWorkspace({
   onApproveSubmission: (submission: HackSubmission) => void;
   onCreateTask: (kind: TaskKind) => void;
   onIssueReward: (kind: RewardKind) => void;
-  onParticipantTabChange: (tab: ParticipantTab) => void;
+  onParticipantTabChange: (tab: ParticipantTab | null) => void;
   onReturnSubmission: (submission: HackSubmission) => void;
   onRoomTabChange: (tab: RoomTab | null) => void;
   onSelectTask: (taskId: string) => void;
@@ -1777,13 +1819,27 @@ function HostRoomWorkspace({
               active={taskKind === "challenge"}
               icon="sparkles-outline"
               label="Challenge"
-              onPress={() => setTaskKind("challenge")}
+              onPress={() => {
+                setTaskKind("challenge");
+                setProofTypes(defaultSpotProofTypes);
+                setTaskForm({
+                  ...emptyTaskForm,
+                  rewardXrdm: "10",
+                });
+              }}
             />
             <KindButton
               active={taskKind === "game"}
               icon="game-controller-outline"
               label="Game"
-              onPress={() => setTaskKind("game")}
+              onPress={() => {
+                setTaskKind("game");
+                setProofTypes(defaultGameProofTypes);
+                setTaskForm({
+                  ...emptyTaskForm,
+                  rewardXrdm: "15",
+                });
+              }}
             />
           </View>
           <AssignmentComposer
@@ -2009,9 +2065,9 @@ function ParticipantRoomWorkspace({
   submitForm,
   submitProofPending,
 }: {
-  activeParticipantTab: ParticipantTab;
+  activeParticipantTab: ParticipantTab | null;
   mySubmissions: DashboardData["mySubmissions"];
-  onParticipantTabChange: (tab: ParticipantTab) => void;
+  onParticipantTabChange: (tab: ParticipantTab | null) => void;
   onSelectTask: (taskId: string) => void;
   onSubmitProof: () => void;
   roomTasks: DashboardData["tasks"];
@@ -2023,162 +2079,744 @@ function ParticipantRoomWorkspace({
   submitForm: typeof emptySubmitForm;
   submitProofPending: boolean;
 }) {
-  const participantTabs: Array<{
-    icon: React.ComponentProps<typeof Ionicons>["name"];
+  const [activeGameSession, setActiveGameSession] = useState<MiniGameSession | null>(null);
+  const regularTasks = roomTasks.filter((task) => (task.kind ?? "task") === "task");
+  const gameTasks = roomTasks.filter((task) => task.kind === "challenge" || task.kind === "game");
+  const participantActions: Array<{
     id: ParticipantTab;
     label: string;
   }> = [
-    { icon: "clipboard-outline", id: "assignments", label: "Tasks" },
-    { icon: "checkmark-circle-outline", id: "proof", label: "My Proof" },
-    { icon: "ribbon-outline", id: "certificates", label: "Certificates" },
-    { icon: "trophy-outline", id: "winners", label: "Winners" },
+    { id: "submit", label: "Submit Task" },
+    { id: "history", label: "History" },
+    { id: "games", label: "Games" },
+    { id: "wallet", label: "Wallet" },
   ];
+  const activeAction = participantActions.find((action) => action.id === activeParticipantTab);
+
+  const openAction = (action: ParticipantTab) => {
+    if (action === "submit" && regularTasks.length) {
+      const selectedRegularTask = regularTasks.find((task) => task._id === selectedTaskId);
+      onSelectTask(selectedRegularTask?._id ?? regularTasks[0]._id);
+    }
+    if (action === "games" && gameTasks.length) {
+      const selectedGameTask = gameTasks.find((task) => task._id === selectedTaskId);
+      onSelectTask(selectedGameTask?._id ?? gameTasks[0]._id);
+    }
+    setActiveGameSession(null);
+    onParticipantTabChange(action);
+  };
+
+  if (!activeParticipantTab) {
+    return (
+      <View style={styles.trackStack}>
+        <View style={styles.quickActionsSection}>
+          <Text style={styles.quickActionsTitle}>Quick Actions</Text>
+          <View style={styles.quickActionGrid}>
+            {participantActions.map((action) => (
+              <QuickActionTile
+                active={false}
+                key={action.id}
+                label={action.label}
+                onPress={() => openAction(action.id)}
+              />
+            ))}
+          </View>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.trackStack}>
-      <ScrollView
-        contentContainerStyle={styles.roomTabs}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-      >
-        {participantTabs.map((tab) => (
-          <RoomTabButton
-            active={activeParticipantTab === tab.id}
-            icon={tab.icon}
-            key={tab.id}
-            label={tab.label}
-            onPress={() => onParticipantTabChange(tab.id)}
-            tone="cyan"
+      <View style={styles.actionScreenHeader}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => {
+            setActiveGameSession(null);
+            onParticipantTabChange(null);
+          }}
+          style={({ pressed }) => [
+            styles.actionBackButton,
+            styles.participantActionBackButton,
+            pressed && styles.pressed,
+          ]}
+        >
+          <Ionicons name="chevron-back-outline" size={17} color={theme.participant} />
+          <Text style={[styles.actionBackText, styles.participantActionBackText]}>
+            Quick Actions
+          </Text>
+        </Pressable>
+        <View style={styles.actionTitleBlock}>
+          <Text style={styles.sectionEyebrow}>Participant Action</Text>
+          <Text numberOfLines={2} style={styles.actionScreenTitle}>
+            {activeAction?.label ?? "Participant Action"}
+          </Text>
+        </View>
+      </View>
+
+      {activeParticipantTab === "submit" ? (
+        <ParticipantSubmitPanel
+          mySubmissions={mySubmissions}
+          onSelectTask={onSelectTask}
+          onSubmitProof={onSubmitProof}
+          regularTasks={regularTasks}
+          selectedTask={selectedTask?.kind === "task" ? selectedTask : undefined}
+          selectedTaskId={selectedTaskId}
+          setSubmitForm={setSubmitForm}
+          submitForm={submitForm}
+          submitProofPending={submitProofPending}
+        />
+      ) : null}
+
+      {activeParticipantTab === "history" ? (
+        <ParticipantHistoryPanel mySubmissions={mySubmissions} roomTasks={roomTasks} />
+      ) : null}
+
+      {activeParticipantTab === "games" ? (
+        <ParticipantGamesPanel
+          activeGameSession={activeGameSession}
+          gameTasks={gameTasks}
+          mySubmissions={mySubmissions}
+          onCompleteGame={(result, task) => {
+            if (task) {
+              onSelectTask(task._id);
+              setSubmitForm((current) => ({
+                ...current,
+                notes: result.notes,
+                proofItems: {
+                  ...current.proofItems,
+                  game_score: result.proofValue,
+                },
+                proofUrl: result.proofValue,
+              }));
+            }
+          }}
+          onSelectTask={onSelectTask}
+          onSetGameSession={setActiveGameSession}
+          onSubmitProof={onSubmitProof}
+          selectedTask={selectedTask}
+          selectedTaskId={selectedTaskId}
+          setSubmitForm={setSubmitForm}
+          submitForm={submitForm}
+          submitProofPending={submitProofPending}
+        />
+      ) : null}
+
+      {activeParticipantTab === "wallet" ? (
+        <ParticipantWalletPanel
+          mySubmissions={mySubmissions}
+          rewards={rewards}
+          roomWinners={roomWinners}
+        />
+      ) : null}
+    </View>
+  );
+}
+
+function ParticipantSubmitPanel({
+  mySubmissions,
+  onSelectTask,
+  onSubmitProof,
+  regularTasks,
+  selectedTask,
+  selectedTaskId,
+  setSubmitForm,
+  submitForm,
+  submitProofPending,
+}: {
+  mySubmissions: DashboardData["mySubmissions"];
+  onSelectTask: (taskId: string) => void;
+  onSubmitProof: () => void;
+  regularTasks: DashboardData["tasks"];
+  selectedTask?: HackTask;
+  selectedTaskId: string;
+  setSubmitForm: React.Dispatch<React.SetStateAction<typeof emptySubmitForm>>;
+  submitForm: typeof emptySubmitForm;
+  submitProofPending: boolean;
+}) {
+  return (
+    <Panel
+      action={<CounterLabel label={`${regularTasks.length} tasks`} />}
+      eyebrow="Participant"
+      icon="send-outline"
+      title="Submit Task"
+      tone="cyan"
+    >
+      <View style={styles.listStack}>
+        {regularTasks.length ? (
+          regularTasks.map((task) => {
+            const submission = mySubmissions.find((item) => item.taskId === task._id);
+            return (
+              <TaskCard
+                key={task._id}
+                onPress={() => onSelectTask(task._id)}
+                selected={selectedTaskId === task._id}
+                status={submission?.status}
+                task={task}
+              />
+            );
+          })
+        ) : (
+          <EmptyState
+            icon="clipboard-outline"
+            text="The host has not assigned a regular final task yet."
           />
-        ))}
-      </ScrollView>
+        )}
+      </View>
 
-      {activeParticipantTab === "assignments" ? (
-        <Panel
-          action={<CounterLabel label={`${roomTasks.length} live`} />}
-          eyebrow="Participant"
-          icon="clipboard-outline"
-          title="Assigned Work"
-          tone="cyan"
-        >
-          <View style={styles.listStack}>
-            {roomTasks.length ? (
-              roomTasks.map((task) => {
-                const submission = mySubmissions.find((item) => item.taskId === task._id);
-                return (
-                  <TaskCard
-                    key={task._id}
-                    onPress={() => onSelectTask(task._id)}
-                    selected={selectedTaskId === task._id}
-                    status={submission?.status}
-                    task={task}
-                  />
-                );
-              })
-            ) : (
-              <EmptyState
-                icon="clipboard-outline"
-                text="The host has not assigned tasks, challenges, or games yet."
-              />
-            )}
-          </View>
+      <TaskProofSubmitCard
+        onSubmitProof={onSubmitProof}
+        selectedTask={selectedTask}
+        setSubmitForm={setSubmitForm}
+        submitForm={submitForm}
+        submitProofPending={submitProofPending}
+      />
+    </Panel>
+  );
+}
 
-          <View style={styles.submitCard}>
-            <View style={styles.sectionHeadingRow}>
-              <View>
-                <Text style={styles.sectionEyebrow}>Submit Proof</Text>
-                <Text style={styles.sectionTitleSmall}>
-                  {selectedTask?.title ?? "Select an assignment"}
-                </Text>
+function ParticipantHistoryPanel({
+  mySubmissions,
+  roomTasks,
+}: {
+  mySubmissions: DashboardData["mySubmissions"];
+  roomTasks: DashboardData["tasks"];
+}) {
+  const groups: Array<{
+    icon: React.ComponentProps<typeof Ionicons>["name"];
+    statuses: Array<SubmissionStatus>;
+    title: string;
+  }> = [
+    { icon: "time-outline", statuses: ["submitted"], title: "Submitted" },
+    { icon: "refresh-outline", statuses: ["returned"], title: "Returned" },
+    { icon: "checkmark-circle-outline", statuses: ["approved"], title: "Verified" },
+    { icon: "trophy-outline", statuses: ["winner"], title: "Winner" },
+  ];
+  const taskCount = roomTasks.length;
+
+  return (
+    <Panel
+      action={<CounterLabel label={`${mySubmissions.length} records`} />}
+      eyebrow="Participant"
+      icon="time-outline"
+      title="History"
+      tone="cyan"
+    >
+      <View style={styles.historySummaryRow}>
+        <MiniStat icon="clipboard-outline" label="Room Tasks" value={taskCount} />
+        <MiniStat icon="checkmark-circle-outline" label="Proof Records" value={mySubmissions.length} />
+      </View>
+      <View style={styles.listStack}>
+        {mySubmissions.length ? (
+          groups.map((group) => {
+            const submissions = mySubmissions.filter((submission) =>
+              group.statuses.includes(submission.status),
+            );
+            if (!submissions.length) {
+              return null;
+            }
+
+            return (
+              <View key={group.title} style={styles.historyGroup}>
+                <View style={styles.historyGroupHeader}>
+                  <Ionicons name={group.icon} size={16} color={theme.participant} />
+                  <Text style={styles.historyGroupTitle}>{group.title}</Text>
+                  <CounterLabel label={`${submissions.length}`} />
+                </View>
+                {submissions.map((submission) => (
+                  <SubmissionCard key={submission._id} submission={submission} />
+                ))}
               </View>
-              {selectedTask ? (
-                <StatusPill label={`+${selectedTask.rewardXrdm} XRDM`} tone="gold" />
-              ) : null}
-            </View>
+            );
+          })
+        ) : (
+          <EmptyState
+            icon="checkmark-circle-outline"
+            text="Submitted proof, returned work, verified records, and winners will appear here."
+          />
+        )}
+      </View>
+    </Panel>
+  );
+}
 
-            <ProofRequirementFields
-              selectedTask={selectedTask}
-              setSubmitForm={setSubmitForm}
-              submitForm={submitForm}
-            />
+function ParticipantGamesPanel({
+  activeGameSession,
+  gameTasks,
+  mySubmissions,
+  onCompleteGame,
+  onSelectTask,
+  onSetGameSession,
+  onSubmitProof,
+  selectedTask,
+  selectedTaskId,
+  setSubmitForm,
+  submitForm,
+  submitProofPending,
+}: {
+  activeGameSession: MiniGameSession | null;
+  gameTasks: DashboardData["tasks"];
+  mySubmissions: DashboardData["mySubmissions"];
+  onCompleteGame: (result: MiniGameResult, task?: HackTask) => void;
+  onSelectTask: (taskId: string) => void;
+  onSetGameSession: React.Dispatch<React.SetStateAction<MiniGameSession | null>>;
+  onSubmitProof: () => void;
+  selectedTask?: HackTask;
+  selectedTaskId: string;
+  setSubmitForm: React.Dispatch<React.SetStateAction<typeof emptySubmitForm>>;
+  submitForm: typeof emptySubmitForm;
+  submitProofPending: boolean;
+}) {
+  const challengeTasks = gameTasks.filter((task) => task.kind === "challenge");
+  const assignedGames = gameTasks.filter((task) => task.kind === "game");
+  const selectedProofTask =
+    selectedTask?.kind === "challenge" || selectedTask?.kind === "game" ? selectedTask : undefined;
 
-            <Field label="Note to host">
-              <HackTextInput
-                multiline
-                onChangeText={(value) =>
-                  setSubmitForm((current) => ({ ...current, notes: value }))
-                }
-                placeholder="Mention branch, demo timestamp, or implementation notes."
-                style={styles.textArea}
-                value={submitForm.notes}
-              />
-            </Field>
+  return (
+    <View style={styles.trackStack}>
+      <Panel
+        action={<CounterLabel label={`${gameTasks.length} live`} />}
+        eyebrow="Participant"
+        icon="game-controller-outline"
+        title="Games"
+        tone="cyan"
+      >
+        {activeGameSession ? (
+          <MiniGamePlayer
+            onBack={() => onSetGameSession(null)}
+            onComplete={(result) => onCompleteGame(result, activeGameSession.task)}
+            session={activeGameSession}
+          />
+        ) : null}
 
-            <HackButton
-              disabled={
-                !selectedTask ||
-                !hasRequiredProofItems(selectedTask, submitForm) ||
-                submitProofPending
-              }
-              icon="send-outline"
-              label="Submit Proof"
-              loading={submitProofPending}
-              onPress={onSubmitProof}
-              tone="cyan"
-            />
+        <View style={styles.gamesBanner}>
+          <Ionicons name="game-controller-outline" size={24} color={theme.participant} />
+          <View style={styles.profileText}>
+            <Text style={styles.gamesBannerTitle}>Play, submit, get verified</Text>
+            <Text style={styles.gamesBannerText}>
+              Host game cards can become proof. Practice games are just for a quick reset.
+            </Text>
           </View>
-        </Panel>
-      ) : null}
+        </View>
 
-      {activeParticipantTab === "proof" ? (
-        <Panel
-          action={<CounterLabel label={`${mySubmissions.length} records`} />}
-          eyebrow="Participant"
-          icon="checkmark-circle-outline"
-          title="My Proof Status"
+        <Text style={styles.sectionEyebrow}>Host Game Cards</Text>
+        <View style={styles.listStack}>
+          {assignedGames.length ? (
+            assignedGames.map((task) => {
+              const submission = mySubmissions.find((item) => item.taskId === task._id);
+              const gameType = getTaskGameType(task);
+              return (
+                <GameAssignmentCard
+                  key={task._id}
+                  onPress={() => {
+                    onSelectTask(task._id);
+                    onSetGameSession({ mode: "assignment", task, type: gameType });
+                  }}
+                  selected={selectedTaskId === task._id}
+                  status={submission?.status}
+                  task={task}
+                />
+              );
+            })
+          ) : (
+            <EmptyState
+              icon="game-controller-outline"
+              text="Host-created game cards will appear here."
+            />
+          )}
+        </View>
+
+        <View style={styles.divider} />
+        <Text style={styles.sectionEyebrow}>Spot Challenges</Text>
+        <View style={styles.listStack}>
+          {challengeTasks.length ? (
+            challengeTasks.map((task) => {
+              const submission = mySubmissions.find((item) => item.taskId === task._id);
+              return (
+                <TaskCard
+                  key={task._id}
+                  onPress={() => onSelectTask(task._id)}
+                  selected={selectedTaskId === task._id}
+                  status={submission?.status}
+                  task={task}
+                />
+              );
+            })
+          ) : (
+            <EmptyState icon="flash-outline" text="Spot challenges from the host will appear here." />
+          )}
+        </View>
+
+        <TaskProofSubmitCard
+          onSubmitProof={onSubmitProof}
+          selectedTask={selectedProofTask}
+          setSubmitForm={setSubmitForm}
+          submitForm={submitForm}
+          submitProofPending={submitProofPending}
+        />
+
+        <View style={styles.divider} />
+        <Text style={styles.sectionEyebrow}>Practice / Play Now</Text>
+        <ScrollView
+          contentContainerStyle={styles.practiceGameShelf}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+        >
+          {gameTypeOptions.map((option) => (
+            <Pressable
+              accessibilityRole="button"
+              key={option.value}
+              onPress={() => onSetGameSession({ mode: "practice", type: option.value })}
+              style={({ pressed }) => [styles.practiceGameCard, pressed && styles.pressed]}
+            >
+              <Ionicons name={option.icon} size={22} color={theme.participant} />
+              <Text style={styles.practiceGameTitle}>{option.label}</Text>
+              <Text style={styles.practiceGameMeta}>Practice</Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+      </Panel>
+    </View>
+  );
+}
+
+function TaskProofSubmitCard({
+  onSubmitProof,
+  selectedTask,
+  setSubmitForm,
+  submitForm,
+  submitProofPending,
+}: {
+  onSubmitProof: () => void;
+  selectedTask?: HackTask;
+  setSubmitForm: React.Dispatch<React.SetStateAction<typeof emptySubmitForm>>;
+  submitForm: typeof emptySubmitForm;
+  submitProofPending: boolean;
+}) {
+  return (
+    <View style={styles.submitCard}>
+      <View style={styles.sectionHeadingRow}>
+        <View>
+          <Text style={styles.sectionEyebrow}>Submit Proof</Text>
+          <Text style={styles.sectionTitleSmall}>
+            {selectedTask?.title ?? "Select an assignment"}
+          </Text>
+        </View>
+        {selectedTask ? <StatusPill label={`+${selectedTask.rewardXrdm} XRDM`} tone="gold" /> : null}
+      </View>
+
+      <ProofRequirementFields
+        selectedTask={selectedTask}
+        setSubmitForm={setSubmitForm}
+        submitForm={submitForm}
+      />
+
+      <Field label="Note to host">
+        <HackTextInput
+          multiline
+          onChangeText={(value) => setSubmitForm((current) => ({ ...current, notes: value }))}
+          placeholder="Mention branch, game result, demo timestamp, or implementation notes."
+          style={styles.textArea}
+          value={submitForm.notes}
+        />
+      </Field>
+
+      <HackButton
+        disabled={!selectedTask || !hasRequiredProofItems(selectedTask, submitForm) || submitProofPending}
+        icon="send-outline"
+        label={selectedTask?.kind === "game" ? "Submit Game Proof" : "Submit Proof"}
+        loading={submitProofPending}
+        onPress={onSubmitProof}
+        tone={selectedTask?.kind === "game" ? "gold" : "cyan"}
+      />
+    </View>
+  );
+}
+
+function GameAssignmentCard({
+  onPress,
+  selected,
+  status,
+  task,
+}: {
+  onPress: () => void;
+  selected: boolean;
+  status?: SubmissionStatus;
+  task: HackTask;
+}) {
+  const gameType = getTaskGameType(task);
+  const gameInfo = getGameTypeInfo(gameType);
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.gameAssignmentCard,
+        selected && styles.taskCardSelected,
+        pressed && styles.pressed,
+      ]}
+    >
+      <View style={styles.cardTopRow}>
+        <View style={styles.gameAssignmentIcon}>
+          <Ionicons name={gameInfo.icon} size={20} color={theme.award} />
+        </View>
+        <View style={styles.taskTitleBlock}>
+          <Text style={styles.cardTitle}>{task.title}</Text>
+          <Text style={styles.cardMeta}>
+            {gameInfo.label} - Due {task.dueAt}
+          </Text>
+        </View>
+        <StatusPill
+          label={status ? submissionStatusLabel(status) : `+${task.rewardXrdm} XRDM`}
+          tone={statusTone(status)}
+        />
+      </View>
+      <Text numberOfLines={3} style={styles.cardDescription}>
+        {task.description}
+      </Text>
+      <View style={styles.proofTypeRow}>
+        <Text style={styles.proofTypeLabel}>Game</Text>
+        <Text style={styles.proofTypeLabel}>Score proof</Text>
+      </View>
+    </Pressable>
+  );
+}
+
+function MiniGamePlayer({
+  onBack,
+  onComplete,
+  session,
+}: {
+  onBack: () => void;
+  onComplete: (result: MiniGameResult) => void;
+  session: MiniGameSession;
+}) {
+  const gameInfo = getGameTypeInfo(session.type);
+
+  return (
+    <View style={styles.miniGameSurface}>
+      <View style={styles.cardTopRow}>
+        <View style={styles.gameAssignmentIcon}>
+          <Ionicons name={gameInfo.icon} size={20} color={theme.award} />
+        </View>
+        <View style={styles.taskTitleBlock}>
+          <Text style={styles.cardTitle}>{gameInfo.label}</Text>
+          <Text style={styles.cardMeta}>
+            {session.mode === "assignment" ? "Host assignment" : "Practice mode"}
+          </Text>
+        </View>
+        <Pressable
+          accessibilityRole="button"
+          onPress={onBack}
+          style={({ pressed }) => [styles.miniGameCloseButton, pressed && styles.pressed]}
+        >
+          <Ionicons name="close-outline" size={17} color={theme.award} />
+        </Pressable>
+      </View>
+      {session.type === "memory_match" ? (
+        <MemoryMatchGame onComplete={onComplete} />
+      ) : session.type === "breath_timer" ? (
+        <BreathTimerGame onComplete={onComplete} />
+      ) : (
+        <QuickMathsGame onComplete={onComplete} />
+      )}
+    </View>
+  );
+}
+
+function MemoryMatchGame({ onComplete }: { onComplete: (result: MiniGameResult) => void }) {
+  const [cards] = useState(() => makeMemoryCards());
+  const [flipped, setFlipped] = useState<Array<number>>([]);
+  const [matched, setMatched] = useState<Array<string>>([]);
+  const [moves, setMoves] = useState(0);
+  const [completed, setCompleted] = useState(false);
+
+  useEffect(() => {
+    if (flipped.length !== 2) {
+      return;
+    }
+
+    const timeout = setTimeout(() => {
+      const [firstIndex, secondIndex] = flipped;
+      const firstCard = cards[firstIndex];
+      const secondCard = cards[secondIndex];
+      setMoves((current) => current + 1);
+
+      if (firstCard?.value && firstCard.value === secondCard?.value) {
+        setMatched((current) => [...current, firstCard.value]);
+      }
+
+      setFlipped([]);
+    }, 650);
+
+    return () => clearTimeout(timeout);
+  }, [cards, flipped]);
+
+  useEffect(() => {
+    if (matched.length === 4 && !completed) {
+      const score = Math.max(40, 120 - moves * 8);
+      setCompleted(true);
+      onComplete(makeMiniGameResult("memory_match", score, `${moves} moves, 4 pairs matched`));
+    }
+  }, [completed, matched.length, moves, onComplete]);
+
+  const handleCardPress = (index: number) => {
+    const card = cards[index];
+    if (!card || completed || flipped.includes(index) || matched.includes(card.value)) {
+      return;
+    }
+    if (flipped.length >= 2) {
+      return;
+    }
+    setFlipped((current) => [...current, index]);
+  };
+
+  return (
+    <View style={styles.miniGameStack}>
+      <View style={styles.miniGameStatRow}>
+        <WalletChip label="Moves" value={moves} />
+        <WalletChip label="Matched" value={matched.length} />
+      </View>
+      <View style={styles.memoryGrid}>
+        {cards.map((card, index) => {
+          const visible = flipped.includes(index) || matched.includes(card.value);
+          return (
+            <Pressable
+              accessibilityRole="button"
+              key={card.id}
+              onPress={() => handleCardPress(index)}
+              style={({ pressed }) => [
+                styles.memoryCard,
+                visible && styles.memoryCardOpen,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Text style={styles.memoryCardText}>{visible ? card.label : "?"}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+      {completed ? <StatusPill label="Result ready for proof" tone="gold" /> : null}
+    </View>
+  );
+}
+
+function BreathTimerGame({ onComplete }: { onComplete: (result: MiniGameResult) => void }) {
+  const duration = 30;
+  const [secondsLeft, setSecondsLeft] = useState(duration);
+  const [running, setRunning] = useState(false);
+  const [completed, setCompleted] = useState(false);
+  const elapsed = duration - secondsLeft;
+  const phase = ["Inhale", "Hold", "Exhale"][Math.floor(elapsed / 4) % 3] ?? "Inhale";
+
+  const completeSession = () => {
+    if (completed) {
+      return;
+    }
+    const score = Math.max(40, Math.round((elapsed / duration) * 100));
+    setCompleted(true);
+    setRunning(false);
+    onComplete(makeMiniGameResult("breath_timer", score, `${elapsed}s mindful session`));
+  };
+
+  useEffect(() => {
+    if (!running || completed) {
+      return;
+    }
+    if (secondsLeft <= 0) {
+      completeSession();
+      return;
+    }
+
+    const interval = setInterval(() => setSecondsLeft((current) => current - 1), 1000);
+    return () => clearInterval(interval);
+  }, [completed, running, secondsLeft]);
+
+  return (
+    <View style={styles.miniGameStack}>
+      <View style={styles.breathRing}>
+        <Text style={styles.breathPhase}>{phase}</Text>
+        <Text style={styles.breathTime}>{secondsLeft}s</Text>
+      </View>
+      <Text style={styles.gamesBannerText}>
+        Follow the phase. Finish after a short reset to create a game result.
+      </Text>
+      <View style={styles.gameControlRow}>
+        <HackButton
+          icon={running ? "pause-outline" : "play-outline"}
+          label={running ? "Pause" : "Start"}
+          onPress={() => setRunning((current) => !current)}
           tone="cyan"
-        >
-          <View style={styles.listStack}>
-            {mySubmissions.length ? (
-              mySubmissions.map((submission) => (
-                <SubmissionCard key={submission._id} submission={submission} />
-              ))
-            ) : (
-              <EmptyState
-                icon="checkmark-circle-outline"
-                text="Submitted proof will appear here with returned, verified, or winner status."
-              />
-            )}
-          </View>
-        </Panel>
-      ) : null}
-
-      {activeParticipantTab === "certificates" ? (
-        <ParticipantCertificatesPanel rewards={rewards} roomWinners={roomWinners} />
-      ) : null}
-
-      {activeParticipantTab === "winners" ? (
-        <Panel
-          action={<CounterLabel label={`${roomWinners.length} announced`} />}
-          eyebrow="Room"
-          icon="trophy-outline"
-          title="Winner Announcements"
+        />
+        <HackButton
+          disabled={completed || elapsed < 5}
+          icon="checkmark-circle-outline"
+          label="Finish"
+          onPress={completeSession}
           tone="gold"
-        >
-          <View style={styles.listStack}>
-            {roomWinners.length ? (
-              roomWinners.map((submission) => (
-                <SubmissionCard key={submission._id} submission={submission} />
-              ))
-            ) : (
-              <EmptyState
-                icon="trophy-outline"
-                text="Winner announcements from the host will appear here."
-              />
-            )}
-          </View>
-        </Panel>
-      ) : null}
+        />
+      </View>
+      {completed ? <StatusPill label="Result ready for proof" tone="gold" /> : null}
+    </View>
+  );
+}
+
+function QuickMathsGame({ onComplete }: { onComplete: (result: MiniGameResult) => void }) {
+  const [questionIndex, setQuestionIndex] = useState(0);
+  const [question, setQuestion] = useState(() => makeMathQuestion(0));
+  const [answer, setAnswer] = useState("");
+  const [correct, setCorrect] = useState(0);
+  const [completed, setCompleted] = useState(false);
+
+  const submitAnswer = () => {
+    if (completed) {
+      return;
+    }
+
+    const nextCorrect = Number(answer) === question.answer ? correct + 1 : correct;
+    const nextIndex = questionIndex + 1;
+    setCorrect(nextCorrect);
+    setAnswer("");
+
+    if (nextIndex >= 5) {
+      setCompleted(true);
+      onComplete(
+        makeMiniGameResult("quick_maths", nextCorrect * 20, `${nextCorrect}/5 answers correct`),
+      );
+      return;
+    }
+
+    setQuestionIndex(nextIndex);
+    setQuestion(makeMathQuestion(nextIndex));
+  };
+
+  return (
+    <View style={styles.miniGameStack}>
+      <View style={styles.mathQuestionCard}>
+        <Text style={styles.mathRound}>Round {questionIndex + 1} / 5</Text>
+        <Text style={styles.mathQuestion}>{question.prompt}</Text>
+      </View>
+      <Field label="Answer">
+        <HackTextInput
+          keyboardType="number-pad"
+          onChangeText={setAnswer}
+          onSubmitEditing={submitAnswer}
+          placeholder="Type result"
+          value={answer}
+        />
+      </Field>
+      <View style={styles.gameControlRow}>
+        <WalletChip label="Correct" value={correct} />
+        <HackButton
+          disabled={!answer.trim() || completed}
+          icon="arrow-forward-outline"
+          label={questionIndex >= 4 ? "Finish" : "Next"}
+          onPress={submitAnswer}
+          tone="cyan"
+        />
+      </View>
+      {completed ? <StatusPill label="Result ready for proof" tone="gold" /> : null}
     </View>
   );
 }
@@ -2439,10 +3077,12 @@ function HostNftBadgesPanel({
   );
 }
 
-function ParticipantCertificatesPanel({
+function ParticipantWalletPanel({
+  mySubmissions,
   rewards,
   roomWinners,
 }: {
+  mySubmissions: DashboardData["mySubmissions"];
   rewards: Array<HackReward>;
   roomWinners: DashboardData["visibleWinners"];
 }) {
@@ -2454,24 +3094,40 @@ function ParticipantCertificatesPanel({
       (total, submission) => total + (submission.awardXrdm ?? submission.rewardXrdm ?? 0),
       0,
     );
+  const verifiedCount = mySubmissions.filter((submission) =>
+    ["approved", "winner"].includes(submission.status),
+  ).length;
 
   return (
     <View style={styles.trackStack}>
       <View style={styles.certificateHero}>
         <View style={styles.certificateHeroIcon}>
-          <Ionicons name="trophy-outline" size={30} color={theme.award} />
+          <Ionicons name="wallet-outline" size={30} color={theme.award} />
         </View>
-        <Text style={styles.certificateHeroTitle}>Certificates & NFTs</Text>
+        <Text style={styles.certificateHeroTitle}>XRDM Wallet</Text>
         <Text style={styles.certificateHeroText}>
-          Participant proof, winner certificates, and NFT badges issued on the in-app So.Good
+          Certificates, NFT badges, winner awards, and verified proof issued on the in-app So.Good
           Ledger.
         </Text>
         <StatusPill label={rewards.length ? "Issued - ledger" : "Awaiting issue"} tone="gold" />
       </View>
 
+      <View style={styles.walletCard}>
+        <Text style={styles.walletLabel}>My XRDM balance</Text>
+        <View style={styles.walletBalanceRow}>
+          <Text style={styles.walletBalance}>{xrdmTotal}</Text>
+          <Text style={styles.walletUnit}>XRDM</Text>
+        </View>
+        <View style={styles.walletChipRow}>
+          <WalletChip label="Verified" value={verifiedCount} />
+          <WalletChip label="Certificates" value={certificateRewards.length} />
+          <WalletChip label="NFTs" value={nftRewards.length} />
+        </View>
+      </View>
+
       <Panel
         action={<CounterLabel label={`${nftRewards.length} badges`} />}
-        eyebrow="P5"
+        eyebrow="Wallet"
         icon="diamond-outline"
         title="My NFT Badges"
         tone="gold"
@@ -2493,7 +3149,7 @@ function ParticipantCertificatesPanel({
 
       <Panel
         action={<CounterLabel label={`${certificateRewards.length} certs`} />}
-        eyebrow="Proof"
+        eyebrow="Wallet"
         icon="document-text-outline"
         title="Certificates"
         tone="cyan"
@@ -2510,18 +3166,38 @@ function ParticipantCertificatesPanel({
         </View>
       </Panel>
 
-      <View style={styles.walletCard}>
-        <Text style={styles.walletLabel}>My XRDM balance</Text>
-        <View style={styles.walletBalanceRow}>
-          <Text style={styles.walletBalance}>{xrdmTotal}</Text>
-          <Text style={styles.walletUnit}>XRDM</Text>
+      <Panel
+        action={<CounterLabel label={`${mySubmissions.length + rewards.length} rows`} />}
+        eyebrow="Ledger"
+        icon="shield-checkmark-outline"
+        title="So.Good Ledger Rows"
+        tone="cyan"
+      >
+        <View style={styles.listStack}>
+          {mySubmissions.map((submission) => (
+            <LedgerRow
+              key={submission._id}
+              label={submission.taskTitle}
+              meta={`${submissionStatusLabel(submission.status)} - ${formatDate(submission.submittedAt)}`}
+              value={`+${submission.awardXrdm ?? submission.rewardXrdm ?? 0} XRDM`}
+            />
+          ))}
+          {rewards.map((reward) => (
+            <LedgerRow
+              key={reward._id}
+              label={reward.title}
+              meta={`${rewardKindLabel(reward.kind)} - ${formatDate(reward.issuedAt)}`}
+              value={reward.awardXrdm ? `+${reward.awardXrdm} XRDM` : "Issued"}
+            />
+          ))}
+          {!mySubmissions.length && !rewards.length ? (
+            <EmptyState
+              icon="shield-checkmark-outline"
+              text="Verified proof, certificates, NFT badges, and XRDM records will appear here."
+            />
+          ) : null}
         </View>
-        <View style={styles.walletChipRow}>
-          <WalletChip label="Certificates" value={certificateRewards.length} />
-          <WalletChip label="NFTs" value={nftRewards.length} />
-          <WalletChip label="Wins" value={roomWinners.length} />
-        </View>
-      </View>
+      </Panel>
 
       <View style={styles.ledgerLinkCard}>
         <Ionicons name="shield-checkmark-outline" size={20} color={theme.participant} />
@@ -2709,6 +3385,23 @@ function WalletChip({ label, value }: { label: string; value: number }) {
   );
 }
 
+function LedgerRow({ label, meta, value }: { label: string; meta: string; value: string }) {
+  return (
+    <View style={styles.ledgerRow}>
+      <View style={styles.ledgerDot} />
+      <View style={styles.profileText}>
+        <Text numberOfLines={1} style={styles.ledgerRowTitle}>
+          {label}
+        </Text>
+        <Text numberOfLines={1} style={styles.ledgerRowMeta}>
+          {meta}
+        </Text>
+      </View>
+      <Text style={styles.ledgerRowValue}>{value}</Text>
+    </View>
+  );
+}
+
 function AssignmentComposer({
   createTaskPending,
   fixedKind,
@@ -2734,9 +3427,17 @@ function AssignmentComposer({
 }) {
   const isRegularTask = fixedKind === "task";
   const isSpotChallenge = fixedKind === "challenge";
+  const isGame = fixedKind === "game";
   const effectiveProofTypes = normalizeTaskProofTypes(fixedKind, proofTypes);
+  const selectableProofTypeOptions = isGame
+    ? proofTypeOptions.filter((option) => option.value === "game_score")
+    : proofTypeOptions.filter((option) => option.value !== "game_score");
 
   const handleProofTypePress = (proofType: ProofType) => {
+    if (isGame) {
+      return;
+    }
+
     const locked = isRegularTask && defaultRegularProofTypes.includes(proofType);
 
     if (locked) {
@@ -2780,7 +3481,7 @@ function AssignmentComposer({
         </View>
       ) : null}
 
-      <Field label={isSpotChallenge ? "Challenge name" : "Assignment title"}>
+      <Field label={isGame ? "Game name" : isSpotChallenge ? "Challenge name" : "Assignment title"}>
         <HackTextInput
           onChangeText={(value) => setTaskForm((current) => ({ ...current, title: value }))}
           placeholder={
@@ -2794,18 +3495,57 @@ function AssignmentComposer({
         />
       </Field>
       <DateTimeField
-        label={isSpotChallenge ? "Challenge date and time" : "Due date and time"}
+        label={isGame ? "Game date and time" : isSpotChallenge ? "Challenge date and time" : "Due date and time"}
         onChange={(value) => setTaskForm((current) => ({ ...current, dueAt: value }))}
         value={taskForm.dueAt}
       />
-      <Field label={isSpotChallenge ? "Rules / brief" : "Description"}>
+
+      {isGame ? (
+        <Field label="Mini-game type">
+          <View style={styles.gameTypeGrid}>
+            {gameTypeOptions.map((option) => {
+              const active = taskForm.gameType === option.value;
+              return (
+                <Pressable
+                  accessibilityRole="button"
+                  key={option.value}
+                  onPress={() =>
+                    setTaskForm((current) => ({ ...current, gameType: option.value }))
+                  }
+                  style={({ pressed }) => [
+                    styles.gameTypeOption,
+                    active && styles.gameTypeOptionActive,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <Ionicons
+                    name={option.icon}
+                    size={18}
+                    color={active ? theme.award : theme.dim}
+                  />
+                  <View style={styles.profileText}>
+                    <Text style={[styles.gameTypeTitle, active && styles.gameTypeTitleActive]}>
+                      {option.label}
+                    </Text>
+                    <Text style={styles.gameTypeDescription}>{option.description}</Text>
+                  </View>
+                </Pressable>
+              );
+            })}
+          </View>
+        </Field>
+      ) : null}
+
+      <Field label={isSpotChallenge || isGame ? "Rules / brief" : "Description"}>
         <HackTextInput
           multiline
           onChangeText={(value) =>
             setTaskForm((current) => ({ ...current, description: value }))
           }
           placeholder={
-            isSpotChallenge
+            isGame
+              ? "Tell participants what score, attempt, or result the host will verify."
+              : isSpotChallenge
               ? "Describe the fun challenge, who can join, and how winners will be picked."
               : "Submit a functional demo. GitHub and Drive proof are mandatory."
           }
@@ -2814,11 +3554,12 @@ function AssignmentComposer({
         />
       </Field>
 
-      <Field label={isRegularTask ? "Expected proof" : "Challenge proof"}>
+      <Field label={isGame ? "Game proof" : isRegularTask ? "Expected proof" : "Challenge proof"}>
         <View style={styles.proofGrid}>
-          {proofTypeOptions.map((option) => {
+          {selectableProofTypeOptions.map((option) => {
             const active = effectiveProofTypes.includes(option.value);
-            const locked = isRegularTask && defaultRegularProofTypes.includes(option.value);
+            const locked =
+              isGame || (isRegularTask && defaultRegularProofTypes.includes(option.value));
             return (
               <Pressable
                 accessibilityRole="button"
@@ -2856,11 +3597,11 @@ function AssignmentComposer({
           !taskForm.dueAt.trim() ||
           createTaskPending
         }
-        icon={isSpotChallenge ? "flash-outline" : "send-outline"}
-        label={isSpotChallenge ? "Create Spot Challenge" : "Publish Regular Task"}
+        icon={isGame ? "game-controller-outline" : isSpotChallenge ? "flash-outline" : "send-outline"}
+        label={isGame ? "Create Game Card" : isSpotChallenge ? "Create Spot Challenge" : "Publish Regular Task"}
         loading={createTaskPending}
         onPress={() => onCreateTask(fixedKind)}
-        tone={isSpotChallenge ? "orange" : "violet"}
+        tone={isGame ? "gold" : isSpotChallenge ? "orange" : "violet"}
       />
     </View>
   );
@@ -3829,7 +4570,7 @@ function ProofRequirementFields({
         <Field key={proofType} label={`${proofTypeLabel(proofType)} proof`}>
           <HackTextInput
             autoCapitalize="none"
-            keyboardType="url"
+            keyboardType={proofType === "game_score" ? "default" : "url"}
             onChangeText={(value) =>
               setSubmitForm((current) => ({
                 ...current,
@@ -3871,10 +4612,13 @@ function ProofItemRow({
   index: number;
   proofItem: SubmissionProofItem;
 }) {
+  const isLinkProof = proofItem.type !== "game_score";
+
   return (
     <Pressable
-      accessibilityRole="link"
-      onPress={() => Linking.openURL(proofItem.value)}
+      accessibilityRole={isLinkProof ? "link" : "text"}
+      disabled={!isLinkProof}
+      onPress={isLinkProof ? () => Linking.openURL(proofItem.value) : undefined}
       style={({ pressed }) => [styles.proofItemRow, pressed && styles.pressed]}
     >
       <View style={styles.proofItemIcon}>
@@ -3888,7 +4632,7 @@ function ProofItemRow({
           {proofItem.value}
         </Text>
       </View>
-      <Text style={styles.proofItemOpen}>Open</Text>
+      <Text style={styles.proofItemOpen}>{isLinkProof ? "Open" : "Result"}</Text>
     </Pressable>
   );
 }
@@ -4080,9 +4824,9 @@ function TaskCard({
       </Text>
       <View style={styles.proofTypeRow}>
         <Text style={styles.proofTypeLabel}>{kindLabel(task.kind ?? "task")}</Text>
-        {task.proofTypes.map((proofType) => (
+        {getTaskProofTypes(task).map((proofType) => (
           <Text key={proofType} style={styles.proofTypeLabel}>
-            {proofType}
+            {proofTypeLabel(proofType)}
           </Text>
         ))}
       </View>
@@ -4233,15 +4977,76 @@ function getToneColors(tone: Tone) {
   };
 }
 
+function getGameTypeInfo(gameType: GameType) {
+  return gameTypeOptions.find((option) => option.value === gameType) ?? gameTypeOptions[0];
+}
+
+function getTaskGameType(task: Pick<HackTask, "gameType">): GameType {
+  return (task.gameType ?? "memory_match") as GameType;
+}
+
+function makeMiniGameResult(gameType: GameType, score: number, detail: string): MiniGameResult {
+  const gameInfo = getGameTypeInfo(gameType);
+  return {
+    gameType,
+    notes: `Completed ${gameInfo.label}. ${detail}. Score: ${score}.`,
+    proofValue: `${gameInfo.label} result - ${detail} - score ${score}`,
+    score,
+    title: gameInfo.label,
+  };
+}
+
+function makeMemoryCards() {
+  const pairs = [
+    { label: "AI", value: "ai" },
+    { label: "UX", value: "ux" },
+    { label: "API", value: "api" },
+    { label: "XR", value: "xr" },
+  ];
+  return pairs
+    .flatMap((card) => [
+      { ...card, id: `${card.value}-a` },
+      { ...card, id: `${card.value}-b` },
+    ])
+    .sort(() => Math.random() - 0.5);
+}
+
+function makeMathQuestion(seed: number) {
+  const left = 8 + seed * 3 + Math.floor(Math.random() * 9);
+  const right = 4 + seed * 2 + Math.floor(Math.random() * 7);
+  const multiply = seed % 3 === 2;
+  if (multiply) {
+    const smallLeft = 2 + (seed % 4);
+    const smallRight = 5 + Math.floor(Math.random() * 5);
+    return {
+      answer: smallLeft * smallRight,
+      prompt: `${smallLeft} x ${smallRight}`,
+    };
+  }
+
+  return {
+    answer: left + right,
+    prompt: `${left} + ${right}`,
+  };
+}
+
 function normalizeTaskProofTypes(kind: TaskKind, proofTypes: Array<ProofType>) {
   if (kind === "task") {
     return [...new Set([...defaultRegularProofTypes, ...proofTypes])];
   }
 
+  if (kind === "game") {
+    return defaultGameProofTypes;
+  }
+
   return proofTypes.length ? [...new Set(proofTypes)] : defaultSpotProofTypes;
 }
 
-function getTaskProofTypes(task?: Pick<HackTask, "proofTypes">) {
+function getTaskProofTypes(task?: Pick<HackTask, "kind" | "proofTypes">) {
+  if (task?.kind === "game") {
+    return defaultGameProofTypes;
+  }
+
   return task?.proofTypes?.length ? task.proofTypes : defaultSpotProofTypes;
 }
 
@@ -4287,6 +5092,7 @@ function proofTypePlaceholder(proofType: ProofType) {
   if (proofType === "video") return "https://loom.com/share/demo";
   if (proofType === "deck") return "https://docs.google.com/presentation/...";
   if (proofType === "file") return "https://drive.google.com/file/...";
+  if (proofType === "game_score") return "Game result will appear here after completion";
   return "https://your-proof-link";
 }
 
@@ -4296,6 +5102,7 @@ function proofTypeIcon(proofType: ProofType): React.ComponentProps<typeof Ionico
   if (proofType === "video") return "videocam-outline";
   if (proofType === "deck") return "easel-outline";
   if (proofType === "file") return "document-attach-outline";
+  if (proofType === "game_score") return "game-controller-outline";
   return "link-outline";
 }
 
@@ -4462,6 +5269,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "900",
     letterSpacing: 0,
+  },
+  participantActionBackButton: {
+    backgroundColor: theme.participantDark,
+    borderColor: theme.participantBorder,
+  },
+  participantActionBackText: {
+    color: theme.participant,
   },
   actionScreenHeader: {
     backgroundColor: theme.panelStrong,
@@ -4918,6 +5732,97 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
   },
+  gameAssignmentCard: {
+    backgroundColor: theme.awardDark,
+    borderColor: theme.awardBorder,
+    borderRadius: 8,
+    borderWidth: 1,
+    padding: 12,
+  },
+  gameAssignmentIcon: {
+    alignItems: "center",
+    backgroundColor: theme.awardDark,
+    borderColor: theme.awardBorder,
+    borderRadius: 8,
+    borderWidth: 1,
+    height: 40,
+    justifyContent: "center",
+    width: 40,
+  },
+  gameControlRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 10,
+  },
+  gamesBanner: {
+    alignItems: "center",
+    backgroundColor: theme.participantDark,
+    borderColor: theme.participantBorder,
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 4,
+    padding: 12,
+  },
+  gamesBannerText: {
+    color: theme.muted,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  gamesBannerTitle: {
+    color: theme.participant,
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  gameTypeDescription: {
+    color: theme.muted,
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  gameTypeGrid: {
+    gap: 8,
+  },
+  gameTypeOption: {
+    alignItems: "center",
+    backgroundColor: theme.panelStrong,
+    borderColor: theme.border,
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 10,
+    padding: 11,
+  },
+  gameTypeOptionActive: {
+    backgroundColor: theme.awardDark,
+    borderColor: theme.awardBorder,
+  },
+  gameTypeTitle: {
+    color: theme.text,
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  gameTypeTitleActive: {
+    color: theme.award,
+  },
+  historyGroup: {
+    gap: 8,
+  },
+  historyGroupHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+  },
+  historyGroupTitle: {
+    color: theme.text,
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  historySummaryRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
   linkRow: {
     alignItems: "center",
     backgroundColor: theme.participantDark,
@@ -4969,6 +5874,40 @@ const styles = StyleSheet.create({
     color: theme.muted,
     fontSize: 11,
     lineHeight: 16,
+  },
+  ledgerDot: {
+    backgroundColor: theme.participant,
+    borderRadius: 4,
+    height: 8,
+    marginTop: 4,
+    width: 8,
+  },
+  ledgerRow: {
+    alignItems: "flex-start",
+    backgroundColor: theme.backgroundAlt,
+    borderColor: theme.border,
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 10,
+    padding: 11,
+  },
+  ledgerRowMeta: {
+    color: theme.dim,
+    fontFamily: Platform.select({ default: "monospace" }),
+    fontSize: 10,
+    marginTop: 2,
+  },
+  ledgerRowTitle: {
+    color: theme.text,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  ledgerRowValue: {
+    color: theme.award,
+    fontFamily: Platform.select({ default: "monospace" }),
+    fontSize: 11,
+    fontWeight: "900",
   },
   ledgerTitle: {
     color: theme.participant,
@@ -5095,6 +6034,101 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     marginTop: 6,
   },
+  breathPhase: {
+    color: theme.participant,
+    fontSize: 21,
+    fontWeight: "900",
+  },
+  breathRing: {
+    alignItems: "center",
+    alignSelf: "center",
+    backgroundColor: theme.participantDark,
+    borderColor: theme.participant,
+    borderRadius: 74,
+    borderWidth: 2,
+    height: 148,
+    justifyContent: "center",
+    width: 148,
+  },
+  breathTime: {
+    color: theme.muted,
+    fontFamily: Platform.select({ default: "monospace" }),
+    fontSize: 13,
+    marginTop: 5,
+  },
+  mathQuestion: {
+    color: theme.text,
+    fontSize: 30,
+    fontWeight: "900",
+    letterSpacing: 0,
+    textAlign: "center",
+  },
+  mathQuestionCard: {
+    backgroundColor: theme.backgroundAlt,
+    borderColor: theme.border,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 6,
+    padding: 16,
+  },
+  mathRound: {
+    color: theme.dim,
+    fontFamily: Platform.select({ default: "monospace" }),
+    fontSize: 10,
+    textAlign: "center",
+    textTransform: "uppercase",
+  },
+  memoryCard: {
+    alignItems: "center",
+    aspectRatio: 1,
+    backgroundColor: theme.panelStrong,
+    borderColor: theme.border,
+    borderRadius: 8,
+    borderWidth: 1,
+    justifyContent: "center",
+    width: "23%",
+  },
+  memoryCardOpen: {
+    backgroundColor: theme.participantDark,
+    borderColor: theme.participant,
+  },
+  memoryCardText: {
+    color: theme.text,
+    fontSize: 18,
+    fontWeight: "900",
+  },
+  memoryGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  miniGameCloseButton: {
+    alignItems: "center",
+    backgroundColor: theme.awardDark,
+    borderColor: theme.awardBorder,
+    borderRadius: 8,
+    borderWidth: 1,
+    height: 34,
+    justifyContent: "center",
+    width: 34,
+  },
+  miniGameStack: {
+    gap: 12,
+    marginTop: 12,
+  },
+  miniGameStatRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  miniGameSurface: {
+    backgroundColor: theme.panelStrong,
+    borderColor: theme.awardBorder,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 12,
+    marginBottom: 12,
+    padding: 12,
+  },
   mutedText: {
     color: theme.muted,
     flex: 1,
@@ -5195,6 +6229,33 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.74,
+  },
+  practiceGameCard: {
+    alignItems: "center",
+    backgroundColor: theme.panelStrong,
+    borderColor: theme.participantBorder,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 6,
+    minHeight: 104,
+    padding: 11,
+    width: 116,
+  },
+  practiceGameMeta: {
+    color: theme.dim,
+    fontFamily: Platform.select({ default: "monospace" }),
+    fontSize: 9,
+    textTransform: "uppercase",
+  },
+  practiceGameShelf: {
+    gap: 8,
+    paddingBottom: 2,
+  },
+  practiceGameTitle: {
+    color: theme.text,
+    fontSize: 12,
+    fontWeight: "800",
+    textAlign: "center",
   },
   profileCard: {
     alignItems: "center",

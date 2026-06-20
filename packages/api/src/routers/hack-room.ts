@@ -4,8 +4,9 @@ import { z } from "zod";
 
 import { protectedProcedure, router } from "../index";
 
-const proofTypeSchema = z.enum(["github", "drive", "file", "url", "video", "deck"]);
+const proofTypeSchema = z.enum(["github", "drive", "file", "url", "video", "deck", "game_score"]);
 const taskKindSchema = z.enum(["task", "challenge", "game"]);
+const gameTypeSchema = z.enum(["memory_match", "breath_timer", "quick_maths"]);
 const rewardKindSchema = z.enum([
   "participant_certificate",
   "winner_certificate",
@@ -41,6 +42,7 @@ type HackTaskRecord = {
   roomId: string;
   hostId: string;
   kind?: z.infer<typeof taskKindSchema>;
+  gameType?: z.infer<typeof gameTypeSchema>;
   title: string;
   description: string;
   dueAt: string;
@@ -220,8 +222,11 @@ export const hackRoomRouter = router({
       const room = roomById.get(submission.roomId);
       return {
         ...submission,
+        gameType:
+          (task?.kind ?? "task") === "game" ? (task?.gameType ?? "memory_match") : task?.gameType,
         proofItems: normalizeProofItems(submission),
         roomName: room?.name ?? "Hack room",
+        taskKind: task?.kind ?? "task",
         taskTitle: task?.title ?? "Hack task",
         rewardXrdm: task?.rewardXrdm ?? submission.awardXrdm ?? 0,
       };
@@ -232,6 +237,7 @@ export const hackRoomRouter = router({
       joinedRooms: joinedRooms.sort(byNewest),
       tasks: visibleTasks.sort(byNewest).map((task) => ({
         ...task,
+        gameType: (task.kind ?? "task") === "game" ? (task.gameType ?? "memory_match") : task.gameType,
         kind: task.kind ?? "task",
         roomName: roomById.get(task.roomId)?.name ?? "Hack room",
         inviteCode: roomById.get(task.roomId)?.inviteCode ?? "",
@@ -241,8 +247,11 @@ export const hackRoomRouter = router({
         const room = roomById.get(submission.roomId);
         return {
           ...submission,
+          gameType:
+            (task?.kind ?? "task") === "game" ? (task?.gameType ?? "memory_match") : task?.gameType,
           proofItems: normalizeProofItems(submission),
           roomName: room?.name ?? "Hack room",
+          taskKind: task?.kind ?? "task",
           taskTitle: task?.title ?? "Hack task",
           rewardXrdm: task?.rewardXrdm ?? submission.awardXrdm ?? 0,
         };
@@ -339,6 +348,7 @@ export const hackRoomRouter = router({
       z.object({
         roomId: z.string().min(1),
         kind: taskKindSchema.default("task"),
+        gameType: gameTypeSchema.optional(),
         title: z.string().trim().min(3).max(100),
         description: z.string().trim().min(10).max(700),
         dueAt: z.string().trim().min(3).max(80),
@@ -351,6 +361,7 @@ export const hackRoomRouter = router({
       const timestamp = now();
       const task: HackTaskRecord = {
         _id: makeId("task"),
+        gameType: input.kind === "game" ? (input.gameType ?? "memory_match") : undefined,
         roomId: input.roomId,
         hostId: ctx.session.user.id,
         kind: input.kind,
