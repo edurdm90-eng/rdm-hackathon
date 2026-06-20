@@ -630,7 +630,7 @@ function HackRoomDetailDashboard({
 }) {
   const router = useRouter();
   const dashboard = useQuery(trpc.hackRoom.dashboard.queryOptions());
-  const [activeRoomTab, setActiveRoomTab] = useState<RoomTab>("participants");
+  const [activeRoomTab, setActiveRoomTab] = useState<RoomTab | null>(null);
   const [activeParticipantTab, setActiveParticipantTab] =
     useState<ParticipantTab>("assignments");
   const [taskForm, setTaskForm] = useState(emptyTaskForm);
@@ -1257,7 +1257,7 @@ function RoomWorkspace({
   winnerSubmissions,
 }: {
   activeParticipantTab: ParticipantTab;
-  activeRoomTab: RoomTab;
+  activeRoomTab: RoomTab | null;
   approvedSubmissions: DashboardData["hostSubmissions"];
   approveSubmissionPending: boolean;
   awardBySubmission: Record<string, string>;
@@ -1269,7 +1269,7 @@ function RoomWorkspace({
   onCreateTask: (kind: TaskKind) => void;
   onParticipantTabChange: (tab: ParticipantTab) => void;
   onReturnSubmission: (submission: HackSubmission) => void;
-  onRoomTabChange: (tab: RoomTab) => void;
+  onRoomTabChange: (tab: RoomTab | null) => void;
   onSelectTask: (taskId: string) => void;
   onSelectWinner: (submission: HackSubmission) => void;
   onShareRoom: (room: HackRoom) => void;
@@ -1397,7 +1397,7 @@ function HostRoomWorkspace({
   taskKind,
   winnerSubmissions,
 }: {
-  activeRoomTab: RoomTab;
+  activeRoomTab: RoomTab | null;
   approvedSubmissions: DashboardData["hostSubmissions"];
   approveSubmissionPending: boolean;
   awardBySubmission: Record<string, string>;
@@ -1407,7 +1407,7 @@ function HostRoomWorkspace({
   onApproveSubmission: (submission: HackSubmission) => void;
   onCreateTask: (kind: TaskKind) => void;
   onReturnSubmission: (submission: HackSubmission) => void;
-  onRoomTabChange: (tab: RoomTab) => void;
+  onRoomTabChange: (tab: RoomTab | null) => void;
   onSelectWinner: (submission: HackSubmission) => void;
   onShareRoom: (room: HackRoom) => void;
   pendingSubmissions: DashboardData["hostSubmissions"];
@@ -1465,57 +1465,50 @@ function HostRoomWorkspace({
     { id: "history", label: "History" },
     { id: "winners", label: "Award XRDM" },
     { id: "badges", label: "Assign Badges" },
+    { id: "challenges", label: "Challenges/Games" },
     { id: "leaderboard", label: "Leaderboard" },
     { id: "profile", label: "Profile" },
   ];
-  const hostTabs: Array<{
-    icon: React.ComponentProps<typeof Ionicons>["name"];
-    id: RoomTab;
-    label: string;
-  }> = [
-    { icon: "people-outline", id: "participants", label: "Participants" },
-    { icon: "clipboard-outline", id: "assign", label: "Assign Task" },
-    { icon: "ribbon-outline", id: "verify", label: "Verify" },
-    { icon: "time-outline", id: "history", label: "History" },
-    { icon: "game-controller-outline", id: "challenges", label: "Challenges" },
-    { icon: "trophy-outline", id: "winners", label: "Winners" },
-    { icon: "medal-outline", id: "badges", label: "Badges" },
-    { icon: "podium-outline", id: "leaderboard", label: "Leaderboard" },
-    { icon: "person-circle-outline", id: "profile", label: "Profile" },
-  ];
+  const activeAction = hostQuickActions.find((action) => action.id === activeRoomTab);
+
+  if (!activeRoomTab) {
+    return (
+      <View style={styles.trackStack}>
+        <View style={styles.quickActionsSection}>
+          <Text style={styles.quickActionsTitle}>Quick Actions</Text>
+          <View style={styles.quickActionGrid}>
+            {hostQuickActions.map((action) => (
+              <QuickActionTile
+                active={false}
+                key={action.id}
+                label={action.label}
+                onPress={() => onRoomTabChange(action.id)}
+              />
+            ))}
+          </View>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.trackStack}>
-      <View style={styles.quickActionsSection}>
-        <Text style={styles.quickActionsTitle}>Quick Actions</Text>
-        <View style={styles.quickActionGrid}>
-          {hostQuickActions.map((action) => (
-            <QuickActionTile
-              active={activeRoomTab === action.id}
-              key={action.id}
-              label={action.label}
-              onPress={() => onRoomTabChange(action.id)}
-            />
-          ))}
+      <View style={styles.actionScreenHeader}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => onRoomTabChange(null)}
+          style={({ pressed }) => [styles.actionBackButton, pressed && styles.pressed]}
+        >
+          <Ionicons name="chevron-back-outline" size={17} color={theme.host} />
+          <Text style={styles.actionBackText}>Quick Actions</Text>
+        </Pressable>
+        <View style={styles.actionTitleBlock}>
+          <Text style={styles.sectionEyebrow}>Host Action</Text>
+          <Text numberOfLines={2} style={styles.actionScreenTitle}>
+            {activeAction?.label ?? "Host Action"}
+          </Text>
         </View>
       </View>
-
-      <ScrollView
-        contentContainerStyle={styles.roomTabs}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-      >
-        {hostTabs.map((tab) => (
-          <RoomTabButton
-            active={activeRoomTab === tab.id}
-            icon={tab.icon}
-            key={tab.id}
-            label={tab.label}
-            onPress={() => onRoomTabChange(tab.id)}
-            tone="violet"
-          />
-        ))}
-      </ScrollView>
 
       {activeRoomTab === "participants" ? (
         <Panel
@@ -3394,6 +3387,41 @@ const styles = StyleSheet.create({
     fontFamily: Platform.select({ default: "monospace" }),
     fontSize: 12,
     fontWeight: "700",
+  },
+  actionBackButton: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    backgroundColor: theme.hostDark,
+    borderColor: theme.hostBorder,
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 6,
+    minHeight: 38,
+    paddingHorizontal: 10,
+  },
+  actionBackText: {
+    color: theme.host,
+    fontSize: 12,
+    fontWeight: "900",
+    letterSpacing: 0,
+  },
+  actionScreenHeader: {
+    backgroundColor: theme.panelStrong,
+    borderColor: theme.border,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 10,
+    padding: 12,
+  },
+  actionScreenTitle: {
+    color: theme.text,
+    fontSize: 20,
+    fontWeight: "800",
+    letterSpacing: 0,
+  },
+  actionTitleBlock: {
+    gap: 4,
   },
   badgeChipRow: {
     flexDirection: "row",
