@@ -1622,20 +1622,21 @@ function HostRoomWorkspace({
     }, [])
     .sort((left, right) => right.awardXrdm - left.awardXrdm);
   const hostQuickActions: Array<{
+    icon: React.ComponentProps<typeof Ionicons>["name"];
     id: RoomTab;
     label: string;
   }> = [
-    { id: "assign", label: "Manage Assignments" },
-    { id: "participants", label: "Manage Members" },
-    { id: "verify", label: "Verify" },
-    { id: "history", label: "History" },
-    { id: "winners", label: "Award XRDM" },
-    { id: "badges", label: "Assign Badges" },
-    { id: "certificates", label: "Certificates" },
-    { id: "nfts", label: "NFT Badges" },
-    { id: "challenges", label: "Challenges/Games" },
-    { id: "leaderboard", label: "Leaderboard" },
-    { id: "profile", label: "Profile" },
+    { icon: "clipboard-outline", id: "assign", label: "Assignments" },
+    { icon: "people-outline", id: "participants", label: "Members" },
+    { icon: "shield-checkmark-outline", id: "verify", label: "Verify" },
+    { icon: "time-outline", id: "history", label: "History" },
+    { icon: "trophy-outline", id: "winners", label: "Award XRDM" },
+    { icon: "medal-outline", id: "badges", label: "Badges" },
+    { icon: "ribbon-outline", id: "certificates", label: "Certificates" },
+    { icon: "diamond-outline", id: "nfts", label: "NFT Badges" },
+    { icon: "game-controller-outline", id: "challenges", label: "Games" },
+    { icon: "podium-outline", id: "leaderboard", label: "Leaderboard" },
+    { icon: "person-circle-outline", id: "profile", label: "Profile" },
   ];
   const activeAction = hostQuickActions.find((action) => action.id === activeRoomTab);
 
@@ -1648,6 +1649,7 @@ function HostRoomWorkspace({
             {hostQuickActions.map((action) => (
               <QuickActionTile
                 active={false}
+                icon={action.icon}
                 key={action.id}
                 label={action.label}
                 onPress={() => onRoomTabChange(action.id)}
@@ -2083,13 +2085,14 @@ function ParticipantRoomWorkspace({
   const regularTasks = roomTasks.filter((task) => (task.kind ?? "task") === "task");
   const gameTasks = roomTasks.filter((task) => task.kind === "challenge" || task.kind === "game");
   const participantActions: Array<{
+    icon: React.ComponentProps<typeof Ionicons>["name"];
     id: ParticipantTab;
     label: string;
   }> = [
-    { id: "submit", label: "Submit Task" },
-    { id: "history", label: "History" },
-    { id: "games", label: "Games" },
-    { id: "wallet", label: "Wallet" },
+    { icon: "send-outline", id: "submit", label: "Submit Task" },
+    { icon: "time-outline", id: "history", label: "History" },
+    { icon: "game-controller-outline", id: "games", label: "Games" },
+    { icon: "wallet-outline", id: "wallet", label: "Wallet" },
   ];
   const activeAction = participantActions.find((action) => action.id === activeParticipantTab);
 
@@ -2115,6 +2118,7 @@ function ParticipantRoomWorkspace({
             {participantActions.map((action) => (
               <QuickActionTile
                 active={false}
+                icon={action.icon}
                 key={action.id}
                 label={action.label}
                 onPress={() => openAction(action.id)}
@@ -3709,10 +3713,12 @@ function SubmissionReviewCard({
 
 function QuickActionTile({
   active,
+  icon,
   label,
   onPress,
 }: {
   active: boolean;
+  icon: React.ComponentProps<typeof Ionicons>["name"];
   label: string;
   onPress: () => void;
 }) {
@@ -3727,6 +3733,11 @@ function QuickActionTile({
         pressed && styles.pressed,
       ]}
     >
+      <Ionicons
+        name={icon}
+        size={22}
+        color={active ? theme.host : theme.participant}
+      />
       <Text
         numberOfLines={2}
         adjustsFontSizeToFit
@@ -5208,11 +5219,11 @@ const styles = StyleSheet.create({
   authCard: {
     backgroundColor: theme.panel,
     borderColor: theme.border,
-    borderRadius: 8,
+    borderRadius: 20,
     borderWidth: 1,
-    gap: 14,
+    gap: 16,
     maxWidth: 420,
-    padding: 16,
+    padding: 22,
     width: "100%",
   },
   authLogo: {
@@ -5229,11 +5240,11 @@ const styles = StyleSheet.create({
   },
   avatar: {
     alignItems: "center",
-    borderRadius: 8,
+    borderRadius: 22,
     borderWidth: 1,
-    height: 42,
+    height: 44,
     justifyContent: "center",
-    width: 42,
+    width: 44,
   },
   avatarText: {
     fontFamily: Platform.select({ default: "monospace" }),
@@ -5280,10 +5291,10 @@ const styles = StyleSheet.create({
   actionScreenHeader: {
     backgroundColor: theme.panelStrong,
     borderColor: theme.border,
-    borderRadius: 8,
+    borderRadius: 14,
     borderWidth: 1,
     gap: 10,
-    padding: 12,
+    padding: 14,
   },
   actionScreenTitle: {
     color: theme.text,
@@ -5312,17 +5323,17 @@ const styles = StyleSheet.create({
   },
   button: {
     alignItems: "center",
-    borderRadius: 8,
+    borderRadius: 12,
     flexDirection: "row",
     gap: 8,
     justifyContent: "center",
-    minHeight: 46,
-    paddingHorizontal: 14,
+    minHeight: 50,
+    paddingHorizontal: 16,
   },
   buttonText: {
-    fontSize: 14,
-    fontWeight: "800",
-    letterSpacing: 0,
+    fontSize: 15,
+    fontWeight: "700",
+    letterSpacing: 0.2,
   },
   cardDescription: {
     color: theme.muted,
@@ -5353,10 +5364,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: theme.awardDark,
     borderColor: theme.awardBorder,
-    borderRadius: 8,
+    borderRadius: 16,
     borderWidth: 1,
-    gap: 9,
-    padding: 16,
+    gap: 10,
+    padding: 20,
   },
   certificateHeroIcon: {
     alignItems: "center",
@@ -5385,11 +5396,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: theme.panel,
     borderColor: theme.border,
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: 1,
     flexDirection: "row",
     gap: 10,
-    padding: 12,
+    padding: 14,
   },
   counterLabel: {
     color: theme.muted,
@@ -5410,17 +5421,17 @@ const styles = StyleSheet.create({
   },
   dashboardHeadline: {
     color: theme.text,
-    fontSize: 28,
+    fontSize: 32,
     fontWeight: "700",
-    letterSpacing: 0,
-    lineHeight: 34,
+    letterSpacing: -0.5,
+    lineHeight: 38,
   },
   dashboardHero: {
     backgroundColor: theme.panel,
     borderColor: theme.border,
-    borderRadius: 8,
+    borderRadius: 18,
     borderWidth: 1,
-    padding: 16,
+    padding: 20,
   },
   dateDoneButton: {
     alignItems: "center",
@@ -5508,12 +5519,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: theme.panelStrong,
     borderColor: theme.border,
-    borderRadius: 8,
+    borderRadius: 12,
     borderStyle: "dashed",
     borderWidth: 1,
     flexDirection: "row",
     gap: 12,
-    padding: 12,
+    padding: 14,
   },
   emptyText: {
     color: theme.muted,
@@ -5554,10 +5565,10 @@ const styles = StyleSheet.create({
   assignmentComposer: {
     backgroundColor: theme.panelStrong,
     borderColor: theme.border,
-    borderRadius: 8,
+    borderRadius: 14,
     borderWidth: 1,
-    gap: 12,
-    padding: 12,
+    gap: 14,
+    padding: 14,
   },
   createRoomCard: {
     backgroundColor: theme.panelStrong,
@@ -5585,11 +5596,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: theme.panelStrong,
     borderColor: theme.border,
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: 1,
-    height: 42,
+    height: 44,
     justifyContent: "center",
-    width: 42,
+    width: 44,
   },
   headerProfileButton: {
     backgroundColor: theme.participantDark,
@@ -5629,13 +5640,13 @@ const styles = StyleSheet.create({
   input: {
     backgroundColor: theme.backgroundAlt,
     borderColor: theme.border,
-    borderRadius: 8,
+    borderRadius: 10,
     borderWidth: 1,
     color: theme.text,
     fontSize: 15,
-    minHeight: 46,
-    paddingHorizontal: 12,
-    paddingVertical: 11,
+    minHeight: 50,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
   },
   inputMultiline: {
     minHeight: 92,
@@ -5735,9 +5746,9 @@ const styles = StyleSheet.create({
   gameAssignmentCard: {
     backgroundColor: theme.awardDark,
     borderColor: theme.awardBorder,
-    borderRadius: 8,
+    borderRadius: 14,
     borderWidth: 1,
-    padding: 12,
+    padding: 14,
   },
   gameAssignmentIcon: {
     alignItems: "center",
@@ -5758,12 +5769,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: theme.participantDark,
     borderColor: theme.participantBorder,
-    borderRadius: 8,
+    borderRadius: 14,
     borderWidth: 1,
     flexDirection: "row",
     gap: 10,
     marginBottom: 4,
-    padding: 12,
+    padding: 14,
   },
   gamesBannerText: {
     color: theme.muted,
@@ -5851,11 +5862,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: theme.awardDark,
     borderColor: theme.awardBorder,
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: 1,
     flexDirection: "row",
     gap: 10,
-    padding: 12,
+    padding: 14,
   },
   leaderboardScore: {
     alignItems: "flex-end",
@@ -5864,11 +5875,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: theme.participantDark,
     borderColor: theme.participantBorder,
-    borderRadius: 8,
+    borderRadius: 14,
     borderWidth: 1,
     flexDirection: "row",
     gap: 10,
-    padding: 12,
+    padding: 14,
   },
   ledgerText: {
     color: theme.muted,
@@ -5935,11 +5946,11 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   metricCard: {
-    borderRadius: 8,
+    borderRadius: 14,
     borderWidth: 1,
     flex: 1,
-    minHeight: 92,
-    padding: 12,
+    minHeight: 100,
+    padding: 14,
   },
   metricLabel: {
     color: theme.muted,
@@ -5950,10 +5961,10 @@ const styles = StyleSheet.create({
   },
   metricValue: {
     color: theme.text,
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: "800",
-    letterSpacing: 0,
-    marginTop: 7,
+    letterSpacing: -0.5,
+    marginTop: 8,
   },
   metricsGrid: {
     flexDirection: "row",
@@ -5968,11 +5979,11 @@ const styles = StyleSheet.create({
   modalCard: {
     backgroundColor: theme.panel,
     borderColor: theme.border,
-    borderRadius: 8,
+    borderRadius: 20,
     borderWidth: 1,
-    gap: 14,
+    gap: 16,
     maxWidth: 430,
-    padding: 16,
+    padding: 20,
     width: "100%",
   },
   modalCloseButton: {
@@ -6015,11 +6026,11 @@ const styles = StyleSheet.create({
   miniStat: {
     backgroundColor: theme.backgroundAlt,
     borderColor: theme.border,
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: 1,
     flex: 1,
-    minHeight: 76,
-    padding: 10,
+    minHeight: 80,
+    padding: 12,
   },
   miniStatLabel: {
     color: theme.dim,
@@ -6123,11 +6134,11 @@ const styles = StyleSheet.create({
   miniGameSurface: {
     backgroundColor: theme.panelStrong,
     borderColor: theme.awardBorder,
-    borderRadius: 8,
+    borderRadius: 14,
     borderWidth: 1,
-    gap: 12,
+    gap: 14,
     marginBottom: 12,
-    padding: 12,
+    padding: 14,
   },
   mutedText: {
     color: theme.muted,
@@ -6153,12 +6164,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: theme.panelStrong,
     borderColor: theme.awardBorder,
-    borderRadius: 8,
+    borderRadius: 14,
     borderWidth: 1,
     gap: 6,
-    minHeight: 106,
-    padding: 10,
-    width: 96,
+    minHeight: 112,
+    padding: 12,
+    width: 100,
   },
   nftBadgeDate: {
     color: theme.dim,
@@ -6176,10 +6187,10 @@ const styles = StyleSheet.create({
     paddingBottom: 2,
   },
   panel: {
-    borderRadius: 8,
+    borderRadius: 16,
     borderWidth: 1,
-    gap: 12,
-    padding: 14,
+    gap: 14,
+    padding: 16,
   },
   panelEyebrow: {
     fontFamily: Platform.select({ default: "monospace" }),
@@ -6194,18 +6205,18 @@ const styles = StyleSheet.create({
   },
   panelIcon: {
     alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.18)",
-    borderRadius: 8,
+    backgroundColor: "rgba(0, 0, 0, 0.22)",
+    borderRadius: 12,
     borderWidth: 1,
-    height: 40,
+    height: 44,
     justifyContent: "center",
-    width: 40,
+    width: 44,
   },
   panelTitle: {
     color: theme.text,
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: "700",
-    letterSpacing: 0,
+    letterSpacing: -0.2,
   },
   panelTitleBlock: {
     flex: 1,
@@ -6221,10 +6232,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: theme.panelStrong,
     borderColor: theme.border,
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: 1,
     flexDirection: "row",
-    gap: 11,
+    gap: 12,
     padding: 12,
   },
   pressed: {
@@ -6261,12 +6272,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: theme.backgroundAlt,
     borderColor: theme.border,
-    borderRadius: 8,
+    borderRadius: 14,
     borderWidth: 1,
     flexDirection: "row",
-    gap: 12,
+    gap: 14,
     marginTop: 16,
-    padding: 12,
+    padding: 14,
   },
   profileEmail: {
     color: theme.dim,
@@ -6360,11 +6371,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: theme.backgroundAlt,
     borderColor: theme.border,
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: 1,
     flexDirection: "row",
-    gap: 9,
-    padding: 9,
+    gap: 10,
+    padding: 10,
   },
   proofItemSectionLabel: {
     color: theme.dim,
@@ -6425,7 +6436,7 @@ const styles = StyleSheet.create({
   },
   quickActionText: {
     color: theme.text,
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: "700",
     letterSpacing: 0,
     textAlign: "center",
@@ -6437,14 +6448,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: theme.panelStrong,
     borderColor: theme.border,
-    borderRadius: 8,
+    borderRadius: 14,
     borderWidth: 1,
     flexBasis: "47.8%",
     flexGrow: 1,
+    gap: 10,
     justifyContent: "center",
-    minHeight: 76,
+    minHeight: 96,
     paddingHorizontal: 10,
-    paddingVertical: 12,
+    paddingVertical: 16,
   },
   quickActionTileActive: {
     backgroundColor: theme.hostDark,
@@ -6453,10 +6465,10 @@ const styles = StyleSheet.create({
   rewardCard: {
     backgroundColor: theme.panelStrong,
     borderColor: theme.border,
-    borderRadius: 8,
+    borderRadius: 14,
     borderWidth: 1,
-    gap: 10,
-    padding: 12,
+    gap: 12,
+    padding: 14,
   },
   rewardIcon: {
     alignItems: "center",
@@ -6514,10 +6526,10 @@ const styles = StyleSheet.create({
   reviewCard: {
     backgroundColor: theme.panelStrong,
     borderColor: theme.border,
-    borderRadius: 8,
+    borderRadius: 14,
     borderWidth: 1,
-    gap: 12,
-    padding: 12,
+    gap: 14,
+    padding: 14,
   },
   reviewHeader: {
     alignItems: "flex-start",
@@ -6587,10 +6599,10 @@ const styles = StyleSheet.create({
   roomWorkspace: {
     backgroundColor: theme.panel,
     borderColor: theme.border,
-    borderRadius: 8,
+    borderRadius: 16,
     borderWidth: 1,
-    gap: 14,
-    padding: 14,
+    gap: 16,
+    padding: 16,
   },
   roomWorkspaceHeader: {
     alignItems: "flex-start",
@@ -6652,11 +6664,11 @@ const styles = StyleSheet.create({
   selectableRoomCard: {
     backgroundColor: theme.backgroundAlt,
     borderColor: theme.border,
-    borderRadius: 8,
+    borderRadius: 14,
     borderWidth: 1,
     minHeight: 166,
-    padding: 12,
-    width: 236,
+    padding: 14,
+    width: 240,
   },
   selectableRoomCardActive: {
     backgroundColor: theme.participantDark,
@@ -6755,11 +6767,11 @@ const styles = StyleSheet.create({
   },
   statusBanner: {
     alignItems: "center",
-    borderRadius: 8,
+    borderRadius: 14,
     borderWidth: 1,
     flexDirection: "row",
-    gap: 9,
-    padding: 12,
+    gap: 10,
+    padding: 14,
   },
   statusBannerText: {
     flex: 1,
@@ -6768,39 +6780,40 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   statusPill: {
-    borderRadius: 8,
+    borderRadius: 100,
     borderWidth: 1,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
   },
   statusPillText: {
     fontFamily: Platform.select({ default: "monospace" }),
     fontSize: 10,
-    fontWeight: "700",
+    fontWeight: "800",
+    letterSpacing: 0.5,
     textTransform: "uppercase",
   },
   submissionCard: {
     backgroundColor: theme.panelStrong,
     borderColor: theme.border,
-    borderRadius: 8,
+    borderRadius: 14,
     borderWidth: 1,
-    padding: 12,
+    padding: 14,
   },
   submitCard: {
     backgroundColor: theme.participantDark,
     borderColor: theme.participantBorder,
-    borderRadius: 8,
+    borderRadius: 14,
     borderWidth: 1,
-    gap: 12,
+    gap: 14,
     marginTop: 14,
-    padding: 12,
+    padding: 14,
   },
   taskCard: {
     backgroundColor: theme.panelStrong,
     borderColor: theme.border,
-    borderRadius: 8,
+    borderRadius: 14,
     borderWidth: 1,
-    padding: 12,
+    padding: 14,
   },
   taskCardSelected: {
     backgroundColor: theme.participantDark,
@@ -6832,10 +6845,10 @@ const styles = StyleSheet.create({
   walletCard: {
     backgroundColor: theme.panelStrong,
     borderColor: theme.border,
-    borderRadius: 8,
+    borderRadius: 16,
     borderWidth: 1,
-    gap: 10,
-    padding: 14,
+    gap: 12,
+    padding: 18,
   },
   walletChip: {
     backgroundColor: theme.backgroundAlt,
