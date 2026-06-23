@@ -3733,11 +3733,13 @@ function QuickActionTile({
         pressed && styles.pressed,
       ]}
     >
-      <Ionicons
-        name={icon}
-        size={22}
-        color={active ? theme.host : theme.participant}
-      />
+      <View style={[styles.quickActionIconBg, active && styles.quickActionIconBgActive]}>
+        <Ionicons
+          name={icon}
+          size={22}
+          color={active ? theme.host : theme.participant}
+        />
+      </View>
       <Text
         numberOfLines={2}
         adjustsFontSizeToFit
@@ -5268,12 +5270,13 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
     backgroundColor: theme.hostDark,
     borderColor: theme.hostBorder,
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: 1,
     flexDirection: "row",
     gap: 6,
-    minHeight: 38,
-    paddingHorizontal: 10,
+    minHeight: 36,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
   },
   actionBackText: {
     color: theme.host,
@@ -5291,16 +5294,16 @@ const styles = StyleSheet.create({
   actionScreenHeader: {
     backgroundColor: theme.panelStrong,
     borderColor: theme.border,
-    borderRadius: 14,
+    borderRadius: 18,
     borderWidth: 1,
-    gap: 10,
-    padding: 14,
+    gap: 12,
+    padding: 16,
   },
   actionScreenTitle: {
     color: theme.text,
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: "800",
-    letterSpacing: 0,
+    letterSpacing: -0.5,
   },
   actionTitleBlock: {
     gap: 4,
@@ -6187,10 +6190,10 @@ const styles = StyleSheet.create({
     paddingBottom: 2,
   },
   panel: {
-    borderRadius: 16,
+    borderRadius: 18,
     borderWidth: 1,
-    gap: 14,
-    padding: 16,
+    gap: 16,
+    padding: 18,
   },
   panelEyebrow: {
     fontFamily: Platform.select({ default: "monospace" }),
@@ -6205,12 +6208,12 @@ const styles = StyleSheet.create({
   },
   panelIcon: {
     alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.22)",
-    borderRadius: 12,
+    backgroundColor: "rgba(0, 0, 0, 0.28)",
+    borderRadius: 14,
     borderWidth: 1,
-    height: 44,
+    height: 46,
     justifyContent: "center",
-    width: 44,
+    width: 46,
   },
   panelTitle: {
     color: theme.text,
@@ -6423,20 +6426,31 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 10,
   },
+  quickActionIconBg: {
+    alignItems: "center",
+    backgroundColor: "rgba(30, 234, 176, 0.10)",
+    borderRadius: 22,
+    height: 44,
+    justifyContent: "center",
+    width: 44,
+  },
+  quickActionIconBgActive: {
+    backgroundColor: "rgba(160, 96, 255, 0.15)",
+  },
   quickActionsSection: {
     gap: 10,
   },
   quickActionsTitle: {
-    color: theme.muted,
+    color: theme.participant,
     fontFamily: Platform.select({ default: "monospace" }),
     fontSize: 12,
     fontWeight: "800",
-    letterSpacing: 0,
+    letterSpacing: 1.5,
     textTransform: "uppercase",
   },
   quickActionText: {
-    color: theme.text,
-    fontSize: 13,
+    color: theme.muted,
+    fontSize: 12,
     fontWeight: "700",
     letterSpacing: 0,
     textAlign: "center",
@@ -6448,19 +6462,22 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: theme.panelStrong,
     borderColor: theme.border,
-    borderRadius: 14,
+    borderRadius: 18,
+    borderTopColor: theme.hostBorder,
+    borderTopWidth: 2,
     borderWidth: 1,
     flexBasis: "47.8%",
     flexGrow: 1,
-    gap: 10,
+    gap: 8,
     justifyContent: "center",
-    minHeight: 96,
+    minHeight: 100,
     paddingHorizontal: 10,
     paddingVertical: 16,
   },
   quickActionTileActive: {
     backgroundColor: theme.hostDark,
     borderColor: theme.host,
+    borderTopColor: theme.host,
   },
   rewardCard: {
     backgroundColor: theme.panelStrong,
@@ -6675,9 +6692,10 @@ const styles = StyleSheet.create({
     borderColor: theme.participant,
   },
   sectionEyebrow: {
-    color: theme.participantBorder,
+    color: theme.muted,
     fontFamily: Platform.select({ default: "monospace" }),
     fontSize: 10,
+    letterSpacing: 1.2,
     textTransform: "uppercase",
   },
   sectionHeadingRow: {
