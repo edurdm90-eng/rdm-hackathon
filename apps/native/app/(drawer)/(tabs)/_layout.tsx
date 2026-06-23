@@ -115,7 +115,7 @@ const styles = StyleSheet.create({
     width: 30,
   },
   iconShellActive: {
-    backgroundColor: "rgba(30, 234, 176, 0.15)",
+    backgroundColor: "rgba(255, 255, 255, 0.10)",
     borderColor: theme.participantBorder,
     borderRadius: 10,
     borderWidth: 1,
@@ -133,7 +133,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   navItemActive: {
-    backgroundColor: "rgba(30, 234, 176, 0.10)",
+    backgroundColor: "rgba(255, 255, 255, 0.06)",
   },
   navItemPressed: {
     opacity: 0.74,

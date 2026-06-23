@@ -7,6 +7,7 @@ import { useNavigation, useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Dimensions,
   Image,
   KeyboardAvoidingView,
   Linking,
@@ -28,6 +29,7 @@ import { HACK_THEME as theme } from "@/lib/constants";
 import { queryClient, trpc } from "@/utils/trpc";
 
 const rdmLogo = require("@/assets/logo/rdm-logo.png");
+const SCREEN_WIDTH = Dimensions.get("window").width;
 
 type RouterOutputs = inferRouterOutputs<AppRouter>;
 type DashboardData = RouterOutputs["hackRoom"]["dashboard"];
@@ -39,6 +41,7 @@ type Role = "participant" | "host";
 type TaskKind = "task" | "challenge" | "game";
 type RoomTab =
   | "assign"
+  | "awards"
   | "badges"
   | "certificates"
   | "challenges"
@@ -1631,9 +1634,7 @@ function HostRoomWorkspace({
     { icon: "shield-checkmark-outline", id: "verify", label: "Verify" },
     { icon: "time-outline", id: "history", label: "History" },
     { icon: "trophy-outline", id: "winners", label: "Award XRDM" },
-    { icon: "medal-outline", id: "badges", label: "Badges" },
-    { icon: "ribbon-outline", id: "certificates", label: "Certificates" },
-    { icon: "diamond-outline", id: "nfts", label: "NFT Badges" },
+    { icon: "ribbon-outline", id: "awards", label: "Certificates & NFTs" },
     { icon: "game-controller-outline", id: "challenges", label: "Games" },
     { icon: "podium-outline", id: "leaderboard", label: "Leaderboard" },
     { icon: "person-circle-outline", id: "profile", label: "Profile" },
@@ -1997,6 +1998,29 @@ function HostRoomWorkspace({
           setRewardForm={setRewardForm}
           winnerSubmissions={winnerSubmissions}
         />
+      ) : null}
+
+      {activeRoomTab === "awards" ? (
+        <>
+          <HostCertificatesPanel
+            issueRewardPending={issueRewardPending}
+            onIssueReward={onIssueReward}
+            rewardForm={rewardForm}
+            rewards={rewards}
+            room={room}
+            setRewardForm={setRewardForm}
+            winnerSubmissions={winnerSubmissions}
+          />
+          <HostNftBadgesPanel
+            issueRewardPending={issueRewardPending}
+            onIssueReward={onIssueReward}
+            rewardForm={rewardForm}
+            rewards={rewards}
+            room={room}
+            setRewardForm={setRewardForm}
+            winnerSubmissions={winnerSubmissions}
+          />
+        </>
       ) : null}
 
       {activeRoomTab === "leaderboard" ? (
@@ -6428,14 +6452,14 @@ const styles = StyleSheet.create({
   },
   quickActionIconBg: {
     alignItems: "center",
-    backgroundColor: "rgba(30, 234, 176, 0.10)",
+    backgroundColor: "rgba(255, 255, 255, 0.07)",
     borderRadius: 22,
     height: 44,
     justifyContent: "center",
     width: 44,
   },
   quickActionIconBgActive: {
-    backgroundColor: "rgba(160, 96, 255, 0.15)",
+    backgroundColor: "rgba(255, 255, 255, 0.12)",
   },
   quickActionsSection: {
     gap: 10,
@@ -6685,11 +6709,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     minHeight: 166,
     padding: 14,
-    width: 240,
+    width: SCREEN_WIDTH - 56,
   },
   selectableRoomCardActive: {
     backgroundColor: theme.participantDark,
-    borderColor: theme.participant,
+    borderColor: theme.participantBorder,
   },
   sectionEyebrow: {
     color: theme.muted,
