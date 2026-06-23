@@ -91,7 +91,7 @@ function ElegantTabBar({ descriptors, navigation, state }: ElegantTabBarProps) {
               ]}
             >
               <View style={[styles.iconShell, focused && styles.iconShellActive]}>
-                <Ionicons name={icon} size={focused ? 20 : 19} color={color} />
+                <Ionicons name={icon} size={focused ? 17 : 16} color={color} />
               </View>
               <Text
                 numberOfLines={1}
@@ -110,27 +110,27 @@ function ElegantTabBar({ descriptors, navigation, state }: ElegantTabBarProps) {
 const styles = StyleSheet.create({
   iconShell: {
     alignItems: "center",
-    height: 26,
+    height: 20,
     justifyContent: "center",
-    width: 30,
+    width: 24,
   },
   iconShellActive: {
     backgroundColor: "rgba(255, 255, 255, 0.10)",
     borderColor: theme.participantBorder,
-    borderRadius: 10,
+    borderRadius: 8,
     borderWidth: 1,
-    height: 34,
-    width: 42,
+    height: 28,
+    width: 36,
   },
   navItem: {
     alignItems: "center",
-    borderRadius: 22,
+    borderRadius: 18,
     flex: 1,
-    gap: 3,
+    gap: 2,
     justifyContent: "center",
-    minHeight: 54,
+    minHeight: 44,
     paddingHorizontal: 4,
-    paddingVertical: 8,
+    paddingVertical: 5,
   },
   navItemActive: {
     backgroundColor: "rgba(255, 255, 255, 0.06)",
@@ -140,9 +140,9 @@ const styles = StyleSheet.create({
   },
   navLabel: {
     color: theme.muted,
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "600",
-    letterSpacing: 0.4,
+    letterSpacing: 0.3,
   },
   navLabelActive: {
     color: theme.participant,
@@ -152,26 +152,26 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: theme.panel,
     borderColor: theme.borderSoft,
-    borderRadius: 32,
+    borderRadius: 26,
     borderWidth: 1,
     flexDirection: "row",
-    gap: 4,
-    minHeight: 68,
-    padding: 6,
+    gap: 3,
+    minHeight: 54,
+    padding: 5,
     ...Platform.select({
       ios: {
         shadowColor: "#000000",
-        shadowOffset: { height: 10, width: 0 },
-        shadowOpacity: 0.30,
-        shadowRadius: 24,
+        shadowOffset: { height: 6, width: 0 },
+        shadowOpacity: 0.26,
+        shadowRadius: 18,
       },
       default: {
-        elevation: 14,
+        elevation: 10,
       },
     }),
   },
   navWrap: {
-    paddingHorizontal: 14,
-    paddingTop: 8,
+    paddingHorizontal: 16,
+    paddingTop: 6,
   },
 });
