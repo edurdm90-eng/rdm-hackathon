@@ -42,12 +42,9 @@ type TaskKind = "task" | "challenge" | "game";
 type RoomTab =
   | "assign"
   | "awards"
-  | "badges"
-  | "certificates"
   | "challenges"
   | "history"
   | "leaderboard"
-  | "nfts"
   | "participants"
   | "profile"
   | "verify"
@@ -1322,17 +1319,31 @@ function SelectableRoomCard({
 }) {
   const tone = role === "host" ? "violet" : "cyan";
   return (
-    <Pressable
-      accessibilityRole="button"
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.selectableRoomCard,
-        selected && styles.selectableRoomCardActive,
-        pressed && styles.pressed,
-      ]}
-    >
-      <View style={styles.cardTopRow}>
-        <StatusPill label={role} tone={tone} />
+    <View style={[styles.selectableRoomCard, selected && styles.selectableRoomCardActive]}>
+      <Pressable
+        accessibilityRole="button"
+        onPress={onPress}
+        style={({ pressed }) => [styles.selectableRoomContent, pressed && styles.pressed]}
+      >
+        <View style={styles.cardTopRow}>
+          <StatusPill label={role} tone={tone} />
+          <View style={styles.roomShareIconSpacer} />
+        </View>
+        <Text numberOfLines={1} style={styles.cardTitle}>
+          {room.name}
+        </Text>
+        <Text numberOfLines={2} style={styles.cardDescription}>
+          {room.description || `Hosted by ${room.hostName}`}
+        </Text>
+        <View style={styles.inviteMiniRow}>
+          <Ionicons name="key-outline" size={14} color={theme.host} />
+          <Text numberOfLines={1} style={styles.inviteMiniText}>
+            {room.inviteCode}
+          </Text>
+        </View>
+        <Text style={styles.cardMeta}>{room.participants.length} participants</Text>
+      </Pressable>
+      <View style={styles.roomShareFloatingWrap}>
         <Pressable
           accessibilityRole="button"
           onPress={onShare}
@@ -1341,20 +1352,7 @@ function SelectableRoomCard({
           <Ionicons name="share-outline" size={15} color={theme.muted} />
         </Pressable>
       </View>
-      <Text numberOfLines={1} style={styles.cardTitle}>
-        {room.name}
-      </Text>
-      <Text numberOfLines={2} style={styles.cardDescription}>
-        {room.description || `Hosted by ${room.hostName}`}
-      </Text>
-      <View style={styles.inviteMiniRow}>
-        <Ionicons name="key-outline" size={14} color={theme.host} />
-        <Text numberOfLines={1} style={styles.inviteMiniText}>
-          {room.inviteCode}
-        </Text>
-      </View>
-      <Text style={styles.cardMeta}>{room.participants.length} participants</Text>
-    </Pressable>
+    </View>
   );
 }
 
@@ -1634,7 +1632,7 @@ function HostRoomWorkspace({
     { icon: "shield-checkmark-outline", id: "verify", label: "Verify" },
     { icon: "time-outline", id: "history", label: "History" },
     { icon: "trophy-outline", id: "winners", label: "Award XRDM" },
-    { icon: "ribbon-outline", id: "awards", label: "Certificates & NFTs" },
+    { icon: "ribbon-outline", id: "awards", label: "Awards" },
     { icon: "game-controller-outline", id: "challenges", label: "Games" },
     { icon: "podium-outline", id: "leaderboard", label: "Leaderboard" },
     { icon: "person-circle-outline", id: "profile", label: "Profile" },
@@ -1932,95 +1930,16 @@ function HostRoomWorkspace({
         </Panel>
       ) : null}
 
-      {activeRoomTab === "badges" ? (
-        <Panel
-          action={<CounterLabel label={`${room.participants.length} members`} />}
-          eyebrow="Recognition"
-          icon="medal-outline"
-          title="Assign Badges"
-          tone="violet"
-        >
-          <View style={styles.badgeGrid}>
-            {room.participants.length ? (
-              room.participants.map((participant) => {
-                const approvedCount = historySubmissions.filter(
-                  (submission) => submission.participantId === participant.userId,
-                ).length;
-                const winCount = winnerSubmissions.filter(
-                  (submission) => submission.participantId === participant.userId,
-                ).length;
-                return (
-                  <View key={participant.userId} style={styles.badgeMemberCard}>
-                    <ParticipantListItem participant={participant} />
-                    <View style={styles.badgeChipRow}>
-                      <StatusPill label="Builder" tone="cyan" />
-                      <StatusPill
-                        label={approvedCount ? "Verified" : "Needs Proof"}
-                        tone={approvedCount ? "violet" : "orange"}
-                      />
-                      <StatusPill
-                        label={winCount ? "Winner" : "Nominate"}
-                        tone={winCount ? "gold" : "cyan"}
-                      />
-                    </View>
-                  </View>
-                );
-              })
-            ) : (
-              <EmptyState
-                icon="medal-outline"
-                text="Members will appear here when participants join the room."
-              />
-            )}
-          </View>
-        </Panel>
-      ) : null}
-
-      {activeRoomTab === "certificates" ? (
-        <HostCertificatesPanel
-          issueRewardPending={issueRewardPending}
-          onIssueReward={onIssueReward}
-          rewardForm={rewardForm}
-          rewards={rewards}
-          room={room}
-          setRewardForm={setRewardForm}
-          winnerSubmissions={winnerSubmissions}
-        />
-      ) : null}
-
-      {activeRoomTab === "nfts" ? (
-        <HostNftBadgesPanel
-          issueRewardPending={issueRewardPending}
-          onIssueReward={onIssueReward}
-          rewardForm={rewardForm}
-          rewards={rewards}
-          room={room}
-          setRewardForm={setRewardForm}
-          winnerSubmissions={winnerSubmissions}
-        />
-      ) : null}
-
       {activeRoomTab === "awards" ? (
-        <>
-          <HostCertificatesPanel
-            issueRewardPending={issueRewardPending}
-            onIssueReward={onIssueReward}
-            rewardForm={rewardForm}
-            rewards={rewards}
-            room={room}
-            setRewardForm={setRewardForm}
-            winnerSubmissions={winnerSubmissions}
-          />
-          <HostNftBadgesPanel
-            issueRewardPending={issueRewardPending}
-            onIssueReward={onIssueReward}
-            rewardForm={rewardForm}
-            rewards={rewards}
-            room={room}
-            setRewardForm={setRewardForm}
-            winnerSubmissions={winnerSubmissions}
-          />
-        </>
+        <HostAwardsPanel
+          issueRewardPending={issueRewardPending}
+          onIssueReward={onIssueReward}
+          rewardForm={rewardForm}
+          rewards={rewards}
+          room={room}
+          setRewardForm={setRewardForm}
+          winnerSubmissions={winnerSubmissions}
+        />
       ) : null}
 
       {activeRoomTab === "leaderboard" ? (
@@ -2845,6 +2764,72 @@ function QuickMathsGame({ onComplete }: { onComplete: (result: MiniGameResult) =
         />
       </View>
       {completed ? <StatusPill label="Result ready for proof" tone="gold" /> : null}
+    </View>
+  );
+}
+
+function HostAwardsPanel({
+  issueRewardPending,
+  onIssueReward,
+  rewardForm,
+  rewards,
+  room,
+  setRewardForm,
+  winnerSubmissions,
+}: {
+  issueRewardPending: boolean;
+  onIssueReward: (kind: RewardKind) => void;
+  rewardForm: ReturnType<typeof makeEmptyRewardForm>;
+  rewards: Array<HackReward>;
+  room: HackRoom;
+  setRewardForm: React.Dispatch<React.SetStateAction<ReturnType<typeof makeEmptyRewardForm>>>;
+  winnerSubmissions: DashboardData["hostSubmissions"];
+}) {
+  const [awardMode, setAwardMode] = useState<"certificates" | "nfts">("certificates");
+
+  const switchMode = (mode: "certificates" | "nfts") => {
+    setAwardMode(mode);
+    setRewardForm(makeEmptyRewardForm());
+  };
+
+  return (
+    <View style={styles.trackStack}>
+      <View style={styles.awardModeSwitch}>
+        <KindButton
+          active={awardMode === "certificates"}
+          icon="ribbon-outline"
+          label="Certificates"
+          onPress={() => switchMode("certificates")}
+        />
+        <KindButton
+          active={awardMode === "nfts"}
+          icon="diamond-outline"
+          label="NFT Badges"
+          onPress={() => switchMode("nfts")}
+        />
+      </View>
+
+      {awardMode === "certificates" ? (
+        <HostCertificatesPanel
+          issueRewardPending={issueRewardPending}
+          onIssueReward={onIssueReward}
+          rewardForm={rewardForm}
+          rewards={rewards}
+          room={room}
+          setRewardForm={setRewardForm}
+          winnerSubmissions={winnerSubmissions}
+        />
+      ) : (
+        <HostNftBadgesPanel
+          issueRewardPending={issueRewardPending}
+          onIssueReward={onIssueReward}
+          rewardForm={rewardForm}
+          rewards={rewards}
+          room={room}
+          setRewardForm={setRewardForm}
+          winnerSubmissions={winnerSubmissions}
+        />
+      )}
     </View>
   );
 }
@@ -3772,38 +3757,6 @@ function QuickActionTile({
       >
         {label}
       </Text>
-    </Pressable>
-  );
-}
-
-function RoomTabButton({
-  active,
-  icon,
-  label,
-  onPress,
-  tone,
-}: {
-  active: boolean;
-  icon: React.ComponentProps<typeof Ionicons>["name"];
-  label: string;
-  onPress: () => void;
-  tone: "cyan" | "violet";
-}) {
-  const toneColors = getToneColors(tone);
-  return (
-    <Pressable
-      accessibilityRole="button"
-      onPress={onPress}
-      style={[
-        styles.roomTabButton,
-        active && {
-          backgroundColor: toneColors.bg,
-          borderColor: toneColors.fg,
-        },
-      ]}
-    >
-      <Ionicons name={icon} size={16} color={active ? toneColors.fg : theme.muted} />
-      <Text style={[styles.roomTabText, active && { color: toneColors.fg }]}>{label}</Text>
     </Pressable>
   );
 }
@@ -5316,46 +5269,34 @@ const styles = StyleSheet.create({
     color: theme.participant,
   },
   actionScreenHeader: {
-    backgroundColor: theme.panelStrong,
+    backgroundColor: theme.backgroundAlt,
     borderColor: theme.border,
-    borderRadius: 12,
+    borderRadius: 10,
     borderWidth: 1,
-    gap: 8,
-    padding: 12,
+    gap: 7,
+    padding: 10,
   },
   actionScreenTitle: {
     color: theme.text,
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: "800",
-    letterSpacing: -0.3,
+    letterSpacing: 0,
   },
   actionTitleBlock: {
     gap: 4,
   },
-  badgeChipRow: {
+  awardModeSwitch: {
     flexDirection: "row",
-    flexWrap: "wrap",
     gap: 8,
-    marginTop: 10,
-  },
-  badgeGrid: {
-    gap: 10,
-  },
-  badgeMemberCard: {
-    backgroundColor: theme.backgroundAlt,
-    borderColor: theme.border,
-    borderRadius: 8,
-    borderWidth: 1,
-    padding: 10,
   },
   button: {
     alignItems: "center",
-    borderRadius: 10,
+    borderRadius: 8,
     flexDirection: "row",
     gap: 6,
     justifyContent: "center",
-    minHeight: 42,
-    paddingHorizontal: 14,
+    minHeight: 40,
+    paddingHorizontal: 12,
   },
   buttonText: {
     fontSize: 13,
@@ -5436,9 +5377,9 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   dashboardContent: {
-    gap: 12,
-    padding: 12,
-    paddingBottom: 24,
+    gap: 10,
+    padding: 10,
+    paddingBottom: 22,
   },
   dashboardCopy: {
     color: theme.muted,
@@ -5456,9 +5397,9 @@ const styles = StyleSheet.create({
   dashboardHero: {
     backgroundColor: theme.panel,
     borderColor: theme.border,
-    borderRadius: 14,
+    borderRadius: 12,
     borderWidth: 1,
-    padding: 14,
+    padding: 12,
   },
   dateDoneButton: {
     alignItems: "center",
@@ -5575,7 +5516,7 @@ const styles = StyleSheet.create({
     paddingTop: 10,
   },
   field: {
-    gap: 7,
+    gap: 6,
   },
   fieldLabel: {
     color: theme.dim,
@@ -5592,18 +5533,18 @@ const styles = StyleSheet.create({
   assignmentComposer: {
     backgroundColor: theme.panelStrong,
     borderColor: theme.border,
-    borderRadius: 12,
+    borderRadius: 10,
     borderWidth: 1,
-    gap: 12,
-    padding: 12,
+    gap: 10,
+    padding: 10,
   },
   createRoomCard: {
     backgroundColor: theme.panelStrong,
     borderColor: theme.border,
-    borderRadius: 8,
+    borderRadius: 10,
     borderWidth: 1,
-    gap: 12,
-    padding: 12,
+    gap: 10,
+    padding: 10,
   },
   createRoomTrigger: {
     alignItems: "center",
@@ -5650,9 +5591,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   homeHeaderLogo: {
-    height: 34,
+    height: 32,
     resizeMode: "cover",
-    width: 90,
+    width: 86,
   },
   homeHeaderSafe: {
     backgroundColor: theme.background,
@@ -5671,9 +5612,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     color: theme.text,
     fontSize: 13,
-    minHeight: 42,
+    minHeight: 40,
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 9,
   },
   inputMultiline: {
     minHeight: 76,
@@ -5773,9 +5714,9 @@ const styles = StyleSheet.create({
   gameAssignmentCard: {
     backgroundColor: theme.awardDark,
     borderColor: theme.awardBorder,
-    borderRadius: 14,
+    borderRadius: 10,
     borderWidth: 1,
-    padding: 14,
+    padding: 11,
   },
   gameAssignmentIcon: {
     alignItems: "center",
@@ -5902,11 +5843,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: theme.participantDark,
     borderColor: theme.participantBorder,
-    borderRadius: 14,
+    borderRadius: 10,
     borderWidth: 1,
     flexDirection: "row",
-    gap: 10,
-    padding: 14,
+    gap: 9,
+    padding: 11,
   },
   ledgerText: {
     color: theme.muted,
@@ -5953,8 +5894,8 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   listStack: {
-    gap: 10,
-    marginTop: 12,
+    gap: 8,
+    marginTop: 10,
   },
   loadingInline: {
     alignItems: "center",
@@ -5973,11 +5914,11 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   metricCard: {
-    borderRadius: 14,
+    borderRadius: 10,
     borderWidth: 1,
     flex: 1,
-    minHeight: 100,
-    padding: 14,
+    minHeight: 82,
+    padding: 11,
   },
   metricLabel: {
     color: theme.muted,
@@ -5988,10 +5929,10 @@ const styles = StyleSheet.create({
   },
   metricValue: {
     color: theme.text,
-    fontSize: 28,
+    fontSize: 22,
     fontWeight: "800",
-    letterSpacing: -0.5,
-    marginTop: 8,
+    letterSpacing: 0,
+    marginTop: 5,
   },
   metricsGrid: {
     flexDirection: "row",
@@ -6006,11 +5947,11 @@ const styles = StyleSheet.create({
   modalCard: {
     backgroundColor: theme.panel,
     borderColor: theme.border,
-    borderRadius: 20,
+    borderRadius: 14,
     borderWidth: 1,
-    gap: 16,
+    gap: 13,
     maxWidth: 430,
-    padding: 20,
+    padding: 16,
     width: "100%",
   },
   modalCloseButton: {
@@ -6161,11 +6102,11 @@ const styles = StyleSheet.create({
   miniGameSurface: {
     backgroundColor: theme.panelStrong,
     borderColor: theme.awardBorder,
-    borderRadius: 14,
+    borderRadius: 10,
     borderWidth: 1,
-    gap: 14,
-    marginBottom: 12,
-    padding: 14,
+    gap: 10,
+    marginBottom: 10,
+    padding: 11,
   },
   mutedText: {
     color: theme.muted,
@@ -6191,12 +6132,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: theme.panelStrong,
     borderColor: theme.awardBorder,
-    borderRadius: 14,
+    borderRadius: 10,
     borderWidth: 1,
     gap: 6,
-    minHeight: 112,
-    padding: 12,
-    width: 100,
+    minHeight: 96,
+    padding: 10,
+    width: 92,
   },
   nftBadgeDate: {
     color: theme.dim,
@@ -6214,10 +6155,10 @@ const styles = StyleSheet.create({
     paddingBottom: 2,
   },
   panel: {
-    borderRadius: 14,
+    borderRadius: 10,
     borderWidth: 1,
-    gap: 12,
-    padding: 14,
+    gap: 10,
+    padding: 11,
   },
   panelEyebrow: {
     fontFamily: Platform.select({ default: "monospace" }),
@@ -6233,11 +6174,11 @@ const styles = StyleSheet.create({
   panelIcon: {
     alignItems: "center",
     backgroundColor: "rgba(0, 0, 0, 0.28)",
-    borderRadius: 10,
+    borderRadius: 8,
     borderWidth: 1,
-    height: 38,
+    height: 34,
     justifyContent: "center",
-    width: 38,
+    width: 34,
   },
   panelTitle: {
     color: theme.text,
@@ -6349,10 +6290,10 @@ const styles = StyleSheet.create({
   proofChip: {
     backgroundColor: theme.panelStrong,
     borderColor: theme.border,
-    borderRadius: 8,
+    borderRadius: 7,
     borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
   },
   proofChipActive: {
     backgroundColor: theme.hostDark,
@@ -6398,11 +6339,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: theme.backgroundAlt,
     borderColor: theme.border,
-    borderRadius: 12,
+    borderRadius: 8,
     borderWidth: 1,
     flexDirection: "row",
-    gap: 10,
-    padding: 10,
+    gap: 8,
+    padding: 8,
   },
   proofItemSectionLabel: {
     color: theme.dim,
@@ -6453,10 +6394,10 @@ const styles = StyleSheet.create({
   quickActionIconBg: {
     alignItems: "center",
     backgroundColor: "rgba(255, 255, 255, 0.07)",
-    borderRadius: 16,
-    height: 34,
+    borderRadius: 14,
+    height: 30,
     justifyContent: "center",
-    width: 34,
+    width: 30,
   },
   quickActionIconBgActive: {
     backgroundColor: "rgba(255, 255, 255, 0.12)",
@@ -6474,8 +6415,8 @@ const styles = StyleSheet.create({
   },
   quickActionText: {
     color: theme.muted,
-    fontSize: 11,
-    fontWeight: "600",
+    fontSize: 10,
+    fontWeight: "700",
     letterSpacing: 0,
     textAlign: "center",
   },
@@ -6486,17 +6427,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: theme.panelStrong,
     borderColor: theme.border,
-    borderRadius: 12,
+    borderRadius: 10,
     borderTopColor: theme.hostBorder,
     borderTopWidth: 1,
     borderWidth: 1,
     flexBasis: "47.8%",
     flexGrow: 1,
-    gap: 6,
+    gap: 5,
     justifyContent: "center",
-    minHeight: 76,
+    minHeight: 68,
     paddingHorizontal: 8,
-    paddingVertical: 12,
+    paddingVertical: 9,
   },
   quickActionTileActive: {
     backgroundColor: theme.hostDark,
@@ -6506,10 +6447,10 @@ const styles = StyleSheet.create({
   rewardCard: {
     backgroundColor: theme.panelStrong,
     borderColor: theme.border,
-    borderRadius: 10,
+    borderRadius: 8,
     borderWidth: 1,
-    gap: 10,
-    padding: 11,
+    gap: 8,
+    padding: 10,
   },
   rewardIcon: {
     alignItems: "center",
@@ -6567,10 +6508,10 @@ const styles = StyleSheet.create({
   reviewCard: {
     backgroundColor: theme.panelStrong,
     borderColor: theme.border,
-    borderRadius: 10,
+    borderRadius: 8,
     borderWidth: 1,
-    gap: 10,
-    padding: 11,
+    gap: 9,
+    padding: 10,
   },
   reviewHeader: {
     alignItems: "flex-start",
@@ -6588,6 +6529,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     height: 32,
     justifyContent: "center",
+    width: 32,
+  },
+  roomShareFloatingWrap: {
+    position: "absolute",
+    right: 10,
+    top: 10,
+  },
+  roomShareIconSpacer: {
+    height: 32,
     width: 32,
   },
   roomShelf: {
@@ -6617,33 +6567,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
   },
-  roomTabButton: {
-    alignItems: "center",
-    backgroundColor: theme.panelStrong,
-    borderColor: theme.border,
-    borderRadius: 8,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 7,
-    minHeight: 42,
-    paddingHorizontal: 12,
-  },
-  roomTabText: {
-    color: theme.muted,
-    fontSize: 12,
-    fontWeight: "800",
-  },
-  roomTabs: {
-    gap: 8,
-    paddingBottom: 2,
-  },
   roomWorkspace: {
     backgroundColor: theme.panel,
     borderColor: theme.border,
-    borderRadius: 12,
+    borderRadius: 10,
     borderWidth: 1,
-    gap: 12,
-    padding: 12,
+    gap: 10,
+    padding: 10,
   },
   roomWorkspaceHeader: {
     alignItems: "flex-start",
@@ -6653,10 +6583,10 @@ const styles = StyleSheet.create({
   },
   roomWorkspaceTitle: {
     color: theme.text,
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: "800",
     letterSpacing: 0,
-    lineHeight: 22,
+    lineHeight: 21,
   },
   roomWorkspaceTitleBlock: {
     flex: 1,
@@ -6705,15 +6635,18 @@ const styles = StyleSheet.create({
   selectableRoomCard: {
     backgroundColor: theme.backgroundAlt,
     borderColor: theme.border,
-    borderRadius: 12,
+    borderRadius: 10,
     borderWidth: 1,
-    minHeight: 140,
-    padding: 12,
-    width: SCREEN_WIDTH - 56,
+    minHeight: 126,
+    overflow: "hidden",
+    width: SCREEN_WIDTH - 48,
   },
   selectableRoomCardActive: {
     backgroundColor: theme.participantDark,
     borderColor: theme.participantBorder,
+  },
+  selectableRoomContent: {
+    padding: 10,
   },
   sectionEyebrow: {
     color: theme.muted,
@@ -6809,11 +6742,11 @@ const styles = StyleSheet.create({
   },
   statusBanner: {
     alignItems: "center",
-    borderRadius: 10,
+    borderRadius: 8,
     borderWidth: 1,
     flexDirection: "row",
     gap: 8,
-    padding: 10,
+    padding: 9,
   },
   statusBannerText: {
     flex: 1,
@@ -6837,25 +6770,25 @@ const styles = StyleSheet.create({
   submissionCard: {
     backgroundColor: theme.panelStrong,
     borderColor: theme.border,
-    borderRadius: 10,
+    borderRadius: 8,
     borderWidth: 1,
-    padding: 11,
+    padding: 10,
   },
   submitCard: {
     backgroundColor: theme.participantDark,
     borderColor: theme.participantBorder,
-    borderRadius: 10,
+    borderRadius: 8,
     borderWidth: 1,
-    gap: 10,
-    marginTop: 10,
-    padding: 12,
+    gap: 9,
+    marginTop: 9,
+    padding: 10,
   },
   taskCard: {
     backgroundColor: theme.panelStrong,
     borderColor: theme.border,
-    borderRadius: 10,
+    borderRadius: 8,
     borderWidth: 1,
-    padding: 11,
+    padding: 10,
   },
   taskCardSelected: {
     backgroundColor: theme.participantDark,
@@ -6871,7 +6804,7 @@ const styles = StyleSheet.create({
     minHeight: 96,
   },
   trackStack: {
-    gap: 10,
+    gap: 8,
   },
   walletBalance: {
     color: theme.text,
@@ -6887,10 +6820,10 @@ const styles = StyleSheet.create({
   walletCard: {
     backgroundColor: theme.panelStrong,
     borderColor: theme.border,
-    borderRadius: 12,
+    borderRadius: 10,
     borderWidth: 1,
-    gap: 10,
-    padding: 14,
+    gap: 8,
+    padding: 11,
   },
   walletChip: {
     backgroundColor: theme.backgroundAlt,

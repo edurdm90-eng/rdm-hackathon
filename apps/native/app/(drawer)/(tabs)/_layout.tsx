@@ -36,95 +36,107 @@ function TabBar({ descriptors, navigation, state }: ElegantTabBarProps) {
   const insets = useSafeAreaInsets();
 
   return (
-    <View style={[styles.bar, { paddingBottom: Math.max(insets.bottom, 8) }]}>
-      {state.routes.map((route, index) => {
-        const focused = state.index === index;
-        const options = descriptors[route.key]?.options;
-        const label =
-          typeof options?.tabBarLabel === "string"
-            ? options.tabBarLabel
-            : options?.title ?? route.name;
-        const icon = tabIcons[route.name as TabRouteName] ?? "ellipse-outline";
+    <View style={[styles.barWrap, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+      <View style={styles.bar}>
+        {state.routes.map((route, index) => {
+          const focused = state.index === index;
+          const options = descriptors[route.key]?.options;
+          const label =
+            typeof options?.tabBarLabel === "string"
+              ? options.tabBarLabel
+              : options?.title ?? route.name;
+          const icon = tabIcons[route.name as TabRouteName] ?? "ellipse-outline";
 
-        const onPress = () => {
-          const event = navigation.emit({
-            canPreventDefault: true,
-            target: route.key,
-            type: "tabPress",
-          });
-          if (!focused && !event.defaultPrevented) {
-            navigation.navigate(route.name);
-          }
-        };
+          const onPress = () => {
+            const event = navigation.emit({
+              canPreventDefault: true,
+              target: route.key,
+              type: "tabPress",
+            });
+            if (!focused && !event.defaultPrevented) {
+              navigation.navigate(route.name);
+            }
+          };
 
-        return (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityState={focused ? { selected: true } : undefined}
-            key={route.key}
-            onPress={onPress}
-            style={({ pressed }) => [styles.tab, pressed && styles.tabPressed]}
-          >
-            {focused && <View style={styles.activeBar} />}
-            <Ionicons
-              name={icon}
-              size={22}
-              color={focused ? theme.text : theme.dim}
-            />
-            <Text style={[styles.label, focused && styles.labelActive]} numberOfLines={1}>
-              {label}
-            </Text>
-          </Pressable>
-        );
-      })}
+          return (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={focused ? { selected: true } : undefined}
+              key={route.key}
+              onPress={onPress}
+              style={({ pressed }) => [
+                styles.tab,
+                focused && styles.tabActive,
+                pressed && styles.tabPressed,
+              ]}
+            >
+              <Ionicons
+                name={icon}
+                size={focused ? 19 : 18}
+                color={focused ? theme.text : theme.dim}
+              />
+              <Text style={[styles.label, focused && styles.labelActive]} numberOfLines={1}>
+                {label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  activeBar: {
-    backgroundColor: theme.text,
-    borderRadius: 2,
-    height: 2,
-    position: "absolute",
-    top: 0,
-    width: 24,
-  },
   bar: {
     backgroundColor: theme.panel,
-    borderTopColor: theme.border,
-    borderTopWidth: StyleSheet.hairlineWidth,
+    borderColor: theme.border,
+    borderRadius: 18,
+    borderWidth: 1,
     flexDirection: "row",
+    gap: 4,
+    minHeight: 58,
+    padding: 5,
     ...Platform.select({
       ios: {
         shadowColor: "#000",
-        shadowOffset: { height: -2, width: 0 },
-        shadowOpacity: 0.12,
-        shadowRadius: 8,
+        shadowOffset: { height: 8, width: 0 },
+        shadowOpacity: 0.2,
+        shadowRadius: 18,
       },
       default: { elevation: 8 },
     }),
   },
+  barWrap: {
+    backgroundColor: theme.background,
+    paddingHorizontal: 14,
+    paddingTop: 7,
+  },
   label: {
     color: theme.dim,
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "600",
-    letterSpacing: 0.2,
-    marginTop: 2,
+    letterSpacing: 0,
+    marginTop: 1,
   },
   labelActive: {
     color: theme.text,
-    fontWeight: "700",
+    fontWeight: "800",
   },
   tab: {
     alignItems: "center",
+    borderRadius: 14,
     flex: 1,
-    gap: 2,
+    gap: 1,
     justifyContent: "center",
-    paddingBottom: 4,
-    paddingTop: 10,
+    minHeight: 48,
+    paddingVertical: 5,
+  },
+  tabActive: {
+    backgroundColor: theme.panelStrong,
+    borderColor: theme.border,
+    borderWidth: 1,
   },
   tabPressed: {
-    opacity: 0.6,
+    opacity: 0.7,
   },
 });
