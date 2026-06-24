@@ -17,6 +17,12 @@ const tabIcons: Record<TabRouteName, React.ComponentProps<typeof Ionicons>["name
   profile: "person-circle-outline",
 };
 
+const tabAccent: Record<TabRouteName, string> = {
+  "hack-room": theme.host,
+  index: theme.participant,
+  profile: theme.award,
+};
+
 export default function TabLayout() {
   return (
     <AuthenticatedTabs>
@@ -46,6 +52,7 @@ function TabBar({ descriptors, navigation, state }: ElegantTabBarProps) {
               ? options.tabBarLabel
               : options?.title ?? route.name;
           const icon = tabIcons[route.name as TabRouteName] ?? "ellipse-outline";
+          const accent = tabAccent[route.name as TabRouteName] ?? theme.participant;
 
           const onPress = () => {
             const event = navigation.emit({
@@ -73,9 +80,12 @@ function TabBar({ descriptors, navigation, state }: ElegantTabBarProps) {
               <Ionicons
                 name={icon}
                 size={focused ? 19 : 18}
-                color={focused ? theme.text : theme.dim}
+                color={focused ? accent : theme.faint}
               />
-              <Text style={[styles.label, focused && styles.labelActive]} numberOfLines={1}>
+              <Text
+                style={[styles.label, focused && styles.labelActive, focused && { color: accent }]}
+                numberOfLines={1}
+              >
                 {label}
               </Text>
             </Pressable>
@@ -90,12 +100,12 @@ const styles = StyleSheet.create({
   bar: {
     backgroundColor: theme.panel,
     borderColor: theme.border,
-    borderRadius: 18,
+    borderRadius: 14,
     borderWidth: 1,
     flexDirection: "row",
     gap: 4,
-    minHeight: 58,
-    padding: 5,
+    minHeight: 54,
+    padding: 4,
     ...Platform.select({
       ios: {
         shadowColor: "#000",
@@ -108,31 +118,32 @@ const styles = StyleSheet.create({
   },
   barWrap: {
     backgroundColor: theme.background,
-    paddingHorizontal: 14,
-    paddingTop: 7,
+    borderTopColor: theme.borderSoft,
+    borderTopWidth: 1,
+    paddingHorizontal: 12,
+    paddingTop: 6,
   },
   label: {
-    color: theme.dim,
+    color: theme.faint,
     fontSize: 9,
     fontWeight: "600",
     letterSpacing: 0,
     marginTop: 1,
   },
   labelActive: {
-    color: theme.text,
     fontWeight: "800",
   },
   tab: {
     alignItems: "center",
-    borderRadius: 14,
+    borderRadius: 10,
     flex: 1,
     gap: 1,
     justifyContent: "center",
-    minHeight: 48,
+    minHeight: 44,
     paddingVertical: 5,
   },
   tabActive: {
-    backgroundColor: theme.panelStrong,
+    backgroundColor: theme.surface,
     borderColor: theme.border,
     borderWidth: 1,
   },

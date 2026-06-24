@@ -71,7 +71,7 @@ type MiniGameSession = {
   task?: HackTask;
   type: GameType;
 };
-type Tone = "cyan" | "violet" | "gold" | "orange" | "red";
+type Tone = "cyan" | "violet" | "gold" | "orange" | "red" | "lime" | "sky";
 type SessionUser = {
   email: string;
   id: string;
@@ -395,8 +395,13 @@ function AuthGateway() {
 }
 
 function HomeDashboard({ user }: { user: SessionUser }) {
+  const router = useRouter();
   const dashboard = useQuery(trpc.hackRoom.dashboard.queryOptions());
   const [message, setMessage] = useState<{ text: string; tone: Tone } | null>(null);
+  const stats = dashboard.data?.stats;
+  const hostedRooms = dashboard.data?.hostedRooms ?? [];
+  const joinedRooms = dashboard.data?.joinedRooms ?? [];
+  const recentSubmissions = dashboard.data?.mySubmissions ?? [];
 
   const handleSignOut = async () => {
     await authClient.signOut();
@@ -415,11 +420,26 @@ function HomeDashboard({ user }: { user: SessionUser }) {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.dashboardHero}>
-          <Text style={styles.dashboardHeadline}>Home</Text>
+          <Text style={styles.dashboardHeadline}>Home Hub</Text>
           <Text style={styles.dashboardCopy}>
             Welcome back, {firstName(user.name)}. Your room activity, pending reviews, and XRDM
             progress live here.
           </Text>
+
+          <View style={styles.homeRoleTabs}>
+            <View style={[styles.homeRoleTab, styles.homeRoleTabParticipant]}>
+              <Ionicons name="person-outline" size={14} color={theme.participant} />
+              <Text style={[styles.homeRoleTabText, styles.homeRoleTabTextParticipant]}>
+                As Participant
+              </Text>
+            </View>
+            <View style={[styles.homeRoleTab, styles.homeRoleTabHost]}>
+              <Ionicons name="trophy-outline" size={14} color={theme.host} />
+              <Text style={[styles.homeRoleTabText, styles.homeRoleTabTextHost]}>
+                As Organizer
+              </Text>
+            </View>
+          </View>
 
           <View style={styles.profileCard}>
             <Avatar name={user.name} tone="cyan" />
@@ -435,19 +455,50 @@ function HomeDashboard({ user }: { user: SessionUser }) {
               icon="shield-checkmark-outline"
               label="Hosted"
               tone="violet"
-              value={dashboard.data?.stats.activeRooms ?? 0}
+              value={stats?.activeRooms ?? 0}
             />
             <MetricCard
               icon="enter-outline"
               label="Joined"
               tone="cyan"
-              value={dashboard.data?.stats.joinedRooms ?? 0}
+              value={stats?.joinedRooms ?? 0}
             />
             <MetricCard
               icon="hourglass-outline"
               label="Reviews"
               tone="gold"
-              value={dashboard.data?.stats.pendingSubmissions ?? 0}
+              value={stats?.pendingSubmissions ?? 0}
+            />
+          </View>
+
+          <View style={styles.homeHubGrid}>
+            <HomeHubTile
+              icon="clipboard-outline"
+              label="Assignments"
+              meta="Due and past work"
+              onPress={() => router.push("/hack-room")}
+              tone="cyan"
+            />
+            <HomeHubTile
+              icon="flash-outline"
+              label="Spot Challenge"
+              meta="Live room prompts"
+              onPress={() => router.push("/hack-room")}
+              tone="orange"
+            />
+            <HomeHubTile
+              icon="game-controller-outline"
+              label="Games"
+              meta="Play and submit score"
+              onPress={() => router.push("/hack-room")}
+              tone="lime"
+            />
+            <HomeHubTile
+              icon="diamond-outline"
+              label="Wallet"
+              meta="XRDM, certs, NFTs"
+              onPress={() => router.push("/profile")}
+              tone="gold"
             />
           </View>
         </View>
@@ -457,12 +508,12 @@ function HomeDashboard({ user }: { user: SessionUser }) {
 
         <Panel eyebrow="Overview" icon="grid-outline" title="Hack Room Snapshot" tone="cyan">
           <View style={styles.listStack}>
-            {dashboard.data?.joinedRooms.length || dashboard.data?.hostedRooms.length ? (
+            {joinedRooms.length || hostedRooms.length ? (
               <>
-                {dashboard.data.hostedRooms.slice(0, 2).map((room) => (
+                {hostedRooms.slice(0, 2).map((room) => (
                   <RoomCard key={room._id} role="host" room={room} />
                 ))}
-                {dashboard.data.joinedRooms.slice(0, 2).map((room) => (
+                {joinedRooms.slice(0, 2).map((room) => (
                   <RoomCard key={room._id} role="participant" room={room} />
                 ))}
               </>
@@ -477,12 +528,10 @@ function HomeDashboard({ user }: { user: SessionUser }) {
 
         <Panel eyebrow="Proof" icon="checkmark-circle-outline" title="Recent Submissions" tone="gold">
           <View style={styles.listStack}>
-            {dashboard.data?.mySubmissions.length ? (
-              dashboard.data.mySubmissions
+            {recentSubmissions.length ? (
+              recentSubmissions
                 .slice(0, 2)
-                .map((submission) => (
-                  <SubmissionCard key={submission._id} submission={submission} />
-                ))
+                .map((submission) => <SubmissionCard key={submission._id} submission={submission} />)
             ) : (
               <EmptyState
                 icon="checkmark-circle-outline"
@@ -499,6 +548,7 @@ function HomeDashboard({ user }: { user: SessionUser }) {
 function ProfileDashboard({ user }: { user: SessionUser }) {
   const dashboard = useQuery(trpc.hackRoom.dashboard.queryOptions());
   const [message, setMessage] = useState<{ text: string; tone: Tone } | null>(null);
+  const stats = dashboard.data?.stats;
 
   const handleSignOut = async () => {
     await authClient.signOut();
@@ -530,19 +580,19 @@ function ProfileDashboard({ user }: { user: SessionUser }) {
               icon="flash-outline"
               label="Rooms"
               tone="cyan"
-              value={(dashboard.data?.stats.activeRooms ?? 0) + (dashboard.data?.stats.joinedRooms ?? 0)}
+              value={(stats?.activeRooms ?? 0) + (stats?.joinedRooms ?? 0)}
             />
             <MetricCard
               icon="trophy-outline"
               label="Wins"
               tone="gold"
-              value={dashboard.data?.stats.winners ?? 0}
+              value={stats?.winners ?? 0}
             />
             <MetricCard
               icon="people-outline"
               label="Network"
               tone="violet"
-              value={dashboard.data?.stats.participants ?? 0}
+              value={stats?.participants ?? 0}
             />
           </View>
         </View>
@@ -1470,6 +1520,12 @@ function RoomWorkspace({
       </View>
 
       {roomRole === "host" ? (
+        <TrackLabel label="Organizer track" tone="violet" />
+      ) : (
+        <TrackLabel label="Participant track" tone="cyan" />
+      )}
+
+      {roomRole === "host" ? (
         <HostRoomWorkspace
           activeRoomTab={activeRoomTab}
           approvedSubmissions={approvedSubmissions}
@@ -1652,6 +1708,7 @@ function HostRoomWorkspace({
                 key={action.id}
                 label={action.label}
                 onPress={() => onRoomTabChange(action.id)}
+                tone="violet"
               />
             ))}
           </View>
@@ -2065,6 +2122,7 @@ function ParticipantRoomWorkspace({
                 key={action.id}
                 label={action.label}
                 onPress={() => openAction(action.id)}
+                tone={action.id === "games" ? "lime" : action.id === "wallet" ? "gold" : "cyan"}
               />
             ))}
           </View>
@@ -3725,12 +3783,15 @@ function QuickActionTile({
   icon,
   label,
   onPress,
+  tone = "violet",
 }: {
   active: boolean;
   icon: React.ComponentProps<typeof Ionicons>["name"];
   label: string;
   onPress: () => void;
+  tone?: Tone;
 }) {
+  const toneColors = getToneColors(tone);
   return (
     <Pressable
       accessibilityRole="button"
@@ -3738,26 +3799,48 @@ function QuickActionTile({
       onPress={onPress}
       style={({ pressed }) => [
         styles.quickActionTile,
-        active && styles.quickActionTileActive,
+        {
+          borderColor: active ? toneColors.border : theme.border,
+          borderTopColor: active ? toneColors.fg : toneColors.border,
+        },
+        active && { backgroundColor: toneColors.bg },
         pressed && styles.pressed,
       ]}
     >
-      <View style={[styles.quickActionIconBg, active && styles.quickActionIconBgActive]}>
+      <View
+        style={[
+          styles.quickActionIconBg,
+          {
+            backgroundColor: active ? toneColors.bg : theme.surface,
+            borderColor: active ? toneColors.border : theme.border,
+          },
+        ]}
+      >
         <Ionicons
           name={icon}
           size={18}
-          color={active ? theme.host : theme.text}
+          color={active ? toneColors.fg : theme.muted}
         />
       </View>
       <Text
         numberOfLines={2}
         adjustsFontSizeToFit
         minimumFontScale={0.78}
-        style={[styles.quickActionText, active && styles.quickActionTextActive]}
+        style={[styles.quickActionText, active && { color: toneColors.fg }]}
       >
         {label}
       </Text>
     </Pressable>
+  );
+}
+
+function TrackLabel({ label, tone }: { label: string; tone: Tone }) {
+  const toneColors = getToneColors(tone);
+  return (
+    <View style={styles.trackLabelRow}>
+      <View style={[styles.trackLabelLine, { backgroundColor: toneColors.fg }]} />
+      <Text style={[styles.trackLabelText, { color: toneColors.fg }]}>{label}</Text>
+    </View>
   );
 }
 
@@ -4760,6 +4843,39 @@ function MetricCard({
   );
 }
 
+function HomeHubTile({
+  icon,
+  label,
+  meta,
+  onPress,
+  tone,
+}: {
+  icon: React.ComponentProps<typeof Ionicons>["name"];
+  label: string;
+  meta: string;
+  onPress: () => void;
+  tone: Tone;
+}) {
+  const toneColors = getToneColors(tone);
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.homeHubTile,
+        { backgroundColor: toneColors.bg, borderColor: toneColors.border },
+        pressed && styles.pressed,
+      ]}
+    >
+      <Ionicons name={icon} size={19} color={toneColors.fg} />
+      <Text style={[styles.homeHubTileLabel, { color: toneColors.fg }]}>{label}</Text>
+      <Text numberOfLines={2} style={styles.homeHubTileMeta}>
+        {meta}
+      </Text>
+    </Pressable>
+  );
+}
+
 function RoomCard({ role, room }: { role: Role; room: HackRoom | DashboardData["joinedRooms"][number] }) {
   const tone = role === "host" ? "violet" : "cyan";
   return (
@@ -4935,6 +5051,22 @@ function getToneColors(tone: Tone) {
       fg: theme.host,
     };
   }
+  if (tone === "lime") {
+    return {
+      bg: theme.limeDark,
+      border: theme.limeBorder,
+      buttonText: "#081000",
+      fg: theme.lime,
+    };
+  }
+  if (tone === "sky") {
+    return {
+      bg: theme.skyDark,
+      border: theme.skyBorder,
+      buttonText: "#02101a",
+      fg: theme.sky,
+    };
+  }
   if (tone === "gold") {
     return {
       bg: theme.awardDark,
@@ -4946,7 +5078,7 @@ function getToneColors(tone: Tone) {
   if (tone === "orange") {
     return {
       bg: theme.warningDark,
-      border: "#904200",
+      border: theme.warningBorder,
       buttonText: "#170900",
       fg: theme.warning,
     };
@@ -5198,11 +5330,11 @@ const styles = StyleSheet.create({
   authCard: {
     backgroundColor: theme.panel,
     borderColor: theme.border,
-    borderRadius: 14,
+    borderRadius: 11,
     borderWidth: 1,
     gap: 12,
     maxWidth: 420,
-    padding: 18,
+    padding: 16,
     width: "100%",
   },
   authLogo: {
@@ -5215,15 +5347,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexGrow: 1,
     justifyContent: "center",
-    padding: 18,
+    padding: 16,
   },
   avatar: {
     alignItems: "center",
-    borderRadius: 16,
+    borderRadius: 999,
     borderWidth: 1,
-    height: 36,
+    height: 34,
     justifyContent: "center",
-    width: 36,
+    width: 34,
   },
   avatarText: {
     fontFamily: Platform.select({ default: "monospace" }),
@@ -5247,12 +5379,12 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
     backgroundColor: theme.hostDark,
     borderColor: theme.hostBorder,
-    borderRadius: 8,
+    borderRadius: 7,
     borderWidth: 1,
     flexDirection: "row",
     gap: 4,
-    minHeight: 30,
-    paddingHorizontal: 10,
+    minHeight: 28,
+    paddingHorizontal: 9,
     paddingVertical: 4,
   },
   actionBackText: {
@@ -5269,12 +5401,12 @@ const styles = StyleSheet.create({
     color: theme.participant,
   },
   actionScreenHeader: {
-    backgroundColor: theme.backgroundAlt,
+    backgroundColor: theme.panelStrong,
     borderColor: theme.border,
-    borderRadius: 10,
+    borderRadius: 11,
     borderWidth: 1,
-    gap: 7,
-    padding: 10,
+    gap: 8,
+    padding: 11,
   },
   actionScreenTitle: {
     color: theme.text,
@@ -5291,11 +5423,11 @@ const styles = StyleSheet.create({
   },
   button: {
     alignItems: "center",
-    borderRadius: 8,
+    borderRadius: 9,
     flexDirection: "row",
     gap: 6,
     justifyContent: "center",
-    minHeight: 40,
+    minHeight: 42,
     paddingHorizontal: 12,
   },
   buttonText: {
@@ -5304,13 +5436,13 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
   cardDescription: {
-    color: theme.muted,
+    color: theme.dim,
     fontSize: 11,
-    lineHeight: 16,
+    lineHeight: 17,
     marginTop: 4,
   },
   cardMeta: {
-    color: theme.dim,
+    color: theme.faint,
     fontFamily: Platform.select({ default: "monospace" }),
     fontSize: 9,
     lineHeight: 14,
@@ -5319,7 +5451,7 @@ const styles = StyleSheet.create({
   cardTitle: {
     color: theme.text,
     fontSize: 13,
-    fontWeight: "700",
+    fontWeight: "800",
     letterSpacing: 0,
   },
   cardTopRow: {
@@ -5362,44 +5494,45 @@ const styles = StyleSheet.create({
   },
   compactBusyRow: {
     alignItems: "center",
-    backgroundColor: theme.panel,
+    backgroundColor: theme.panelStrong,
     borderColor: theme.border,
-    borderRadius: 12,
+    borderRadius: 11,
     borderWidth: 1,
     flexDirection: "row",
     gap: 10,
     padding: 14,
   },
   counterLabel: {
-    color: theme.muted,
+    color: theme.dim,
     fontFamily: Platform.select({ default: "monospace" }),
-    fontSize: 10,
+    fontSize: 9,
+    letterSpacing: 0.7,
     textTransform: "uppercase",
   },
   dashboardContent: {
-    gap: 10,
-    padding: 10,
-    paddingBottom: 22,
+    gap: 11,
+    padding: 12,
+    paddingBottom: 112,
   },
   dashboardCopy: {
-    color: theme.muted,
+    color: theme.dim,
     fontSize: 12,
-    lineHeight: 18,
+    lineHeight: 19,
     marginTop: 6,
   },
   dashboardHeadline: {
     color: theme.text,
-    fontSize: 24,
-    fontWeight: "700",
-    letterSpacing: -0.5,
+    fontSize: 22,
+    fontWeight: "800",
+    letterSpacing: 0,
     lineHeight: 30,
   },
   dashboardHero: {
     backgroundColor: theme.panel,
     borderColor: theme.border,
-    borderRadius: 12,
+    borderRadius: 11,
     borderWidth: 1,
-    padding: 12,
+    padding: 13,
   },
   dateDoneButton: {
     alignItems: "center",
@@ -5453,7 +5586,7 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
     backgroundColor: theme.participantDark,
     borderColor: theme.participantBorder,
-    borderRadius: 7,
+    borderRadius: 8,
     borderWidth: 1,
     flexDirection: "row",
     gap: 4,
@@ -5471,11 +5604,11 @@ const styles = StyleSheet.create({
   divider: {
     backgroundColor: theme.borderSoft,
     height: 1,
-    marginVertical: 4,
+    marginVertical: 6,
   },
   emptyIcon: {
     alignItems: "center",
-    backgroundColor: theme.backgroundAlt,
+    backgroundColor: theme.surface,
     borderColor: theme.border,
     borderRadius: 8,
     borderWidth: 1,
@@ -5485,9 +5618,9 @@ const styles = StyleSheet.create({
   },
   emptyState: {
     alignItems: "center",
-    backgroundColor: theme.panelStrong,
+    backgroundColor: theme.surface,
     borderColor: theme.border,
-    borderRadius: 10,
+    borderRadius: 9,
     borderStyle: "dashed",
     borderWidth: 1,
     flexDirection: "row",
@@ -5495,7 +5628,7 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   emptyText: {
-    color: theme.muted,
+    color: theme.dim,
     flex: 1,
     fontSize: 12,
     lineHeight: 18,
@@ -5509,7 +5642,7 @@ const styles = StyleSheet.create({
   feedbackText: {
     borderColor: theme.borderSoft,
     borderTopWidth: 1,
-    color: theme.muted,
+    color: theme.dim,
     fontSize: 12,
     lineHeight: 18,
     marginTop: 10,
@@ -5519,9 +5652,10 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   fieldLabel: {
-    color: theme.dim,
+    color: theme.faint,
     fontFamily: Platform.select({ default: "monospace" }),
-    fontSize: 10,
+    fontSize: 9,
+    letterSpacing: 1.1,
     textTransform: "uppercase",
   },
   formTitle: {
@@ -5531,17 +5665,17 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
   },
   assignmentComposer: {
-    backgroundColor: theme.panelStrong,
-    borderColor: theme.border,
-    borderRadius: 10,
+    backgroundColor: theme.hostDark,
+    borderColor: theme.hostBorder,
+    borderRadius: 11,
     borderWidth: 1,
-    gap: 10,
-    padding: 10,
+    gap: 11,
+    padding: 11,
   },
   createRoomCard: {
-    backgroundColor: theme.panelStrong,
+    backgroundColor: theme.panel,
     borderColor: theme.border,
-    borderRadius: 10,
+    borderRadius: 11,
     borderWidth: 1,
     gap: 10,
     padding: 10,
@@ -5549,7 +5683,7 @@ const styles = StyleSheet.create({
   createRoomTrigger: {
     alignItems: "center",
     backgroundColor: theme.host,
-    borderRadius: 8,
+    borderRadius: 9,
     flexDirection: "row",
     gap: 5,
     minHeight: 36,
@@ -5564,26 +5698,26 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: theme.panelStrong,
     borderColor: theme.border,
-    borderRadius: 10,
+    borderRadius: 9,
     borderWidth: 1,
     height: 36,
     justifyContent: "center",
     width: 36,
   },
   headerProfileButton: {
-    backgroundColor: theme.participantDark,
-    borderColor: theme.participantBorder,
+    backgroundColor: theme.panelStrong,
+    borderColor: theme.borderStrong,
   },
   homeHeader: {
     alignItems: "center",
     backgroundColor: theme.background,
-    borderBottomColor: theme.border,
+    borderBottomColor: theme.borderSoft,
     borderBottomWidth: 1,
     flexDirection: "row",
     gap: 10,
     justifyContent: "space-between",
     paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingVertical: 9,
   },
   homeHeaderActions: {
     alignItems: "center",
@@ -5597,6 +5731,67 @@ const styles = StyleSheet.create({
   },
   homeHeaderSafe: {
     backgroundColor: theme.background,
+  },
+  homeHubGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 14,
+  },
+  homeHubTile: {
+    borderRadius: 11,
+    borderWidth: 1,
+    flexBasis: "47.8%",
+    flexGrow: 1,
+    minHeight: 92,
+    padding: 11,
+  },
+  homeHubTileLabel: {
+    fontSize: 12,
+    fontWeight: "800",
+    marginTop: 8,
+  },
+  homeHubTileMeta: {
+    color: theme.dim,
+    fontSize: 10,
+    lineHeight: 14,
+    marginTop: 2,
+  },
+  homeRoleTab: {
+    alignItems: "center",
+    borderBottomWidth: 2,
+    flex: 1,
+    flexDirection: "row",
+    gap: 6,
+    justifyContent: "center",
+    minHeight: 36,
+  },
+  homeRoleTabHost: {
+    backgroundColor: theme.hostDark,
+    borderBottomColor: theme.host,
+  },
+  homeRoleTabParticipant: {
+    backgroundColor: theme.participantDark,
+    borderBottomColor: theme.participant,
+  },
+  homeRoleTabs: {
+    borderColor: theme.border,
+    borderRadius: 9,
+    borderWidth: 1,
+    flexDirection: "row",
+    marginTop: 12,
+    overflow: "hidden",
+  },
+  homeRoleTabText: {
+    fontFamily: Platform.select({ default: "monospace" }),
+    fontSize: 9,
+    fontWeight: "800",
+  },
+  homeRoleTabTextHost: {
+    color: theme.host,
+  },
+  homeRoleTabTextParticipant: {
+    color: theme.participant,
   },
   hostRoomCard: {
     backgroundColor: theme.panelStrong,
@@ -5612,7 +5807,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     color: theme.text,
     fontSize: 13,
-    minHeight: 40,
+    minHeight: 42,
     paddingHorizontal: 12,
     paddingVertical: 9,
   },
@@ -5669,7 +5864,7 @@ const styles = StyleSheet.create({
   joinTightButton: {
     alignItems: "center",
     backgroundColor: theme.participant,
-    borderRadius: 7,
+    borderRadius: 8,
     flexDirection: "row",
     gap: 4,
     height: 38,
@@ -5684,9 +5879,9 @@ const styles = StyleSheet.create({
   },
   kindButton: {
     alignItems: "center",
-    backgroundColor: theme.panelStrong,
+    backgroundColor: theme.surface,
     borderColor: theme.border,
-    borderRadius: 7,
+    borderRadius: 8,
     borderWidth: 1,
     flex: 1,
     flexDirection: "row",
@@ -5697,7 +5892,7 @@ const styles = StyleSheet.create({
   },
   kindButtonActive: {
     backgroundColor: theme.hostDark,
-    borderColor: theme.host,
+    borderColor: theme.hostBorder,
   },
   kindButtonText: {
     color: theme.muted,
@@ -5712,16 +5907,16 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   gameAssignmentCard: {
-    backgroundColor: theme.awardDark,
-    borderColor: theme.awardBorder,
-    borderRadius: 10,
+    backgroundColor: theme.limeDark,
+    borderColor: theme.limeBorder,
+    borderRadius: 11,
     borderWidth: 1,
     padding: 11,
   },
   gameAssignmentIcon: {
     alignItems: "center",
-    backgroundColor: theme.awardDark,
-    borderColor: theme.awardBorder,
+    backgroundColor: theme.limeDark,
+    borderColor: theme.limeBorder,
     borderRadius: 8,
     borderWidth: 1,
     height: 40,
@@ -5735,9 +5930,9 @@ const styles = StyleSheet.create({
   },
   gamesBanner: {
     alignItems: "center",
-    backgroundColor: theme.participantDark,
-    borderColor: theme.participantBorder,
-    borderRadius: 10,
+    backgroundColor: theme.limeDark,
+    borderColor: theme.limeBorder,
+    borderRadius: 11,
     borderWidth: 1,
     flexDirection: "row",
     gap: 8,
@@ -5745,12 +5940,12 @@ const styles = StyleSheet.create({
     padding: 10,
   },
   gamesBannerText: {
-    color: theme.muted,
+    color: theme.dim,
     fontSize: 11,
     lineHeight: 16,
   },
   gamesBannerTitle: {
-    color: theme.participant,
+    color: theme.lime,
     fontSize: 12,
     fontWeight: "800",
   },
@@ -5764,17 +5959,17 @@ const styles = StyleSheet.create({
   },
   gameTypeOption: {
     alignItems: "center",
-    backgroundColor: theme.panelStrong,
+    backgroundColor: theme.surface,
     borderColor: theme.border,
-    borderRadius: 8,
+    borderRadius: 9,
     borderWidth: 1,
     flexDirection: "row",
     gap: 10,
     padding: 11,
   },
   gameTypeOptionActive: {
-    backgroundColor: theme.awardDark,
-    borderColor: theme.awardBorder,
+    backgroundColor: theme.limeDark,
+    borderColor: theme.limeBorder,
   },
   gameTypeTitle: {
     color: theme.text,
@@ -5782,7 +5977,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   gameTypeTitleActive: {
-    color: theme.award,
+    color: theme.lime,
   },
   historyGroup: {
     gap: 8,
@@ -5830,7 +6025,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: theme.awardDark,
     borderColor: theme.awardBorder,
-    borderRadius: 8,
+    borderRadius: 9,
     borderWidth: 1,
     flexDirection: "row",
     gap: 8,
@@ -5843,7 +6038,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: theme.participantDark,
     borderColor: theme.participantBorder,
-    borderRadius: 10,
+    borderRadius: 11,
     borderWidth: 1,
     flexDirection: "row",
     gap: 9,
@@ -5863,9 +6058,9 @@ const styles = StyleSheet.create({
   },
   ledgerRow: {
     alignItems: "flex-start",
-    backgroundColor: theme.backgroundAlt,
+    backgroundColor: theme.surface,
     borderColor: theme.border,
-    borderRadius: 8,
+    borderRadius: 9,
     borderWidth: 1,
     flexDirection: "row",
     gap: 10,
@@ -5917,11 +6112,11 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1,
     flex: 1,
-    minHeight: 82,
-    padding: 11,
+    minHeight: 76,
+    padding: 10,
   },
   metricLabel: {
-    color: theme.muted,
+    color: theme.dim,
     fontFamily: Platform.select({ default: "monospace" }),
     fontSize: 10,
     marginTop: 2,
@@ -5929,7 +6124,7 @@ const styles = StyleSheet.create({
   },
   metricValue: {
     color: theme.text,
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: "800",
     letterSpacing: 0,
     marginTop: 5,
@@ -5947,7 +6142,7 @@ const styles = StyleSheet.create({
   modalCard: {
     backgroundColor: theme.panel,
     borderColor: theme.border,
-    borderRadius: 14,
+    borderRadius: 12,
     borderWidth: 1,
     gap: 13,
     maxWidth: 430,
@@ -5976,7 +6171,7 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.72)",
+    backgroundColor: "rgba(10, 12, 15, 0.82)",
     flex: 1,
     justifyContent: "center",
     padding: 18,
@@ -5994,11 +6189,11 @@ const styles = StyleSheet.create({
   miniStat: {
     backgroundColor: theme.backgroundAlt,
     borderColor: theme.border,
-    borderRadius: 8,
+    borderRadius: 9,
     borderWidth: 1,
     flex: 1,
-    minHeight: 60,
-    padding: 10,
+    minHeight: 58,
+    padding: 9,
   },
   miniStatLabel: {
     color: theme.dim,
@@ -6014,15 +6209,15 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   breathPhase: {
-    color: theme.participant,
+    color: theme.lime,
     fontSize: 21,
     fontWeight: "900",
   },
   breathRing: {
     alignItems: "center",
     alignSelf: "center",
-    backgroundColor: theme.participantDark,
-    borderColor: theme.participant,
+    backgroundColor: theme.limeDark,
+    borderColor: theme.lime,
     borderRadius: 74,
     borderWidth: 2,
     height: 148,
@@ -6060,7 +6255,7 @@ const styles = StyleSheet.create({
   memoryCard: {
     alignItems: "center",
     aspectRatio: 1,
-    backgroundColor: theme.panelStrong,
+    backgroundColor: theme.surface,
     borderColor: theme.border,
     borderRadius: 8,
     borderWidth: 1,
@@ -6068,8 +6263,8 @@ const styles = StyleSheet.create({
     width: "23%",
   },
   memoryCardOpen: {
-    backgroundColor: theme.participantDark,
-    borderColor: theme.participant,
+    backgroundColor: theme.limeDark,
+    borderColor: theme.lime,
   },
   memoryCardText: {
     color: theme.text,
@@ -6100,16 +6295,16 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   miniGameSurface: {
-    backgroundColor: theme.panelStrong,
-    borderColor: theme.awardBorder,
-    borderRadius: 10,
+    backgroundColor: theme.limeDark,
+    borderColor: theme.limeBorder,
+    borderRadius: 11,
     borderWidth: 1,
     gap: 10,
     marginBottom: 10,
     padding: 11,
   },
   mutedText: {
-    color: theme.muted,
+    color: theme.dim,
     flex: 1,
     fontSize: 13,
     lineHeight: 19,
@@ -6130,7 +6325,7 @@ const styles = StyleSheet.create({
   },
   nftBadgeCard: {
     alignItems: "center",
-    backgroundColor: theme.panelStrong,
+    backgroundColor: theme.awardDark,
     borderColor: theme.awardBorder,
     borderRadius: 10,
     borderWidth: 1,
@@ -6155,14 +6350,16 @@ const styles = StyleSheet.create({
     paddingBottom: 2,
   },
   panel: {
-    borderRadius: 10,
+    borderRadius: 11,
     borderWidth: 1,
     gap: 10,
-    padding: 11,
+    padding: 12,
   },
   panelEyebrow: {
     fontFamily: Platform.select({ default: "monospace" }),
-    fontSize: 10,
+    fontSize: 9,
+    fontWeight: "700",
+    letterSpacing: 1.4,
     textTransform: "uppercase",
   },
   panelHeader: {
@@ -6173,7 +6370,7 @@ const styles = StyleSheet.create({
   },
   panelIcon: {
     alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.28)",
+    backgroundColor: theme.backgroundAlt,
     borderRadius: 8,
     borderWidth: 1,
     height: 34,
@@ -6183,8 +6380,8 @@ const styles = StyleSheet.create({
   panelTitle: {
     color: theme.text,
     fontSize: 15,
-    fontWeight: "700",
-    letterSpacing: -0.2,
+    fontWeight: "800",
+    letterSpacing: 0,
   },
   panelTitleBlock: {
     flex: 1,
@@ -6198,9 +6395,9 @@ const styles = StyleSheet.create({
   },
   participantRow: {
     alignItems: "center",
-    backgroundColor: theme.panelStrong,
+    backgroundColor: theme.surface,
     borderColor: theme.border,
-    borderRadius: 8,
+    borderRadius: 9,
     borderWidth: 1,
     flexDirection: "row",
     gap: 10,
@@ -6211,9 +6408,9 @@ const styles = StyleSheet.create({
   },
   practiceGameCard: {
     alignItems: "center",
-    backgroundColor: theme.panelStrong,
-    borderColor: theme.participantBorder,
-    borderRadius: 8,
+    backgroundColor: theme.limeDark,
+    borderColor: theme.limeBorder,
+    borderRadius: 10,
     borderWidth: 1,
     gap: 6,
     minHeight: 104,
@@ -6248,7 +6445,7 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   profileEmail: {
-    color: theme.dim,
+    color: theme.faint,
     fontSize: 11,
     marginTop: 1,
   },
@@ -6288,22 +6485,22 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   proofChip: {
-    backgroundColor: theme.panelStrong,
+    backgroundColor: theme.surface,
     borderColor: theme.border,
-    borderRadius: 7,
+    borderRadius: 8,
     borderWidth: 1,
     paddingHorizontal: 10,
     paddingVertical: 7,
   },
   proofChipActive: {
     backgroundColor: theme.hostDark,
-    borderColor: theme.host,
+    borderColor: theme.hostBorder,
   },
   proofChipLocked: {
     borderColor: theme.award,
   },
   proofChipText: {
-    color: theme.muted,
+    color: theme.dim,
     fontFamily: Platform.select({ default: "monospace" }),
     fontSize: 11,
   },
@@ -6337,7 +6534,7 @@ const styles = StyleSheet.create({
   },
   proofItemRow: {
     alignItems: "center",
-    backgroundColor: theme.backgroundAlt,
+    backgroundColor: theme.surface,
     borderColor: theme.border,
     borderRadius: 8,
     borderWidth: 1,
@@ -6346,7 +6543,7 @@ const styles = StyleSheet.create({
     padding: 8,
   },
   proofItemSectionLabel: {
-    color: theme.dim,
+    color: theme.faint,
     fontFamily: Platform.select({ default: "monospace" }),
     fontSize: 10,
     textTransform: "uppercase",
@@ -6361,7 +6558,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   proofItemValue: {
-    color: theme.muted,
+    color: theme.dim,
     fontFamily: Platform.select({ default: "monospace" }),
     fontSize: 10,
   },
@@ -6369,7 +6566,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   proofTypeLabel: {
-    backgroundColor: theme.backgroundAlt,
+    backgroundColor: theme.surface,
     borderColor: theme.border,
     borderRadius: 8,
     borderWidth: 1,
@@ -6393,30 +6590,27 @@ const styles = StyleSheet.create({
   },
   quickActionIconBg: {
     alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.07)",
-    borderRadius: 14,
-    height: 30,
+    borderRadius: 12,
+    borderWidth: 1,
+    height: 32,
     justifyContent: "center",
-    width: 30,
-  },
-  quickActionIconBgActive: {
-    backgroundColor: "rgba(255, 255, 255, 0.12)",
+    width: 32,
   },
   quickActionsSection: {
-    gap: 8,
+    gap: 9,
   },
   quickActionsTitle: {
-    color: theme.muted,
+    color: theme.dim,
     fontFamily: Platform.select({ default: "monospace" }),
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "800",
-    letterSpacing: 1.2,
+    letterSpacing: 1.7,
     textTransform: "uppercase",
   },
   quickActionText: {
-    color: theme.muted,
+    color: theme.dim,
     fontSize: 10,
-    fontWeight: "700",
+    fontWeight: "800",
     letterSpacing: 0,
     textAlign: "center",
   },
@@ -6425,29 +6619,22 @@ const styles = StyleSheet.create({
   },
   quickActionTile: {
     alignItems: "center",
-    backgroundColor: theme.panelStrong,
-    borderColor: theme.border,
-    borderRadius: 10,
-    borderTopColor: theme.hostBorder,
-    borderTopWidth: 1,
+    backgroundColor: theme.surface,
+    borderRadius: 11,
+    borderTopWidth: 2,
     borderWidth: 1,
     flexBasis: "47.8%",
     flexGrow: 1,
     gap: 5,
     justifyContent: "center",
-    minHeight: 68,
+    minHeight: 72,
     paddingHorizontal: 8,
     paddingVertical: 9,
   },
-  quickActionTileActive: {
-    backgroundColor: theme.hostDark,
-    borderColor: theme.hostBorder,
-    borderTopColor: theme.host,
-  },
   rewardCard: {
-    backgroundColor: theme.panelStrong,
+    backgroundColor: theme.surface,
     borderColor: theme.border,
-    borderRadius: 8,
+    borderRadius: 9,
     borderWidth: 1,
     gap: 8,
     padding: 10,
@@ -6477,7 +6664,7 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   rewardSelectorChip: {
-    backgroundColor: theme.panelStrong,
+    backgroundColor: theme.surface,
     borderColor: theme.border,
     borderRadius: 7,
     borderWidth: 1,
@@ -6506,9 +6693,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   reviewCard: {
-    backgroundColor: theme.panelStrong,
-    borderColor: theme.border,
-    borderRadius: 8,
+    backgroundColor: theme.surface,
+    borderColor: theme.participantBorder,
+    borderRadius: 11,
     borderWidth: 1,
     gap: 9,
     padding: 10,
@@ -6523,7 +6710,7 @@ const styles = StyleSheet.create({
   },
   roomShareIcon: {
     alignItems: "center",
-    backgroundColor: theme.backgroundAlt,
+    backgroundColor: theme.surface,
     borderColor: theme.border,
     borderRadius: 8,
     borderWidth: 1,
@@ -6570,10 +6757,10 @@ const styles = StyleSheet.create({
   roomWorkspace: {
     backgroundColor: theme.panel,
     borderColor: theme.border,
-    borderRadius: 10,
+    borderRadius: 11,
     borderWidth: 1,
-    gap: 10,
-    padding: 10,
+    gap: 11,
+    padding: 11,
   },
   roomWorkspaceHeader: {
     alignItems: "flex-start",
@@ -6583,7 +6770,7 @@ const styles = StyleSheet.create({
   },
   roomWorkspaceTitle: {
     color: theme.text,
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "800",
     letterSpacing: 0,
     lineHeight: 21,
@@ -6633,26 +6820,26 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   selectableRoomCard: {
-    backgroundColor: theme.backgroundAlt,
+    backgroundColor: theme.panel,
     borderColor: theme.border,
-    borderRadius: 10,
+    borderRadius: 11,
     borderWidth: 1,
     minHeight: 126,
     overflow: "hidden",
     width: SCREEN_WIDTH - 48,
   },
   selectableRoomCardActive: {
-    backgroundColor: theme.participantDark,
-    borderColor: theme.participantBorder,
+    backgroundColor: theme.hostDark,
+    borderColor: theme.hostBorder,
   },
   selectableRoomContent: {
     padding: 10,
   },
   sectionEyebrow: {
-    color: theme.muted,
+    color: theme.dim,
     fontFamily: Platform.select({ default: "monospace" }),
-    fontSize: 10,
-    letterSpacing: 1.2,
+    fontSize: 9,
+    letterSpacing: 1.6,
     textTransform: "uppercase",
   },
   sectionHeadingRow: {
@@ -6662,7 +6849,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   sectionTitleSmall: {
-    color: theme.participant,
+    color: theme.text,
     fontSize: 12,
     fontWeight: "700",
     marginTop: 2,
@@ -6705,7 +6892,7 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   selectorChip: {
-    backgroundColor: theme.panelStrong,
+    backgroundColor: theme.surface,
     borderColor: theme.border,
     borderRadius: 7,
     borderWidth: 1,
@@ -6742,7 +6929,7 @@ const styles = StyleSheet.create({
   },
   statusBanner: {
     alignItems: "center",
-    borderRadius: 8,
+    borderRadius: 9,
     borderWidth: 1,
     flexDirection: "row",
     gap: 8,
@@ -6757,7 +6944,7 @@ const styles = StyleSheet.create({
   statusPill: {
     borderRadius: 100,
     borderWidth: 1,
-    paddingHorizontal: 7,
+    paddingHorizontal: 8,
     paddingVertical: 2,
   },
   statusPillText: {
@@ -6768,31 +6955,31 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   submissionCard: {
-    backgroundColor: theme.panelStrong,
+    backgroundColor: theme.surface,
     borderColor: theme.border,
-    borderRadius: 8,
+    borderRadius: 9,
     borderWidth: 1,
     padding: 10,
   },
   submitCard: {
     backgroundColor: theme.participantDark,
     borderColor: theme.participantBorder,
-    borderRadius: 8,
+    borderRadius: 10,
     borderWidth: 1,
     gap: 9,
     marginTop: 9,
     padding: 10,
   },
   taskCard: {
-    backgroundColor: theme.panelStrong,
+    backgroundColor: theme.surface,
     borderColor: theme.border,
-    borderRadius: 8,
+    borderRadius: 9,
     borderWidth: 1,
     padding: 10,
   },
   taskCardSelected: {
     backgroundColor: theme.participantDark,
-    borderColor: theme.participant,
+    borderColor: theme.participantBorder,
   },
   taskTitleBlock: {
     flex: 1,
@@ -6804,11 +6991,28 @@ const styles = StyleSheet.create({
     minHeight: 96,
   },
   trackStack: {
+    gap: 9,
+  },
+  trackLabelLine: {
+    borderRadius: 2,
+    height: 2,
+    width: 24,
+  },
+  trackLabelRow: {
+    alignItems: "center",
+    flexDirection: "row",
     gap: 8,
+  },
+  trackLabelText: {
+    fontFamily: Platform.select({ default: "monospace" }),
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 1.7,
+    textTransform: "uppercase",
   },
   walletBalance: {
     color: theme.text,
-    fontSize: 26,
+    fontSize: 30,
     fontWeight: "800",
     letterSpacing: 0,
   },
@@ -6818,15 +7022,15 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   walletCard: {
-    backgroundColor: theme.panelStrong,
-    borderColor: theme.border,
-    borderRadius: 10,
+    backgroundColor: theme.awardDark,
+    borderColor: theme.awardBorder,
+    borderRadius: 11,
     borderWidth: 1,
     gap: 8,
     padding: 11,
   },
   walletChip: {
-    backgroundColor: theme.backgroundAlt,
+    backgroundColor: theme.surface,
     borderColor: theme.border,
     borderRadius: 8,
     borderWidth: 1,
@@ -6849,7 +7053,7 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
   walletLabel: {
-    color: theme.dim,
+    color: theme.awardBorder,
     fontFamily: Platform.select({ default: "monospace" }),
     fontSize: 10,
     textTransform: "uppercase",
