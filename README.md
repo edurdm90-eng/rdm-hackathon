@@ -13,7 +13,7 @@ Hack Room supports a complete room-based hackathon loop:
 - Hosts create regular tasks, spot challenges, special tasks, and notifications from `Assignments`.
 - Participants submit proof with required fields: student name, team name, description, GitHub/Drive links, and any other configured proof fields.
 - Hosts verify, return, or award submissions.
-- Hosts award XRDM from verified submissions and can search by team/student/email/assignment.
+- Hosts announce winners from verified submissions, assign XRDM, and can search by team/student/email/assignment.
 - Hosts issue certificates and NFT badge records from the awards/reward ledger flow.
 - Participants track submission history and view wallet rewards.
 - Hosts and participants can play lightweight in-app mini-games; games are play-only and do not create proof submissions.
@@ -175,7 +175,7 @@ The native shell has:
 5. Use `Created Tasks` to see created assignments.
 6. Tap a created task to open `History` filtered to that assignment.
 7. Use `Verify` to approve or return submitted proof.
-8. Use `Award XRDM` to search teams and award from verified submissions.
+8. Use `Announce Winners` to search teams, choose winners, and assign XRDM from verified submissions.
 9. Use `Awards` for certificates, NFT badge records, and reward ledger entries.
 10. Use `Games` only to play mini-games.
 
@@ -266,7 +266,7 @@ bun run check-types
 
 ## Product Naming
 
-- `Award XRDM`: choose winners and assign XRDM from verified submissions.
+- `Announce Winners`: choose winners and assign XRDM from verified submissions.
 - `Awards`: issue certificates, NFT badge records, and reward ledger entries.
 - `Games`: play-only mini-games for host and participant.
 - `Spot Challenge`: proof-based challenge created from `Assignments`.

@@ -1832,7 +1832,7 @@ function HostRoomWorkspace({
     { icon: "people-outline", id: "participants", label: "Members" },
     { icon: "shield-checkmark-outline", id: "verify", label: "Verify" },
     { icon: "time-outline", id: "history", label: "History" },
-    { icon: "trophy-outline", id: "winners", label: "Award XRDM" },
+    { icon: "trophy-outline", id: "winners", label: "Announce Winners" },
     { icon: "ribbon-outline", id: "awards", label: "Awards" },
     { icon: "game-controller-outline", id: "games", label: "Games" },
     { icon: "podium-outline", id: "leaderboard", label: "Leaderboard" },
@@ -2020,7 +2020,7 @@ function HostRoomWorkspace({
           action={<CounterLabel label={`${filteredApprovedSubmissions.length}/${approvedSubmissions.length} ready`} />}
           eyebrow="Winner Selection"
           icon="trophy-outline"
-          title="Award XRDM"
+          title="Announce Winners"
           tone="gold"
         >
           <Field label="Search team">
@@ -2083,7 +2083,7 @@ function HostRoomWorkspace({
             ) : (
               <EmptyState
                 icon="trophy-outline"
-                text="Verify proof from the review queue before awarding XRDM."
+                text="Verify proof from the review queue before announcing winners."
               />
             )}
           </View>
