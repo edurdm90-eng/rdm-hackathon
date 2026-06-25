@@ -1777,6 +1777,7 @@ function HostRoomWorkspace({
   winnerSubmissions: DashboardData["hostSubmissions"];
 }) {
   const [historyTaskId, setHistoryTaskId] = useState("");
+  const [winnerSearch, setWinnerSearch] = useState("");
   const leaderboardRows = winnerSubmissions
     .reduce<
       Array<{
@@ -1806,6 +1807,21 @@ function HostRoomWorkspace({
       return rows;
     }, [])
     .sort((left, right) => right.awardXrdm - left.awardXrdm);
+  const normalizedWinnerSearch = winnerSearch.trim().toLowerCase();
+  const filteredApprovedSubmissions = normalizedWinnerSearch
+    ? approvedSubmissions.filter((submission) =>
+        [
+          submission.teamName,
+          submission.submitterName,
+          submission.participantName,
+          submission.participantEmail,
+          submission.taskTitle,
+          submission.roomName,
+        ]
+          .filter(Boolean)
+          .some((value) => value?.toLowerCase().includes(normalizedWinnerSearch)),
+      )
+    : approvedSubmissions;
   const hostQuickActions: Array<{
     icon: React.ComponentProps<typeof Ionicons>["name"];
     id: RoomTab;
@@ -2001,45 +2017,73 @@ function HostRoomWorkspace({
 
       {activeRoomTab === "winners" ? (
         <Panel
-          action={<CounterLabel label={`${approvedSubmissions.length} ready`} />}
-          eyebrow="Announcement"
+          action={<CounterLabel label={`${filteredApprovedSubmissions.length}/${approvedSubmissions.length} ready`} />}
+          eyebrow="Winner Selection"
           icon="trophy-outline"
-          title="Announce Winners"
+          title="Award XRDM"
           tone="gold"
         >
+          <Field label="Search team">
+            <View style={styles.searchInputWrap}>
+              <Ionicons name="search-outline" size={16} color={theme.dim} />
+              <HackTextInput
+                autoCapitalize="none"
+                onChangeText={setWinnerSearch}
+                placeholder="Search team, student, email, or assignment"
+                style={styles.searchInput}
+                value={winnerSearch}
+              />
+              {winnerSearch.trim() ? (
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => setWinnerSearch("")}
+                  style={({ pressed }) => [styles.searchClearButton, pressed && styles.pressed]}
+                >
+                  <Ionicons name="close-outline" size={15} color={theme.award} />
+                </Pressable>
+              ) : null}
+            </View>
+          </Field>
           <View style={styles.listStack}>
             {approvedSubmissions.length ? (
-              approvedSubmissions.map((submission) => (
-                <SubmissionReviewCard
-                  award={
-                    awardBySubmission[submission._id] ??
-                    String(submission.awardXrdm ?? submission.rewardXrdm ?? 20)
-                  }
-                  feedback={
-                    feedbackBySubmission[submission._id] ??
-                    submission.hostFeedback ??
-                    "Strong contribution and clear proof of participation."
-                  }
-                  key={submission._id}
-                  mode="winner"
-                  onAwardChange={(value) =>
-                    setAwardBySubmission((current) => ({ ...current, [submission._id]: value }))
-                  }
-                  onFeedbackChange={(value) =>
-                    setFeedbackBySubmission((current) => ({
-                      ...current,
-                      [submission._id]: value,
-                    }))
-                  }
-                  onSelectWinner={() => onSelectWinner(submission)}
-                  selectWinnerPending={selectWinnerPending}
-                  submission={submission}
+              filteredApprovedSubmissions.length ? (
+                filteredApprovedSubmissions.map((submission) => (
+                  <SubmissionReviewCard
+                    award={
+                      awardBySubmission[submission._id] ??
+                      String(submission.awardXrdm ?? submission.rewardXrdm ?? 20)
+                    }
+                    feedback={
+                      feedbackBySubmission[submission._id] ??
+                      submission.hostFeedback ??
+                      "Strong contribution and clear proof of participation."
+                    }
+                    key={submission._id}
+                    mode="winner"
+                    onAwardChange={(value) =>
+                      setAwardBySubmission((current) => ({ ...current, [submission._id]: value }))
+                    }
+                    onFeedbackChange={(value) =>
+                      setFeedbackBySubmission((current) => ({
+                        ...current,
+                        [submission._id]: value,
+                      }))
+                    }
+                    onSelectWinner={() => onSelectWinner(submission)}
+                    selectWinnerPending={selectWinnerPending}
+                    submission={submission}
+                  />
+                ))
+              ) : (
+                <EmptyState
+                  icon="search-outline"
+                  text="No verified submission matches this search."
                 />
-              ))
+              )
             ) : (
               <EmptyState
                 icon="trophy-outline"
-                text="Verify proof from the review queue before announcing winners."
+                text="Verify proof from the review queue before awarding XRDM."
               />
             )}
           </View>
@@ -7591,6 +7635,35 @@ const styles = StyleSheet.create({
     gap: 8,
     marginTop: 9,
     padding: 10,
+  },
+  searchClearButton: {
+    alignItems: "center",
+    backgroundColor: theme.awardDark,
+    borderColor: theme.awardBorder,
+    borderRadius: 7,
+    borderWidth: 1,
+    height: 28,
+    justifyContent: "center",
+    width: 28,
+  },
+  searchInput: {
+    backgroundColor: "transparent",
+    borderWidth: 0,
+    flex: 1,
+    minHeight: 36,
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+  },
+  searchInputWrap: {
+    alignItems: "center",
+    backgroundColor: theme.backgroundAlt,
+    borderColor: theme.awardBorder,
+    borderRadius: 9,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 8,
+    minHeight: 42,
+    paddingHorizontal: 10,
   },
   screen: {
     backgroundColor: theme.background,
