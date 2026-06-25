@@ -1,6 +1,6 @@
 import type { AppRouter } from "@rdm-hack/api/routers/index";
 import { Ionicons } from "@expo/vector-icons";
-import DateTimePicker from "@react-native-community/datetimepicker";
+import DateTimePicker, { DateTimePickerAndroid } from "@react-native-community/datetimepicker";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import type { inferRouterOutputs } from "@trpc/server";
 import { useNavigation, useRouter } from "expo-router";
@@ -165,11 +165,14 @@ function makeEmptyProofItems(): Record<ProofType, string> {
   };
 }
 
-function makeEmptySubmitForm() {
+function makeEmptySubmitForm(submitterName = "") {
   return {
+    description: "",
     notes: "",
     proofItems: makeEmptyProofItems(),
     proofUrl: "",
+    submitterName,
+    teamName: "",
   };
 }
 
@@ -802,7 +805,7 @@ function HackRoomDetailDashboard({
   const [assignmentMode, setAssignmentMode] = useState<AssignmentMode>("task");
   const [proofTypes, setProofTypes] = useState<Array<ProofType>>(defaultRegularProofTypes);
   const [selectedTaskId, setSelectedTaskId] = useState("");
-  const [submitForm, setSubmitForm] = useState(emptySubmitForm);
+  const [submitForm, setSubmitForm] = useState(() => makeEmptySubmitForm(user.name));
   const [rewardForm, setRewardForm] = useState(makeEmptyRewardForm());
   const [message, setMessage] = useState<{ text: string; tone: Tone } | null>(null);
   const [feedbackBySubmission, setFeedbackBySubmission] = useState<Record<string, string>>({});
@@ -924,7 +927,7 @@ function HackRoomDetailDashboard({
     trpc.hackRoom.submitProof.mutationOptions({
       onError: (error) => setMessage({ text: error.message, tone: "red" }),
       onSuccess: async () => {
-        setSubmitForm(makeEmptySubmitForm());
+        setSubmitForm(makeEmptySubmitForm(user.name));
         setMessage({ text: "Proof submitted for host review", tone: "cyan" });
         await invalidateDashboard();
       },
@@ -1052,6 +1055,15 @@ function HackRoomDetailDashboard({
       return;
     }
 
+    const submitterName = submitForm.submitterName.trim();
+    const teamName = submitForm.teamName.trim();
+    const submissionDescription = submitForm.description.trim();
+
+    if (!submitterName || !teamName || !submissionDescription) {
+      setMessage({ text: "Add your name, team name, and submission description", tone: "red" });
+      return;
+    }
+
     const proofItems = buildProofItemsForTask(selectedTask, submitForm);
     const missingProofTypes = proofItems
       .filter((item) => !item.value.trim())
@@ -1063,6 +1075,9 @@ function HackRoomDetailDashboard({
     }
 
     submitProof.mutate({
+      submissionDescription,
+      submitterName,
+      teamName,
       notes: submitForm.notes,
       proofItems,
       proofUrl: proofItems[0]?.value ?? "",
@@ -1793,10 +1808,12 @@ function HostRoomWorkspace({
     .sort((left, right) => right.awardXrdm - left.awardXrdm);
   const hostQuickActions: Array<{
     icon: React.ComponentProps<typeof Ionicons>["name"];
-    id: RoomTab;
+    id: RoomTab | "created-tasks";
     label: string;
+    targetTab?: RoomTab;
   }> = [
     { icon: "clipboard-outline", id: "assign", label: "Assignments" },
+    { icon: "layers-outline", id: "created-tasks", label: "Created Tasks", targetTab: "history" },
     { icon: "people-outline", id: "participants", label: "Members" },
     { icon: "shield-checkmark-outline", id: "verify", label: "Verify" },
     { icon: "time-outline", id: "history", label: "History" },
@@ -1820,7 +1837,7 @@ function HostRoomWorkspace({
                 icon={action.icon}
                 key={action.id}
                 label={action.label}
-                onPress={() => onRoomTabChange(action.id)}
+                onPress={() => onRoomTabChange(action.targetTab ?? (action.id as RoomTab))}
                 tone="violet"
               />
             ))}
@@ -1969,6 +1986,8 @@ function HostRoomWorkspace({
           title="History"
           tone="gold"
         >
+          <HostCreatedTasksSummary roomTasks={roomTasks} />
+          <View style={styles.divider} />
           <View style={styles.listStack}>
             {historySubmissions.length ? (
               historySubmissions.map((submission) => (
@@ -2176,6 +2195,95 @@ function HostRoomWorkspace({
   );
 }
 
+function HostCreatedTasksSummary({ roomTasks }: { roomTasks: DashboardData["tasks"] }) {
+  const taskKinds: Array<{
+    icon: React.ComponentProps<typeof Ionicons>["name"];
+    kind: TaskKind;
+    label: string;
+  }> = [
+    { icon: "clipboard-outline", kind: "task", label: "Regular" },
+    { icon: "person-outline", kind: "special", label: "Special" },
+    { icon: "sparkles-outline", kind: "challenge", label: "Challenge" },
+    { icon: "game-controller-outline", kind: "game", label: "Game" },
+  ];
+
+  return (
+    <View style={styles.createdTasksBlock}>
+      <View style={styles.historyGroupHeader}>
+        <Ionicons name="layers-outline" size={16} color={theme.host} />
+        <Text style={styles.historyGroupTitle}>Created Tasks</Text>
+        <CounterLabel label={`${roomTasks.length} total`} />
+      </View>
+
+      <View style={styles.createdTaskKindGrid}>
+        {taskKinds.map((taskKind) => {
+          const count = roomTasks.filter((task) => (task.kind ?? "task") === taskKind.kind).length;
+          const toneColors = getToneColors(taskKindTone(taskKind.kind));
+
+          return (
+            <View
+              key={taskKind.kind}
+              style={[
+                styles.createdTaskKindChip,
+                { backgroundColor: toneColors.bg, borderColor: toneColors.border },
+              ]}
+            >
+              <Ionicons name={taskKind.icon} size={15} color={toneColors.fg} />
+              <Text style={[styles.createdTaskKindCount, { color: toneColors.fg }]}>{count}</Text>
+              <Text numberOfLines={1} style={styles.createdTaskKindLabel}>
+                {taskKind.label}
+              </Text>
+            </View>
+          );
+        })}
+      </View>
+
+      <View style={styles.listStack}>
+        {roomTasks.length ? (
+          roomTasks.map((task) => <CreatedTaskLogCard key={task._id} task={task} />)
+        ) : (
+          <EmptyState
+            icon="layers-outline"
+            text="Created regular tasks, special tasks, challenges, and games will appear here."
+          />
+        )}
+      </View>
+    </View>
+  );
+}
+
+function CreatedTaskLogCard({ task }: { task: HackTask }) {
+  const kind = task.kind ?? "task";
+  const proofTypes = getTaskProofTypes(task).map((proofType) => proofTypeLabel(proofType));
+
+  return (
+    <View style={styles.createdTaskCard}>
+      <View style={styles.cardTopRow}>
+        <View style={styles.taskTitleBlock}>
+          <Text numberOfLines={1} style={styles.cardTitle}>
+            {task.title}
+          </Text>
+          <Text style={styles.cardMeta}>
+            {formatDate(task.createdAt)} - Due {formatDate(task.dueAt)}
+          </Text>
+        </View>
+        <StatusPill label={kindLabel(kind)} tone={taskKindTone(kind)} />
+      </View>
+      <Text numberOfLines={2} style={styles.cardDescription}>
+        {task.description || "No description added."}
+      </Text>
+      <View style={styles.proofTypeRow}>
+        <Text style={styles.proofTypeLabel}>+{task.rewardXrdm} XRDM</Text>
+        {proofTypes.map((proofType) => (
+          <Text key={proofType} style={styles.proofTypeLabel}>
+            {proofType}
+          </Text>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 function ParticipantRoomWorkspace({
   activeParticipantTab,
   mySubmissions,
@@ -2367,6 +2475,11 @@ function ParticipantSubmitPanel({
   submitForm: typeof emptySubmitForm;
   submitProofPending: boolean;
 }) {
+  const selectedSubmission = selectedTask
+    ? mySubmissions.find((submission) => submission.taskId === selectedTask._id)
+    : undefined;
+  const showProofForm = !selectedTask || canShowProofSubmitCard(selectedSubmission?.status);
+
   return (
     <Panel
       action={<CounterLabel label={`${regularTasks.length} tasks`} />}
@@ -2397,13 +2510,21 @@ function ParticipantSubmitPanel({
         )}
       </View>
 
-      <TaskProofSubmitCard
-        onSubmitProof={onSubmitProof}
-        selectedTask={selectedTask}
-        setSubmitForm={setSubmitForm}
-        submitForm={submitForm}
-        submitProofPending={submitProofPending}
-      />
+      {selectedSubmission?.status === "returned" ? (
+        <ReturnedSubmissionNotice submission={selectedSubmission} />
+      ) : null}
+
+      {showProofForm ? (
+        <TaskProofSubmitCard
+          onSubmitProof={onSubmitProof}
+          selectedTask={selectedTask}
+          setSubmitForm={setSubmitForm}
+          submitForm={submitForm}
+          submitProofPending={submitProofPending}
+        />
+      ) : selectedSubmission ? (
+        <SubmissionHoldCard submission={selectedSubmission} />
+      ) : null}
     </Panel>
   );
 }
@@ -2504,6 +2625,10 @@ function ParticipantGamesPanel({
   const assignedGames = gameTasks.filter((task) => task.kind === "game");
   const selectedProofTask =
     selectedTask?.kind === "challenge" || selectedTask?.kind === "game" ? selectedTask : undefined;
+  const selectedSubmission = selectedProofTask
+    ? mySubmissions.find((submission) => submission.taskId === selectedProofTask._id)
+    : undefined;
+  const showProofForm = !selectedProofTask || canShowProofSubmitCard(selectedSubmission?.status);
 
   return (
     <View style={styles.trackStack}>
@@ -2580,13 +2705,21 @@ function ParticipantGamesPanel({
           )}
         </View>
 
-        <TaskProofSubmitCard
-          onSubmitProof={onSubmitProof}
-          selectedTask={selectedProofTask}
-          setSubmitForm={setSubmitForm}
-          submitForm={submitForm}
-          submitProofPending={submitProofPending}
-        />
+        {selectedSubmission?.status === "returned" ? (
+          <ReturnedSubmissionNotice submission={selectedSubmission} />
+        ) : null}
+
+        {showProofForm ? (
+          <TaskProofSubmitCard
+            onSubmitProof={onSubmitProof}
+            selectedTask={selectedProofTask}
+            setSubmitForm={setSubmitForm}
+            submitForm={submitForm}
+            submitProofPending={submitProofPending}
+          />
+        ) : selectedSubmission ? (
+          <SubmissionHoldCard submission={selectedSubmission} />
+        ) : null}
 
         <View style={styles.divider} />
         <Text style={styles.sectionEyebrow}>Practice / Play Now</Text>
@@ -2626,6 +2759,8 @@ function TaskProofSubmitCard({
   submitForm: typeof emptySubmitForm;
   submitProofPending: boolean;
 }) {
+  const submitMetaComplete = hasSubmissionMeta(submitForm);
+
   return (
     <View style={styles.submitCard}>
       <View style={styles.sectionHeadingRow}>
@@ -2637,6 +2772,43 @@ function TaskProofSubmitCard({
         </View>
         {selectedTask ? <StatusPill label={`+${selectedTask.rewardXrdm} XRDM`} tone="gold" /> : null}
       </View>
+
+      <View style={styles.submitMetaGrid}>
+        <View style={styles.submitMetaField}>
+          <Field label="Your name">
+            <HackTextInput
+              onChangeText={(value) =>
+                setSubmitForm((current) => ({ ...current, submitterName: value }))
+              }
+              placeholder="Student name"
+              value={submitForm.submitterName}
+            />
+          </Field>
+        </View>
+        <View style={styles.submitMetaField}>
+          <Field label="Team name">
+            <HackTextInput
+              onChangeText={(value) =>
+                setSubmitForm((current) => ({ ...current, teamName: value }))
+              }
+              placeholder="Team / room name"
+              value={submitForm.teamName}
+            />
+          </Field>
+        </View>
+      </View>
+
+      <Field label="Description">
+        <HackTextInput
+          multiline
+          onChangeText={(value) =>
+            setSubmitForm((current) => ({ ...current, description: value }))
+          }
+          placeholder="Summarize what your team built, changed, or completed."
+          style={styles.submitDescriptionInput}
+          value={submitForm.description}
+        />
+      </Field>
 
       <ProofRequirementFields
         selectedTask={selectedTask}
@@ -2655,13 +2827,85 @@ function TaskProofSubmitCard({
       </Field>
 
       <HackButton
-        disabled={!selectedTask || !hasRequiredProofItems(selectedTask, submitForm) || submitProofPending}
+        disabled={
+          !selectedTask ||
+          !submitMetaComplete ||
+          !hasRequiredProofItems(selectedTask, submitForm) ||
+          submitProofPending
+        }
         icon="send-outline"
         label={selectedTask?.kind === "game" ? "Submit Game Proof" : "Submit Proof"}
         loading={submitProofPending}
         onPress={onSubmitProof}
         tone={selectedTask?.kind === "game" ? "gold" : "cyan"}
       />
+    </View>
+  );
+}
+
+function ReturnedSubmissionNotice({
+  submission,
+}: {
+  submission: DashboardData["mySubmissions"][number];
+}) {
+  return (
+    <View style={styles.returnedNoticeCard}>
+      <View style={styles.submissionHoldHeader}>
+        <View style={[styles.submissionHoldIcon, { borderColor: theme.dangerBorder }]}>
+          <Ionicons name="refresh-outline" size={16} color={theme.danger} />
+        </View>
+        <View style={styles.profileText}>
+          <Text style={styles.submissionHoldTitle}>Proof returned</Text>
+          <Text style={styles.submissionHoldText}>
+            Update the required fields below and resubmit for verification.
+          </Text>
+        </View>
+        <StatusPill label="Returned" tone="red" />
+      </View>
+      {submission.hostFeedback ? (
+        <Text style={styles.feedbackText}>{submission.hostFeedback}</Text>
+      ) : null}
+    </View>
+  );
+}
+
+function SubmissionHoldCard({
+  submission,
+}: {
+  submission: DashboardData["mySubmissions"][number];
+}) {
+  const tone = statusTone(submission.status);
+  const toneColors = getToneColors(tone);
+  const title =
+    submission.status === "submitted"
+      ? "Proof sent for verification"
+      : submission.status === "approved"
+        ? "Proof verified"
+        : submission.status === "winner"
+          ? "Winner announced"
+          : "Proof status updated";
+  const text =
+    submission.status === "submitted"
+      ? "Your proof is with the host. This form will reopen only if the host returns it."
+      : submission.status === "approved"
+        ? "This proof is locked as verified. You can track it from History."
+        : submission.status === "winner"
+          ? "This proof has been selected as a winning record."
+          : "Check History for the latest status.";
+
+  return (
+    <View style={[styles.submissionHoldCard, { backgroundColor: toneColors.bg, borderColor: toneColors.border }]}>
+      <View style={styles.submissionHoldHeader}>
+        <View style={[styles.submissionHoldIcon, { borderColor: toneColors.border }]}>
+          <Ionicons name={submissionHoldIcon(submission.status)} size={16} color={toneColors.fg} />
+        </View>
+        <View style={styles.profileText}>
+          <Text style={[styles.submissionHoldTitle, { color: toneColors.fg }]}>{title}</Text>
+          <Text style={styles.submissionHoldText}>{text}</Text>
+        </View>
+        <StatusPill label={submissionStatusLabel(submission.status)} tone={tone} />
+      </View>
+      <SubmissionCard submission={submission} />
     </View>
   );
 }
@@ -3953,12 +4197,14 @@ function SubmissionReviewCard({
   selectWinnerPending?: boolean;
   submission: HackSubmission;
 }) {
+  const displayParticipantName = submission.submitterName?.trim() || submission.participantName;
+
   return (
     <View style={styles.reviewCard}>
       <View style={styles.reviewHeader}>
-        <Avatar name={submission.participantName} tone="cyan" />
+        <Avatar name={displayParticipantName} tone="cyan" />
         <View style={styles.reviewTitleBlock}>
-          <Text style={styles.cardTitle}>{submission.participantName}</Text>
+          <Text style={styles.cardTitle}>{displayParticipantName}</Text>
           <Text style={styles.cardMeta}>
             {submission.roomName} - {submission.taskTitle}
           </Text>
@@ -3969,6 +4215,7 @@ function SubmissionReviewCard({
         />
       </View>
 
+      <SubmissionMetaBlock submission={submission} />
       <ProofItemsList proofItems={getSubmissionProofItems(submission)} />
       {submission.notes ? <Text style={styles.notesText}>{submission.notes}</Text> : null}
 
@@ -4830,6 +5077,34 @@ function DateTimeField({
     }
   };
 
+  const openAndroidPicker = (mode: "date" | "time") => {
+    DateTimePickerAndroid.open({
+      mode,
+      onDismiss: handlePickerDismiss,
+      onNeutralButtonPress: handlePickerDismiss,
+      onValueChange: (event, selectedDate) => {
+        const baseDate = parseDateTimeValue(value);
+        const nextDate =
+          mode === "date"
+            ? mergeDateParts(baseDate, selectedDate)
+            : mergeTimeParts(baseDate, selectedDate);
+
+        onChange(nextDate.toISOString());
+        setPickerMode(null);
+      },
+      value: pickerDate,
+    });
+  };
+
+  const handleOpenPicker = (mode: "date" | "time") => {
+    if (Platform.OS === "android") {
+      openAndroidPicker(mode);
+      return;
+    }
+
+    setPickerMode(mode);
+  };
+
   if (Platform.OS === "web") {
     return (
       <Field label={label}>
@@ -4851,7 +5126,7 @@ function DateTimeField({
         <View style={styles.datePickerActions}>
           <Pressable
             accessibilityRole="button"
-            onPress={() => setPickerMode("date")}
+            onPress={() => handleOpenPicker("date")}
             style={({ pressed }) => [styles.datePickerButton, pressed && styles.pressed]}
           >
             <Ionicons name="calendar-outline" size={16} color={theme.host} />
@@ -4859,7 +5134,7 @@ function DateTimeField({
           </Pressable>
           <Pressable
             accessibilityRole="button"
-            onPress={() => setPickerMode("time")}
+            onPress={() => handleOpenPicker("time")}
             style={({ pressed }) => [styles.datePickerButton, pressed && styles.pressed]}
           >
             <Ionicons name="time-outline" size={16} color={theme.host} />
@@ -4868,7 +5143,7 @@ function DateTimeField({
         </View>
       </View>
 
-      {pickerMode ? (
+      {Platform.OS === "ios" && pickerMode ? (
         <View style={styles.nativePickerWrap}>
           <DateTimePicker
             display={Platform.OS === "ios" ? "spinner" : "default"}
@@ -5239,6 +5514,7 @@ function SubmissionCard({
           tone={statusTone(submission.status)}
         />
       </View>
+      <SubmissionMetaBlock submission={submission} />
       <ProofItemsList proofItems={getSubmissionProofItems(submission)} />
       <View style={styles.awardRow}>
         <Text style={styles.cardMeta}>{formatDate(submission.submittedAt)}</Text>
@@ -5249,6 +5525,45 @@ function SubmissionCard({
       {submission.hostFeedback ? (
         <Text style={styles.feedbackText}>{submission.hostFeedback}</Text>
       ) : null}
+    </View>
+  );
+}
+
+function SubmissionMetaBlock({
+  submission,
+}: {
+  submission: {
+    participantName: string;
+    submissionDescription?: string;
+    submitterName?: string;
+    teamName?: string;
+  };
+}) {
+  const submittedBy = submission.submitterName?.trim() || submission.participantName;
+  const teamName = submission.teamName?.trim();
+  const description = submission.submissionDescription?.trim();
+
+  if (!teamName && !description && !submission.submitterName?.trim()) {
+    return null;
+  }
+
+  return (
+    <View style={styles.submissionMetaBox}>
+      <View style={styles.submissionMetaRow}>
+        <Text style={styles.submissionMetaLabel}>Student</Text>
+        <Text numberOfLines={1} style={styles.submissionMetaText}>
+          {submittedBy}
+        </Text>
+      </View>
+      {teamName ? (
+        <View style={styles.submissionMetaRow}>
+          <Text style={styles.submissionMetaLabel}>Team</Text>
+          <Text numberOfLines={1} style={styles.submissionMetaText}>
+            {teamName}
+          </Text>
+        </View>
+      ) : null}
+      {description ? <Text style={styles.submissionDescriptionText}>{description}</Text> : null}
     </View>
   );
 }
@@ -5473,6 +5788,16 @@ function hasRequiredProofItems(task: HackTask, submitForm: typeof emptySubmitFor
   return buildProofItemsForTask(task, submitForm).every((proofItem) => proofItem.value.trim());
 }
 
+function hasSubmissionMeta(submitForm: typeof emptySubmitForm) {
+  return Boolean(
+    submitForm.submitterName.trim() && submitForm.teamName.trim() && submitForm.description.trim(),
+  );
+}
+
+function canShowProofSubmitCard(status?: SubmissionStatus) {
+  return !status || status === "returned";
+}
+
 function getSubmissionProofItems(submission: {
   proofItems?: Array<SubmissionProofItem>;
   proofUrl: string;
@@ -5553,6 +5878,20 @@ function statusTone(status?: SubmissionStatus) {
   if (status === "returned") return "red";
   if (status === "submitted") return "orange";
   return "gold";
+}
+
+function submissionHoldIcon(status: SubmissionStatus): React.ComponentProps<typeof Ionicons>["name"] {
+  if (status === "winner") return "trophy-outline";
+  if (status === "approved") return "checkmark-circle-outline";
+  if (status === "returned") return "refresh-outline";
+  return "hourglass-outline";
+}
+
+function taskKindTone(kind: TaskKind): Tone {
+  if (kind === "challenge") return "orange";
+  if (kind === "game") return "lime";
+  if (kind === "special") return "sky";
+  return "violet";
 }
 
 function kindLabel(kind: TaskKind) {
@@ -5753,6 +6092,7 @@ const styles = StyleSheet.create({
   cardTopRow: {
     alignItems: "flex-start",
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 10,
     justifyContent: "space-between",
   },
@@ -5989,6 +6329,43 @@ const styles = StyleSheet.create({
     color: "#060214",
     fontSize: 12,
     fontWeight: "900",
+  },
+  createdTaskCard: {
+    backgroundColor: theme.surface,
+    borderColor: theme.border,
+    borderRadius: 9,
+    borderWidth: 1,
+    gap: 8,
+    padding: 10,
+  },
+  createdTaskKindChip: {
+    borderRadius: 9,
+    borderWidth: 1,
+    flexBasis: "47.8%",
+    flexGrow: 1,
+    minHeight: 58,
+    padding: 9,
+  },
+  createdTaskKindCount: {
+    fontSize: 16,
+    fontWeight: "900",
+    marginTop: 3,
+  },
+  createdTaskKindGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 7,
+  },
+  createdTaskKindLabel: {
+    color: theme.dim,
+    fontFamily: Platform.select({ default: "monospace" }),
+    fontSize: 9,
+    fontWeight: "800",
+    marginTop: 1,
+    textTransform: "uppercase",
+  },
+  createdTasksBlock: {
+    gap: 10,
   },
   headerIconButton: {
     alignItems: "center",
@@ -6881,22 +7258,29 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   proofTypeLabel: {
+    alignSelf: "flex-start",
     backgroundColor: theme.surface,
     borderColor: theme.border,
     borderRadius: 8,
     borderWidth: 1,
     color: theme.dim,
+    flexShrink: 1,
     fontFamily: Platform.select({ default: "monospace" }),
-    fontSize: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
+    fontSize: 9,
+    lineHeight: 12,
+    maxWidth: "100%",
+    overflow: "hidden",
+    paddingHorizontal: 7,
+    paddingVertical: 4,
     textTransform: "uppercase",
   },
   proofTypeRow: {
+    alignItems: "flex-start",
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 6,
-    marginTop: 10,
+    gap: 5,
+    marginTop: 8,
+    width: "100%",
   },
   quickActionGrid: {
     flexDirection: "row",
@@ -7130,6 +7514,15 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingBottom: 2,
   },
+  returnedNoticeCard: {
+    backgroundColor: theme.dangerDark,
+    borderColor: theme.dangerBorder,
+    borderRadius: 10,
+    borderWidth: 1,
+    gap: 8,
+    marginTop: 9,
+    padding: 10,
+  },
   screen: {
     backgroundColor: theme.background,
     flex: 1,
@@ -7276,6 +7669,72 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     padding: 10,
   },
+  submissionHoldCard: {
+    borderRadius: 10,
+    borderWidth: 1,
+    gap: 9,
+    marginTop: 9,
+    padding: 10,
+  },
+  submissionHoldHeader: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    gap: 9,
+  },
+  submissionHoldIcon: {
+    alignItems: "center",
+    backgroundColor: theme.panelStrong,
+    borderRadius: 8,
+    borderWidth: 1,
+    height: 34,
+    justifyContent: "center",
+    width: 34,
+  },
+  submissionHoldText: {
+    color: theme.muted,
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 2,
+  },
+  submissionHoldTitle: {
+    color: theme.text,
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  submissionDescriptionText: {
+    color: theme.text,
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 7,
+  },
+  submissionMetaBox: {
+    backgroundColor: theme.panelStrong,
+    borderColor: theme.border,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 5,
+    marginTop: 10,
+    padding: 9,
+  },
+  submissionMetaLabel: {
+    color: theme.dim,
+    fontFamily: Platform.select({ default: "monospace" }),
+    fontSize: 9,
+    fontWeight: "800",
+    minWidth: 52,
+    textTransform: "uppercase",
+  },
+  submissionMetaRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+  },
+  submissionMetaText: {
+    color: theme.text,
+    flex: 1,
+    fontSize: 12,
+    fontWeight: "800",
+  },
   submitCard: {
     backgroundColor: theme.participantDark,
     borderColor: theme.participantBorder,
@@ -7284,6 +7743,19 @@ const styles = StyleSheet.create({
     gap: 9,
     marginTop: 9,
     padding: 10,
+  },
+  submitDescriptionInput: {
+    minHeight: 64,
+  },
+  submitMetaField: {
+    flexBasis: "47.8%",
+    flexGrow: 1,
+    minWidth: 128,
+  },
+  submitMetaGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 9,
   },
   specialAssigneeRow: {
     alignItems: "center",
@@ -7309,6 +7781,7 @@ const styles = StyleSheet.create({
     borderColor: theme.border,
     borderRadius: 9,
     borderWidth: 1,
+    overflow: "hidden",
     padding: 10,
   },
   taskCardSelected: {
@@ -7317,6 +7790,7 @@ const styles = StyleSheet.create({
   },
   taskTitleBlock: {
     flex: 1,
+    minWidth: 0,
   },
   textArea: {
     minHeight: 76,

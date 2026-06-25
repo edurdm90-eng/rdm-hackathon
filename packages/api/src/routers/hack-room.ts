@@ -65,6 +65,9 @@ type HackSubmissionRecord = {
   proofItems?: Array<z.infer<typeof proofItemSchema>>;
   proofUrl: string;
   notes: string;
+  submissionDescription?: string;
+  submitterName?: string;
+  teamName?: string;
   status: "submitted" | "approved" | "winner" | "returned";
   hostFeedback?: string;
   awardXrdm?: number;
@@ -502,6 +505,9 @@ export const hackRoomRouter = router({
         proofItems: z.array(proofItemSchema).max(6).default([]),
         proofUrl: z.string().trim().max(500).default(""),
         notes: z.string().trim().max(700).default(""),
+        submissionDescription: z.string().trim().max(700).default(""),
+        submitterName: z.string().trim().max(80).default(""),
+        teamName: z.string().trim().max(100).default(""),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -576,6 +582,9 @@ export const hackRoomRouter = router({
               proofItems,
               proofUrl: proofItems[0]?.value ?? input.proofUrl,
               notes: input.notes,
+              submissionDescription: input.submissionDescription,
+              submitterName: input.submitterName,
+              teamName: input.teamName,
               status: "submitted",
               submittedAt: timestamp,
               updatedAt: timestamp,
@@ -601,6 +610,9 @@ export const hackRoomRouter = router({
         proofItems,
         proofUrl: proofItems[0]?.value ?? input.proofUrl,
         notes: input.notes,
+        submissionDescription: input.submissionDescription,
+        submitterName: input.submitterName,
+        teamName: input.teamName,
         status: "submitted",
         submittedAt: timestamp,
         updatedAt: timestamp,
