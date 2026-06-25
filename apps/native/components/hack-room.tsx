@@ -45,6 +45,7 @@ type RoomTab =
   | "assign"
   | "awards"
   | "challenges"
+  | "created"
   | "history"
   | "leaderboard"
   | "participants"
@@ -1775,6 +1776,7 @@ function HostRoomWorkspace({
   taskKind: TaskKind;
   winnerSubmissions: DashboardData["hostSubmissions"];
 }) {
+  const [historyTaskId, setHistoryTaskId] = useState("");
   const challengeTasks = roomTasks.filter((task) => task.kind === "challenge" || task.kind === "game");
   const challengeComposerKind: TaskKind = taskKind === "game" ? "game" : "challenge";
   const leaderboardRows = winnerSubmissions
@@ -1808,12 +1810,11 @@ function HostRoomWorkspace({
     .sort((left, right) => right.awardXrdm - left.awardXrdm);
   const hostQuickActions: Array<{
     icon: React.ComponentProps<typeof Ionicons>["name"];
-    id: RoomTab | "created-tasks";
+    id: RoomTab;
     label: string;
-    targetTab?: RoomTab;
   }> = [
     { icon: "clipboard-outline", id: "assign", label: "Assignments" },
-    { icon: "layers-outline", id: "created-tasks", label: "Created Tasks", targetTab: "history" },
+    { icon: "layers-outline", id: "created", label: "Created Tasks" },
     { icon: "people-outline", id: "participants", label: "Members" },
     { icon: "shield-checkmark-outline", id: "verify", label: "Verify" },
     { icon: "time-outline", id: "history", label: "History" },
@@ -1837,7 +1838,7 @@ function HostRoomWorkspace({
                 icon={action.icon}
                 key={action.id}
                 label={action.label}
-                onPress={() => onRoomTabChange(action.targetTab ?? (action.id as RoomTab))}
+                onPress={() => onRoomTabChange(action.id)}
                 tone="violet"
               />
             ))}
@@ -1936,6 +1937,17 @@ function HostRoomWorkspace({
         />
       ) : null}
 
+      {activeRoomTab === "created" ? (
+        <HostCreatedTasksPanel
+          historySubmissions={historySubmissions}
+          onOpenTaskHistory={(taskId) => {
+            setHistoryTaskId(taskId);
+            onRoomTabChange("history");
+          }}
+          roomTasks={roomTasks}
+        />
+      ) : null}
+
       {activeRoomTab === "verify" ? (
         <Panel
           action={<CounterLabel label={`${pendingSubmissions.length} pending`} />}
@@ -1979,32 +1991,12 @@ function HostRoomWorkspace({
       ) : null}
 
       {activeRoomTab === "history" ? (
-        <Panel
-          action={<CounterLabel label={`${historySubmissions.length} verified`} />}
-          eyebrow="Verified Proof"
-          icon="time-outline"
-          title="History"
-          tone="gold"
-        >
-          <HostCreatedTasksSummary roomTasks={roomTasks} />
-          <View style={styles.divider} />
-          <View style={styles.listStack}>
-            {historySubmissions.length ? (
-              historySubmissions.map((submission) => (
-                <SubmissionReviewCard
-                  key={submission._id}
-                  mode="history"
-                  submission={submission}
-                />
-              ))
-            ) : (
-              <EmptyState
-                icon="time-outline"
-                text="Verified proof and winner records will collect here."
-              />
-            )}
-          </View>
-        </Panel>
+        <HostTaskHistoryPanel
+          historySubmissions={historySubmissions}
+          onSelectTask={setHistoryTaskId}
+          roomTasks={roomTasks}
+          selectedTaskId={historyTaskId}
+        />
       ) : null}
 
       {activeRoomTab === "challenges" ? (
@@ -2195,7 +2187,15 @@ function HostRoomWorkspace({
   );
 }
 
-function HostCreatedTasksSummary({ roomTasks }: { roomTasks: DashboardData["tasks"] }) {
+function HostCreatedTasksPanel({
+  historySubmissions,
+  onOpenTaskHistory,
+  roomTasks,
+}: {
+  historySubmissions: DashboardData["hostSubmissions"];
+  onOpenTaskHistory: (taskId: string) => void;
+  roomTasks: DashboardData["tasks"];
+}) {
   const taskKinds: Array<{
     icon: React.ComponentProps<typeof Ionicons>["name"];
     kind: TaskKind;
@@ -2207,14 +2207,20 @@ function HostCreatedTasksSummary({ roomTasks }: { roomTasks: DashboardData["task
     { icon: "game-controller-outline", kind: "game", label: "Game" },
   ];
 
-  return (
-    <View style={styles.createdTasksBlock}>
-      <View style={styles.historyGroupHeader}>
-        <Ionicons name="layers-outline" size={16} color={theme.host} />
-        <Text style={styles.historyGroupTitle}>Created Tasks</Text>
-        <CounterLabel label={`${roomTasks.length} total`} />
-      </View>
+  const historyCountByTask = new Map<string, number>();
+  historySubmissions.forEach((submission) => {
+    historyCountByTask.set(submission.taskId, (historyCountByTask.get(submission.taskId) ?? 0) + 1);
+  });
 
+  return (
+    <Panel
+      action={<CounterLabel label={`${roomTasks.length} created`} />}
+      eyebrow="Host Menu"
+      icon="layers-outline"
+      title="Created Tasks"
+      tone="violet"
+    >
+      <View style={styles.createdTasksBlock}>
       <View style={styles.createdTaskKindGrid}>
         {taskKinds.map((taskKind) => {
           const count = roomTasks.filter((task) => (task.kind ?? "task") === taskKind.kind).length;
@@ -2240,7 +2246,14 @@ function HostCreatedTasksSummary({ roomTasks }: { roomTasks: DashboardData["task
 
       <View style={styles.listStack}>
         {roomTasks.length ? (
-          roomTasks.map((task) => <CreatedTaskLogCard key={task._id} task={task} />)
+          roomTasks.map((task) => (
+            <CreatedTaskLogCard
+              historyCount={historyCountByTask.get(task._id) ?? 0}
+              key={task._id}
+              onPress={() => onOpenTaskHistory(task._id)}
+              task={task}
+            />
+          ))
         ) : (
           <EmptyState
             icon="layers-outline"
@@ -2249,15 +2262,121 @@ function HostCreatedTasksSummary({ roomTasks }: { roomTasks: DashboardData["task
         )}
       </View>
     </View>
+    </Panel>
   );
 }
 
-function CreatedTaskLogCard({ task }: { task: HackTask }) {
+function HostTaskHistoryPanel({
+  historySubmissions,
+  onSelectTask,
+  roomTasks,
+  selectedTaskId,
+}: {
+  historySubmissions: DashboardData["hostSubmissions"];
+  onSelectTask: (taskId: string) => void;
+  roomTasks: DashboardData["tasks"];
+  selectedTaskId: string;
+}) {
+  const activeTaskId = roomTasks.some((task) => task._id === selectedTaskId)
+    ? selectedTaskId
+    : (roomTasks[0]?._id ?? "");
+  const selectedTask = roomTasks.find((task) => task._id === activeTaskId);
+  const selectedHistory = selectedTask
+    ? historySubmissions.filter((submission) => submission.taskId === selectedTask._id)
+    : [];
+  const historyCountByTask = new Map<string, number>();
+  historySubmissions.forEach((submission) => {
+    historyCountByTask.set(submission.taskId, (historyCountByTask.get(submission.taskId) ?? 0) + 1);
+  });
+
+  return (
+    <Panel
+      action={<CounterLabel label={`${historySubmissions.length} verified`} />}
+      eyebrow="Assignment History"
+      icon="time-outline"
+      title="History"
+      tone="gold"
+    >
+      <View style={styles.createdTasksBlock}>
+        <View style={styles.historyGroupHeader}>
+          <Ionicons name="layers-outline" size={16} color={theme.award} />
+          <Text style={styles.historyGroupTitle}>Pick Assignment</Text>
+          <CounterLabel label={`${roomTasks.length} tasks`} />
+        </View>
+        <View style={styles.listStack}>
+          {roomTasks.length ? (
+            roomTasks.map((task) => (
+              <CreatedTaskLogCard
+                historyCount={historyCountByTask.get(task._id) ?? 0}
+                key={task._id}
+                onPress={() => onSelectTask(task._id)}
+                selected={task._id === activeTaskId}
+                task={task}
+              />
+            ))
+          ) : (
+            <EmptyState
+              icon="clipboard-outline"
+              text="Create an assignment first. Its verification history will appear here."
+            />
+          )}
+        </View>
+      </View>
+
+      <View style={styles.divider} />
+
+      <View style={styles.listStack}>
+        <View style={styles.historyGroupHeader}>
+          <Ionicons name="checkmark-circle-outline" size={16} color={theme.award} />
+          <Text numberOfLines={1} style={styles.historyGroupTitle}>
+            {selectedTask?.title ?? "No assignment selected"}
+          </Text>
+          <CounterLabel label={`${selectedHistory.length} records`} />
+        </View>
+        {selectedHistory.length ? (
+          selectedHistory.map((submission) => (
+            <SubmissionReviewCard key={submission._id} mode="history" submission={submission} />
+          ))
+        ) : (
+          <EmptyState
+            icon="time-outline"
+            text={
+              selectedTask
+                ? "No verified proof or winner records for this assignment yet."
+                : "Select an assignment to see its history."
+            }
+          />
+        )}
+      </View>
+    </Panel>
+  );
+}
+
+function CreatedTaskLogCard({
+  historyCount,
+  onPress,
+  selected,
+  task,
+}: {
+  historyCount?: number;
+  onPress?: () => void;
+  selected?: boolean;
+  task: HackTask;
+}) {
   const kind = task.kind ?? "task";
   const proofTypes = getTaskProofTypes(task).map((proofType) => proofTypeLabel(proofType));
 
   return (
-    <View style={styles.createdTaskCard}>
+    <Pressable
+      accessibilityRole={onPress ? "button" : undefined}
+      disabled={!onPress}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.createdTaskCard,
+        selected && styles.createdTaskCardSelected,
+        pressed && onPress && styles.pressed,
+      ]}
+    >
       <View style={styles.cardTopRow}>
         <View style={styles.taskTitleBlock}>
           <Text numberOfLines={1} style={styles.cardTitle}>
@@ -2267,7 +2386,10 @@ function CreatedTaskLogCard({ task }: { task: HackTask }) {
             {formatDate(task.createdAt)} - Due {formatDate(task.dueAt)}
           </Text>
         </View>
-        <StatusPill label={kindLabel(kind)} tone={taskKindTone(kind)} />
+        <View style={styles.createdTaskBadges}>
+          <StatusPill label={kindLabel(kind)} tone={taskKindTone(kind)} />
+          {typeof historyCount === "number" ? <CounterLabel label={`${historyCount} history`} /> : null}
+        </View>
       </View>
       <Text numberOfLines={2} style={styles.cardDescription}>
         {task.description || "No description added."}
@@ -2280,7 +2402,7 @@ function CreatedTaskLogCard({ task }: { task: HackTask }) {
           </Text>
         ))}
       </View>
-    </View>
+    </Pressable>
   );
 }
 
@@ -2759,7 +2881,9 @@ function TaskProofSubmitCard({
   submitForm: typeof emptySubmitForm;
   submitProofPending: boolean;
 }) {
-  const submitMetaComplete = hasSubmissionMeta(submitForm);
+  const submitMetaComplete = Boolean(
+    submitForm.submitterName.trim() && submitForm.teamName.trim() && submitForm.description.trim(),
+  );
 
   return (
     <View style={styles.submitCard}>
@@ -5788,12 +5912,6 @@ function hasRequiredProofItems(task: HackTask, submitForm: typeof emptySubmitFor
   return buildProofItemsForTask(task, submitForm).every((proofItem) => proofItem.value.trim());
 }
 
-function hasSubmissionMeta(submitForm: typeof emptySubmitForm) {
-  return Boolean(
-    submitForm.submitterName.trim() && submitForm.teamName.trim() && submitForm.description.trim(),
-  );
-}
-
 function canShowProofSubmitCard(status?: SubmissionStatus) {
   return !status || status === "returned";
 }
@@ -6337,6 +6455,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     gap: 8,
     padding: 10,
+  },
+  createdTaskBadges: {
+    alignItems: "flex-end",
+    gap: 5,
+  },
+  createdTaskCardSelected: {
+    backgroundColor: theme.awardDark,
+    borderColor: theme.awardBorder,
   },
   createdTaskKindChip: {
     borderRadius: 9,
