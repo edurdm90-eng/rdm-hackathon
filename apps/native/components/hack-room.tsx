@@ -1,6 +1,6 @@
 import type { AppRouter } from "@rdm-hack/api/routers/index";
 import { Ionicons } from "@expo/vector-icons";
-import DateTimePicker, { type DateTimePickerEvent } from "@react-native-community/datetimepicker";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import type { inferRouterOutputs } from "@trpc/server";
 import { useNavigation, useRouter } from "expo-router";
@@ -1591,32 +1591,39 @@ function RoomWorkspace({
   winnerSubmissions: DashboardData["hostSubmissions"];
 }) {
   const tone = roomRole === "host" ? "violet" : "cyan";
+  const focusedActionOpen =
+    roomRole === "host" ? Boolean(activeRoomTab) : Boolean(activeParticipantTab);
+
   return (
     <View style={styles.roomWorkspace}>
-      <View style={styles.roomWorkspaceHeader}>
-        <View style={styles.roomWorkspaceTitleBlock}>
-          <Text style={styles.sectionEyebrow}>Inside Hack Room</Text>
-          <Text numberOfLines={1} style={styles.roomWorkspaceTitle}>
-            {room.name}
-          </Text>
-          <Text numberOfLines={2} style={styles.cardDescription}>
-            {room.description || `Hosted by ${room.hostName}`}
-          </Text>
-        </View>
-        <StatusPill label={roomRole} tone={tone} />
-      </View>
+      {!focusedActionOpen ? (
+        <>
+          <View style={styles.roomWorkspaceHeader}>
+            <View style={styles.roomWorkspaceTitleBlock}>
+              <Text style={styles.sectionEyebrow}>Inside Hack Room</Text>
+              <Text numberOfLines={1} style={styles.roomWorkspaceTitle}>
+                {room.name}
+              </Text>
+              <Text numberOfLines={2} style={styles.cardDescription}>
+                {room.description || `Hosted by ${room.hostName}`}
+              </Text>
+            </View>
+            <StatusPill label={roomRole} tone={tone} />
+          </View>
 
-      <View style={styles.roomStatsGrid}>
-        <MiniStat icon="people-outline" label="Participants" value={room.participants.length} />
-        <MiniStat icon="clipboard-outline" label="Tasks" value={roomTasks.length} />
-        <MiniStat icon="trophy-outline" label="Winners" value={roomWinners.length} />
-      </View>
+          <View style={styles.roomStatsGrid}>
+            <MiniStat icon="people-outline" label="Participants" value={room.participants.length} />
+            <MiniStat icon="clipboard-outline" label="Tasks" value={roomTasks.length} />
+            <MiniStat icon="trophy-outline" label="Winners" value={roomWinners.length} />
+          </View>
 
-      {roomRole === "host" ? (
-        <TrackLabel label="Organizer track" tone="violet" />
-      ) : (
-        <TrackLabel label="Participant track" tone="cyan" />
-      )}
+          {roomRole === "host" ? (
+            <TrackLabel label="Organizer track" tone="violet" />
+          ) : (
+            <TrackLabel label="Participant track" tone="cyan" />
+          )}
+        </>
+      ) : null}
 
       {roomRole === "host" ? (
         <HostRoomWorkspace
@@ -4799,12 +4806,12 @@ function DateTimeField({
   const [pickerMode, setPickerMode] = useState<"date" | "time" | null>(null);
   const pickerDate = parseDateTimeValue(value);
 
-  const handlePickerChange = (_event: DateTimePickerEvent, selectedDate?: Date) => {
+  const handlePickerValueChange = (_event: unknown, selectedDate: Date) => {
     if (Platform.OS !== "ios") {
       setPickerMode(null);
     }
 
-    if (!selectedDate || !pickerMode) {
+    if (!pickerMode) {
       return;
     }
 
@@ -4815,6 +4822,12 @@ function DateTimeField({
         : mergeTimeParts(baseDate, selectedDate);
 
     onChange(nextDate.toISOString());
+  };
+
+  const handlePickerDismiss = () => {
+    if (Platform.OS !== "ios") {
+      setPickerMode(null);
+    }
   };
 
   if (Platform.OS === "web") {
@@ -4860,7 +4873,9 @@ function DateTimeField({
           <DateTimePicker
             display={Platform.OS === "ios" ? "spinner" : "default"}
             mode={pickerMode}
-            onChange={handlePickerChange}
+            onDismiss={handlePickerDismiss}
+            onNeutralButtonPress={handlePickerDismiss}
+            onValueChange={handlePickerValueChange}
             value={pickerDate}
           />
           {Platform.OS === "ios" ? (
