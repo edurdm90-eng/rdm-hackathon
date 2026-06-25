@@ -1,0 +1,736 @@
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
+<h2 class="sr-only">HackRoom mobile wireframe — two phone frames side by side showing Host flow (Profile, Quick Actions, Assignments with Regular Task / Spot Challenge / Special Task / Notification, Members, Verify, History, Award XRDM, Awards Certificates, Awards NFT Badges, Games, Leaderboard, Room Profile) and Participant flow (Quick Actions, Submit Task, History, Games with Memory Match, Wallet), all in dark mode with teal and gold accents.</h2>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-sans);background:#0a0a0a;padding:16px 0 24px}
+.outer{display:flex;gap:20px;justify-content:center;flex-wrap:wrap}
+.col{display:flex;flex-direction:column;gap:12px;align-items:center}
+.col-lbl{font-size:11px;font-weight:500;color:#444;text-transform:uppercase;letter-spacing:.8px;text-align:center;margin-bottom:2px}
+
+/* phone frame */
+.phone{width:300px;background:#0d0d0d;border-radius:30px;border:1.5px solid #252525;overflow:hidden;flex-shrink:0}
+.sb{background:#111;padding:8px 14px 6px;display:flex;justify-content:space-between;align-items:center}
+.sb .t{font-size:11px;font-weight:500;color:#ccc}
+.sb .ic{display:flex;gap:4px;align-items:center;font-size:11px;color:#888}
+.topnav{background:#111;border-bottom:.5px solid #1e1e1e;padding:9px 12px;display:flex;align-items:center;justify-content:space-between}
+.logo-r{border:1.5px solid #1D9E75;border-radius:4px;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#1D9E75}
+.logo-dm{font-size:14px;font-weight:700;color:#f0f0f0;letter-spacing:-.5px}
+.logo-dm span{color:#1D9E75}
+.tnv{display:flex;gap:5px}
+.nb{width:26px;height:26px;background:#1a1a1a;border-radius:7px;display:flex;align-items:center;justify-content:center;border:.5px solid #222}
+.nb i{font-size:13px;color:#888}
+.body{background:#0d0d0d;overflow-y:auto;max-height:520px;padding:9px 9px 0}
+
+/* back button */
+.back-btn{display:inline-flex;align-items:center;gap:5px;background:#1a1a1a;border:.5px solid #252525;border-radius:8px;padding:5px 10px;font-size:11px;color:#c0c0c0;margin-bottom:8px;cursor:pointer}
+.back-btn i{font-size:12px}
+
+/* room header */
+.room-hdr{background:#1a1a1a;border:.5px solid #252525;border-radius:12px;padding:11px 12px;margin-bottom:8px}
+.rh-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px}
+.rh-eyebrow{font-size:9px;font-weight:500;color:#555;text-transform:uppercase;letter-spacing:.6px;margin-bottom:2px}
+.rh-title{font-size:14px;font-weight:500;color:#e8e8e8;margin-bottom:3px}
+.rh-desc{font-size:10px;color:#666;line-height:1.45}
+.role-pill{padding:2px 8px;border-radius:8px;font-size:9px;font-weight:600;letter-spacing:.4px;text-transform:uppercase}
+.role-host{background:#1a2a1e;border:.5px solid #1D9E75;color:#1D9E75}
+.role-part{background:#1a1a2e;border:.5px solid #534AB7;color:#7F77DD}
+.stats-row{display:flex;gap:6px;margin-top:8px}
+.stat-box{flex:1;background:#111;border:.5px solid #1e1e1e;border-radius:8px;padding:7px 8px;text-align:center}
+.sb-n{font-size:15px;font-weight:500;color:#e0e0e0}
+.sb-l{font-size:9px;color:#555;margin-top:1px;text-transform:uppercase;letter-spacing:.4px}
+
+/* quick actions back bar */
+.qa-back{display:flex;align-items:center;gap:6px;background:#1a1a1a;border:.5px solid #252525;border-radius:9px;padding:7px 10px;margin-bottom:8px}
+.qa-back i{font-size:14px;color:#888}
+.qa-back-txt{font-size:11px;color:#c0c0c0}
+.host-action-lbl{font-size:9px;color:#555;text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px}
+.host-action-val{font-size:14px;font-weight:500;color:#e8e8e8}
+
+/* QA grid */
+.qa-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px}
+.qa-item{background:#1a1a1a;border:.5px solid #252525;border-radius:10px;padding:14px 10px;display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer;transition:border-color .15s}
+.qa-item:hover{border-color:#1D9E75}
+.qa-item.full{grid-column:1/-1}
+.qa-icon{width:34px;height:34px;background:#111;border-radius:9px;display:flex;align-items:center;justify-content:center;border:.5px solid #1e1e1e}
+.qa-icon i{font-size:16px;color:#ccc}
+.qa-label{font-size:11px;color:#c0c0c0;font-weight:500}
+
+/* section card */
+.sc{background:#1a1a1a;border:.5px solid #252525;border-radius:12px;padding:11px 12px;margin-bottom:8px}
+.sc-hdr{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px}
+.sc-eyebrow{font-size:9px;color:#555;text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px}
+.sc-title{font-size:13px;font-weight:500;color:#e0e0e0}
+.sc-badge{padding:2px 7px;border-radius:7px;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.3px}
+.badge-gold{background:#2a2000;border:.5px solid #c09000;color:#c09000}
+.badge-green{background:#0a2016;border:.5px solid #1D9E75;color:#1D9E75}
+.badge-amber{background:#2a1800;border:.5px solid #EF9F27;color:#EF9F27}
+.badge-sub{background:#1a1a2a;border:.5px solid #534AB7;color:#7F77DD}
+
+/* task type toggle */
+.tt-row{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap}
+.tt-btn{flex:1;min-width:60px;display:flex;align-items:center;justify-content:center;gap:4px;background:#111;border:.5px solid #252525;border-radius:8px;padding:7px 6px;font-size:10px;color:#888;cursor:pointer;transition:all .15s}
+.tt-btn.active{background:#0d2019;border-color:#1D9E75;color:#1D9E75}
+.tt-btn i{font-size:12px}
+.tt-btn.notif.active{background:#1a1020;border-color:#534AB7;color:#7F77DD}
+.tt-btn.special.active{background:#2a1400;border-color:#EF9F27;color:#EF9F27}
+
+/* form fields */
+.flbl{font-size:9px;font-weight:500;color:#555;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+.finput{width:100%;background:#111;border:.5px solid #252525;border-radius:8px;padding:8px 10px;font-size:11px;color:#c0c0c0;font-family:var(--font-sans);margin-bottom:8px}
+.finput::placeholder{color:#444}
+.ftextarea{width:100%;background:#111;border:.5px solid #252525;border-radius:8px;padding:8px 10px;font-size:11px;color:#c0c0c0;font-family:var(--font-sans);resize:none;height:52px;margin-bottom:8px}
+.ftextarea::placeholder{color:#444}
+
+/* proof tags */
+.proof-tags{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px}
+.ptag{padding:3px 8px;background:#111;border:.5px solid #1D9E75;border-radius:6px;font-size:9px;font-weight:600;color:#1D9E75;text-transform:uppercase}
+.ptag.amber{border-color:#EF9F27;color:#EF9F27}
+.ptag.purple{border-color:#7F77DD;color:#7F77DD}
+
+/* member rows */
+.mem-row{display:flex;align-items:center;gap:8px;background:#111;border:.5px solid #1e1e1e;border-radius:8px;padding:8px 10px;margin-bottom:5px}
+.av{width:28px;height:28px;border-radius:50%;background:#1a2a1e;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;color:#1D9E75;flex-shrink:0}
+.av.purple{background:#1a1a2e;color:#7F77DD}
+.av.amber{background:#2a1800;color:#EF9F27}
+.mem-name{font-size:12px;font-weight:500;color:#d0d0d0;flex:1}
+.mem-meta{font-size:9px;color:#555}
+.mem-date{font-size:9px;color:#555;margin-left:auto}
+
+/* invite code row */
+.invite-row{display:flex;align-items:center;justify-content:space-between;background:#111;border:.5px solid #1D9E75;border-radius:8px;padding:8px 10px;margin-bottom:8px}
+.invite-code{font-size:13px;font-weight:600;color:#1D9E75;letter-spacing:.5px;display:flex;align-items:center;gap:6px}
+.invite-code i{font-size:13px}
+.share-btn{display:flex;align-items:center;gap:4px;background:#0d2019;border:.5px solid #1D9E75;border-radius:7px;padding:4px 8px;font-size:10px;color:#1D9E75;cursor:pointer}
+.share-btn i{font-size:12px}
+
+/* review queue */
+.rq-item{background:#111;border:.5px solid #1e1e1e;border-radius:9px;padding:9px 10px;margin-bottom:6px}
+.rq-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:7px}
+.rq-name{font-size:12px;font-weight:500;color:#d0d0d0}
+.rq-sub{font-size:10px;color:#666;margin-top:1px}
+.status-pill{padding:2px 7px;border-radius:7px;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.3px}
+.s-submitted{background:#1a1020;border:.5px solid #7F77DD;color:#7F77DD}
+.s-verified{background:#0a2016;border:.5px solid #1D9E75;color:#1D9E75}
+.s-winner{background:#2a2000;border:.5px solid #c09000;color:#c09000}
+.s-returned{background:#2a1400;border:.5px solid #993C1D;color:#D85A30}
+.proof-link{display:flex;align-items:center;justify-content:space-between;background:#1a1a1a;border:.5px solid #222;border-radius:7px;padding:7px 9px;margin-bottom:4px}
+.pl-left{display:flex;align-items:center;gap:7px}
+.pl-icon{width:26px;height:26px;background:#111;border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.pl-icon i{font-size:13px;color:#888}
+.pl-name{font-size:11px;font-weight:500;color:#c0c0c0}
+.pl-url{font-size:9px;color:#555;margin-top:1px}
+.pl-open{font-size:10px;color:#1D9E75;font-weight:500}
+.sc-note{font-size:10px;color:#666;margin-top:6px;line-height:1.45}
+.feedback-lbl{font-size:9px;color:#555;text-transform:uppercase;letter-spacing:.5px;margin:8px 0 4px}
+.feedback-box{background:#111;border:.5px solid #222;border-radius:7px;padding:8px 9px;font-size:10px;color:#888}
+
+/* award card */
+.award-card{background:#1a1800;border:.5px solid #c09000;border-radius:10px;padding:10px 11px;margin-bottom:6px}
+.award-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:6px}
+.award-name{font-size:12px;font-weight:500;color:#e0e0e0}
+.award-sub{font-size:10px;color:#888;margin-top:1px;line-height:1.35}
+.award-lbl{font-size:9px;color:#555;text-transform:uppercase;letter-spacing:.5px;margin:6px 0 3px}
+.xrdm-val{display:flex;align-items:center;gap:4px;font-size:13px;font-weight:500;color:#c09000}
+.xrdm-val i{font-size:14px}
+
+/* leaderboard */
+.lb-row{display:flex;align-items:center;gap:8px;background:#1a1800;border:.5px solid #2a2000;border-radius:8px;padding:9px 10px;margin-bottom:5px}
+.lb-rank{font-size:13px;font-weight:600;color:#c09000;width:20px;text-align:center;flex-shrink:0}
+.lb-info{flex:1}
+.lb-name{font-size:12px;font-weight:500;color:#e0e0e0}
+.lb-email{font-size:10px;color:#666;margin-top:1px}
+.lb-xrdm{font-size:12px;font-weight:600;color:#1D9E75;text-align:right}
+.lb-wins{font-size:9px;color:#555;text-align:right;margin-top:1px}
+
+/* room profile fields */
+.rp-field{background:#111;border:.5px solid #1e1e1e;border-radius:8px;padding:8px 10px;margin-bottom:5px}
+.rpf-lbl{font-size:9px;color:#555;text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px}
+.rpf-val{font-size:12px;color:#d0d0d0;font-weight:500}
+
+/* action button */
+.act-btn{width:100%;background:#1a1a1a;border:.5px solid #333;border-radius:9px;padding:10px;text-align:center;font-size:12px;font-weight:500;color:#c0c0c0;cursor:pointer;margin-top:6px;display:flex;align-items:center;justify-content:center;gap:6px}
+.act-btn i{font-size:14px}
+.act-btn.primary{background:#0d2019;border-color:#1D9E75;color:#1D9E75}
+.act-btn.danger{background:#1a0a0a;border-color:#D85A30;color:#D85A30}
+
+/* wallet */
+.wallet-card{background:#1a1800;border:.5px solid #c09000;border-radius:12px;padding:12px;margin-bottom:8px;text-align:center}
+.wallet-icon{width:36px;height:36px;background:#111;border-radius:9px;display:flex;align-items:center;justify-content:center;margin:0 auto 6px}
+.wallet-icon i{font-size:18px;color:#c09000}
+.wallet-title{font-size:13px;font-weight:500;color:#c09000;margin-bottom:4px}
+.wallet-desc{font-size:10px;color:#888;line-height:1.4;margin-bottom:8px}
+.wallet-pill{display:inline-flex;align-items:center;gap:4px;background:#2a2000;border:.5px solid #c09000;border-radius:8px;padding:2px 9px;font-size:9px;font-weight:600;color:#c09000;text-transform:uppercase;letter-spacing:.4px}
+.bal-row{display:flex;align-items:baseline;gap:6px;margin-bottom:8px}
+.bal-n{font-size:24px;font-weight:500;color:#e8e8e8}
+.bal-unit{font-size:12px;color:#555;font-weight:500}
+.bal-stats{display:flex;gap:6px}
+.bal-stat{flex:1;background:#111;border:.5px solid #1e1e1e;border-radius:7px;padding:6px 8px}
+.bs-n{font-size:13px;font-weight:500;color:#c09000}
+.bs-l{font-size:9px;color:#555;margin-top:1px}
+
+/* memory match */
+.mm-card{background:#1a1800;border:.5px solid #c09000;border-radius:12px;padding:10px;margin-bottom:6px}
+.mm-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.mm-title{font-size:12px;font-weight:500;color:#e0e0e0}
+.mm-close{width:22px;height:22px;background:#2a2000;border-radius:6px;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.mm-close i{font-size:12px;color:#c09000}
+.mm-stats{display:flex;gap:6px;margin-bottom:8px}
+.mm-stat{flex:1;background:#111;border-radius:6px;padding:5px 7px}
+.mm-stat-n{font-size:13px;font-weight:500;color:#c09000}
+.mm-stat-l{font-size:9px;color:#555}
+.mm-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}
+.mm-cell{background:#111;border:.5px solid #2a2000;border-radius:7px;height:44px;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.mm-q{font-size:16px;font-weight:500;color:#666}
+
+/* games */
+.game-card{background:#1a1800;border:.5px solid #2a2000;border-radius:10px;padding:9px 10px;margin-bottom:6px;display:flex;align-items:flex-start;gap:8px}
+.game-icon{width:32px;height:32px;background:#111;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.game-icon i{font-size:15px;color:#c09000}
+.game-body{flex:1}
+.game-name{font-size:12px;font-weight:500;color:#d0d0d0}
+.game-meta{font-size:10px;color:#666;margin-top:1px}
+.game-desc{font-size:10px;color:#666;margin-top:4px;line-height:1.4}
+
+/* spot challenge */
+.sc-card{background:#1a1020;border:.5px solid #534AB7;border-radius:10px;padding:9px 10px;margin-bottom:6px}
+.sc-card-title{font-size:12px;font-weight:500;color:#d0d0d0;margin-bottom:2px}
+.sc-card-meta{font-size:10px;color:#666}
+
+/* tab row */
+.tab-row{display:flex;gap:5px;margin-bottom:8px}
+.tab-b{flex:1;background:#111;border:.5px solid #252525;border-radius:8px;padding:7px 0;text-align:center;font-size:10px;color:#666;cursor:pointer}
+.tab-b.active{background:#0d2019;border-color:#1D9E75;color:#1D9E75;font-weight:500}
+.tab-b.active-gold{background:#1a1800;border-color:#c09000;color:#c09000;font-weight:500}
+
+/* submit proof */
+.submit-task-card{background:#1a1a1a;border:.5px solid #1D9E75;border-radius:10px;padding:9px 10px;margin-bottom:6px}
+.st-title{font-size:12px;font-weight:500;color:#d0d0d0;margin-bottom:2px}
+.st-meta{font-size:10px;color:#666}
+.st-desc{font-size:10px;color:#888;margin-top:5px;line-height:1.4}
+
+/* bnav */
+.bnav{background:#111;border-top:.5px solid #1e1e1e;padding:8px 0 10px;display:flex;justify-content:space-around}
+.bni{display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer}
+.bni i{font-size:18px;color:#555}
+.bni span{font-size:9px;color:#555}
+.bni.act i{color:#1D9E75}
+.bni.act span{color:#1D9E75}
+.bni-rooms{background:#1a1a1a;border-radius:10px;padding:5px 12px;display:flex;flex-direction:column;align-items:center;gap:2px}
+.bni-rooms i{color:#e0e0e0!important}
+.bni-rooms span{color:#e0e0e0!important}
+
+.divider{height:.5px;background:#1a1a1a;margin:8px 0}
+.section-lbl{font-size:9px;font-weight:600;color:#444;text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px}
+</style>
+
+<div class="outer">
+
+<!-- ══ HOST COLUMN ══ -->
+<div class="col">
+  <div class="col-lbl">Host flow</div>
+
+  <!-- HOST: Profile -->
+  <div class="phone">
+    <div class="sb"><span class="t">10:55</span><div class="ic"><i class="ti ti-signal-4g" aria-hidden="true"></i><i class="ti ti-wifi" aria-hidden="true"></i><i class="ti ti-battery-2" aria-hidden="true"></i></div></div>
+    <div class="topnav"><div style="display:flex;align-items:center;gap:5px"><div class="logo-r">R</div><div class="logo-dm"><span>D</span>M</div></div><div class="tnv"><div class="nb"><i class="ti ti-bell" aria-hidden="true"></i></div><div class="nb"><i class="ti ti-menu-2" aria-hidden="true"></i></div><div class="nb"><i class="ti ti-user" aria-hidden="true"></i></div></div></div>
+    <div class="body">
+      <div style="background:#1a1a1a;border:.5px solid #252525;border-radius:12px;padding:11px 12px;margin-bottom:8px">
+        <div style="display:flex;align-items:center;gap:9px;margin-bottom:10px">
+          <div class="av" style="width:34px;height:34px;font-size:12px">YD</div>
+          <div><div style="font-size:14px;font-weight:500;color:#e8e8e8">Yash Diwan</div><div style="font-size:10px;color:#666">yash@rdm.test</div></div>
+        </div>
+        <div class="stats-row">
+          <div class="stat-box"><div class="sb-n">2</div><div class="sb-l">Rooms</div></div>
+          <div class="stat-box" style="border-color:#c09000"><div class="sb-n" style="color:#c09000">1</div><div class="sb-l">Wins</div></div>
+          <div class="stat-box"><div class="sb-n">3</div><div class="sb-l">Network</div></div>
+        </div>
+      </div>
+      <div class="sc">
+        <div style="display:flex;align-items:center;gap:7px;margin-bottom:10px"><div class="nb" style="width:28px;height:28px"><i class="ti ti-user-circle" style="font-size:14px;color:#888" aria-hidden="true"></i></div><div><div style="font-size:9px;color:#555;text-transform:uppercase;letter-spacing:.5px">Account</div><div style="font-size:13px;font-weight:500;color:#e0e0e0">Profile</div></div></div>
+        <div class="rp-field"><div class="rpf-lbl">Name</div><div class="rpf-val">Yash Diwan</div></div>
+        <div class="rp-field"><div class="rpf-lbl">Email</div><div class="rpf-val">yash@rdm.test</div></div>
+        <div class="rp-field"><div class="rpf-lbl">User ID</div><div class="rpf-val">user_host</div></div>
+        <div class="act-btn danger" style="margin-top:8px"><i class="ti ti-logout" aria-hidden="true"></i>Sign Out</div>
+      </div>
+    </div>
+    <div class="bnav"><div class="bni"><i class="ti ti-home" aria-hidden="true"></i><span>Home</span></div><div class="bni"><i class="ti ti-bolt" aria-hidden="true"></i><span>Rooms</span></div><div class="bni act"><i class="ti ti-user" aria-hidden="true"></i><span>Profile</span></div></div>
+  </div>
+
+  <!-- HOST: Quick Actions -->
+  <div class="phone">
+    <div class="sb"><span class="t">10:55</span><div class="ic"><i class="ti ti-signal-4g" aria-hidden="true"></i><i class="ti ti-wifi" aria-hidden="true"></i><i class="ti ti-battery-2" aria-hidden="true"></i></div></div>
+    <div class="topnav"><div style="display:flex;align-items:center;gap:5px"><div class="logo-r">R</div><div class="logo-dm"><span>D</span>M</div></div><div class="tnv"><div class="nb"><i class="ti ti-bell" aria-hidden="true"></i></div><div class="nb"><i class="ti ti-menu-2" aria-hidden="true"></i></div><div class="nb"><i class="ti ti-user" aria-hidden="true"></i></div></div></div>
+    <div class="body">
+      <div class="back-btn"><i class="ti ti-arrow-left" aria-hidden="true"></i>Hack Rooms</div>
+      <div class="room-hdr">
+        <div class="rh-top"><div><div class="rh-eyebrow">Inside Hack Room</div><div class="rh-title">XRDM Impact Sprint</div><div class="rh-desc">Build responsible AI prototypes and submit final proof for organizer verification.</div></div><div class="role-pill role-host">Host</div></div>
+        <div class="stats-row"><div class="stat-box"><div class="sb-n">3</div><div class="sb-l">Participants</div></div><div class="stat-box"><div class="sb-n">3</div><div class="sb-l">Tasks</div></div><div class="stat-box"><div class="sb-n">1</div><div class="sb-l">Winners</div></div></div>
+      </div>
+      <div class="section-lbl">Quick Actions</div>
+      <div class="qa-grid">
+        <div class="qa-item"><div class="qa-icon"><i class="ti ti-clipboard-list" aria-hidden="true"></i></div><div class="qa-label">Assignments</div></div>
+        <div class="qa-item"><div class="qa-icon"><i class="ti ti-users" aria-hidden="true"></i></div><div class="qa-label">Members</div></div>
+        <div class="qa-item"><div class="qa-icon"><i class="ti ti-shield-check" aria-hidden="true"></i></div><div class="qa-label">Verify</div></div>
+        <div class="qa-item"><div class="qa-icon"><i class="ti ti-clock" aria-hidden="true"></i></div><div class="qa-label">History</div></div>
+        <div class="qa-item"><div class="qa-icon"><i class="ti ti-trophy" aria-hidden="true"></i></div><div class="qa-label">Award XRDM</div></div>
+        <div class="qa-item"><div class="qa-icon"><i class="ti ti-award" aria-hidden="true"></i></div><div class="qa-label">Awards</div></div>
+        <div class="qa-item"><div class="qa-icon"><i class="ti ti-device-gamepad-2" aria-hidden="true"></i></div><div class="qa-label">Games</div></div>
+        <div class="qa-item"><div class="qa-icon"><i class="ti ti-chart-bar" aria-hidden="true"></i></div><div class="qa-label">Leaderboard</div></div>
+        <div class="qa-item qa-full"><div class="qa-icon"><i class="ti ti-user-circle" aria-hidden="true"></i></div><div class="qa-label">Profile</div></div>
+      </div>
+    </div>
+    <div class="bnav"><div class="bni"><i class="ti ti-home" aria-hidden="true"></i><span>Home</span></div><div class="bni act"><div class="bni-rooms"><i class="ti ti-bolt" aria-hidden="true"></i><span>Rooms</span></div></div><div class="bni"><i class="ti ti-user" aria-hidden="true"></i><span>Profile</span></div></div>
+  </div>
+
+  <!-- HOST: Assignments -->
+  <div class="phone">
+    <div class="sb"><span class="t">10:55</span><div class="ic"><i class="ti ti-signal-4g" aria-hidden="true"></i><i class="ti ti-wifi" aria-hidden="true"></i><i class="ti ti-battery-2" aria-hidden="true"></i></div></div>
+    <div class="topnav"><div style="display:flex;align-items:center;gap:5px"><div class="logo-r">R</div><div class="logo-dm"><span>D</span>M</div></div><div class="tnv"><div class="nb"><i class="ti ti-bell" aria-hidden="true"></i></div><div class="nb"><i class="ti ti-menu-2" aria-hidden="true"></i></div><div class="nb"><i class="ti ti-user" aria-hidden="true"></i></div></div></div>
+    <div class="body">
+      <div class="back-btn"><i class="ti ti-arrow-left" aria-hidden="true"></i>Hack Rooms</div>
+      <div class="room-hdr">
+        <div class="rh-top"><div><div class="rh-eyebrow">Inside Hack Room</div><div class="rh-title">XRDM Impact Sprint</div><div class="rh-desc">Build responsible AI prototypes and submit final proof for organizer verification.</div></div><div class="role-pill role-host">Host</div></div>
+        <div class="stats-row"><div class="stat-box"><div class="sb-n">3</div><div class="sb-l">Participants</div></div><div class="stat-box"><div class="sb-n">3</div><div class="sb-l">Tasks</div></div><div class="stat-box"><div class="sb-n">1</div><div class="sb-l">Winners</div></div></div>
+      </div>
+      <div class="qa-back"><i class="ti ti-arrow-left" aria-hidden="true"></i><div><div class="qa-back-txt">Quick Actions</div></div></div>
+      <div style="margin-bottom:6px"><div class="host-action-lbl">Host Action</div><div class="host-action-val">Assignments</div></div>
+      <div class="sc">
+        <div class="sc-hdr"><div><div class="sc-eyebrow">Organizer Track</div><div class="sc-title">Create Assignment</div></div><span class="sc-badge badge-green">All Participants</span></div>
+        <!-- 4 task type buttons -->
+        <div class="tt-row">
+          <div class="tt-btn active"><i class="ti ti-clipboard-list" aria-hidden="true"></i>Regular Task</div>
+          <div class="tt-btn"><i class="ti ti-bolt" aria-hidden="true"></i>Spot Challenge</div>
+        </div>
+        <div class="tt-row">
+          <div class="tt-btn special"><i class="ti ti-star" aria-hidden="true"></i>Special Task</div>
+          <div class="tt-btn notif"><i class="ti ti-bell" aria-hidden="true"></i>Notification</div>
+        </div>
+        <div class="flbl">Assignment Title</div>
+        <div class="finput" style="outline:none">Build a working prototype</div>
+        <div class="flbl">Due Date and Time</div>
+        <div class="finput" style="outline:none">2026-06-20T17:00:00.000Z</div>
+        <div class="flbl">Description</div>
+        <div class="ftextarea" style="outline:none">Submit a functional demo. GitHub and Drive proof are mandatory.</div>
+        <div class="flbl">Expected Proof</div>
+        <div class="proof-tags"><span class="ptag">GitHub required</span><span class="ptag">Drive required</span><span class="ptag amber">Video</span></div>
+        <div class="act-btn primary"><i class="ti ti-send" aria-hidden="true"></i>Create Assignment</div>
+      </div>
+    </div>
+    <div class="bnav"><div class="bni"><i class="ti ti-home" aria-hidden="true"></i><span>Home</span></div><div class="bni act"><div class="bni-rooms"><i class="ti ti-bolt" aria-hidden="true"></i><span>Rooms</span></div></div><div class="bni"><i class="ti ti-user" aria-hidden="true"></i><span>Profile</span></div></div>
+  </div>
+
+  <!-- HOST: Members -->
+  <div class="phone">
+    <div class="sb"><span class="t">10:55</span><div class="ic"><i class="ti ti-signal-4g" aria-hidden="true"></i><i class="ti ti-wifi" aria-hidden="true"></i><i class="ti ti-battery-2" aria-hidden="true"></i></div></div>
+    <div class="topnav"><div style="display:flex;align-items:center;gap:5px"><div class="logo-r">R</div><div class="logo-dm"><span>D</span>M</div></div><div class="tnv"><div class="nb"><i class="ti ti-bell" aria-hidden="true"></i></div><div class="nb"><i class="ti ti-menu-2" aria-hidden="true"></i></div><div class="nb"><i class="ti ti-user" aria-hidden="true"></i></div></div></div>
+    <div class="body">
+      <div class="back-btn"><i class="ti ti-arrow-left" aria-hidden="true"></i>Hack Rooms</div>
+      <div class="room-hdr">
+        <div class="rh-top"><div><div class="rh-eyebrow">Inside Hack Room</div><div class="rh-title">XRDM Impact Sprint</div></div><div class="role-pill role-host">Host</div></div>
+        <div class="stats-row"><div class="stat-box"><div class="sb-n">3</div><div class="sb-l">Participants</div></div><div class="stat-box"><div class="sb-n">3</div><div class="sb-l">Tasks</div></div><div class="stat-box"><div class="sb-n">1</div><div class="sb-l">Winners</div></div></div>
+      </div>
+      <div class="qa-back"><i class="ti ti-arrow-left" aria-hidden="true"></i><div><div class="qa-back-txt">Quick Actions</div></div></div>
+      <div style="margin-bottom:6px"><div class="host-action-lbl">Host Action</div><div class="host-action-val">Members</div></div>
+      <div class="sc">
+        <div class="sc-hdr"><div><div class="sc-eyebrow">Host Menu</div><div class="sc-title">Participants</div></div><span class="sc-badge badge-green">3 Joined</span></div>
+        <div class="invite-row"><div class="invite-code"><i class="ti ti-key" aria-hidden="true"></i>HR-XRDM24</div><div class="share-btn"><i class="ti ti-share" aria-hidden="true"></i>Share</div></div>
+        <div class="mem-row"><div class="av">RK</div><div><div class="mem-name">Riya Kapoor</div><div class="mem-meta">riya@rdm.test</div></div><div class="mem-date">Jun 20</div></div>
+        <div class="mem-row"><div class="av purple">AM</div><div><div class="mem-name">Arjun Mehta</div><div class="mem-meta">arjun@rdm.test</div></div><div class="mem-date">Jun 21</div></div>
+        <div class="mem-row"><div class="av amber">NR</div><div><div class="mem-name">Nisha Rao</div><div class="mem-meta">nisha@rdm.test</div></div><div class="mem-date">Jun 22</div></div>
+      </div>
+    </div>
+    <div class="bnav"><div class="bni"><i class="ti ti-home" aria-hidden="true"></i><span>Home</span></div><div class="bni act"><div class="bni-rooms"><i class="ti ti-bolt" aria-hidden="true"></i><span>Rooms</span></div></div><div class="bni"><i class="ti ti-user" aria-hidden="true"></i><span>Profile</span></div></div>
+  </div>
+
+  <!-- HOST: Verify -->
+  <div class="phone">
+    <div class="sb"><span class="t">10:55</span><div class="ic"><i class="ti ti-signal-4g" aria-hidden="true"></i><i class="ti ti-wifi" aria-hidden="true"></i><i class="ti ti-battery-2" aria-hidden="true"></i></div></div>
+    <div class="topnav"><div style="display:flex;align-items:center;gap:5px"><div class="logo-r">R</div><div class="logo-dm"><span>D</span>M</div></div><div class="tnv"><div class="nb"><i class="ti ti-bell" aria-hidden="true"></i></div><div class="nb"><i class="ti ti-menu-2" aria-hidden="true"></i></div><div class="nb"><i class="ti ti-user" aria-hidden="true"></i></div></div></div>
+    <div class="body">
+      <div class="back-btn"><i class="ti ti-arrow-left" aria-hidden="true"></i>Hack Rooms</div>
+      <div class="room-hdr">
+        <div class="rh-top"><div><div class="rh-eyebrow">Inside Hack Room</div><div class="rh-title">XRDM Impact Sprint</div></div><div class="role-pill role-host">Host</div></div>
+        <div class="stats-row"><div class="stat-box"><div class="sb-n">3</div><div class="sb-l">Participants</div></div><div class="stat-box"><div class="sb-n">3</div><div class="sb-l">Tasks</div></div><div class="stat-box"><div class="sb-n">1</div><div class="sb-l">Winners</div></div></div>
+      </div>
+      <div class="qa-back"><i class="ti ti-arrow-left" aria-hidden="true"></i><div><div class="qa-back-txt">Quick Actions</div></div></div>
+      <div style="margin-bottom:6px"><div class="host-action-lbl">Host Action</div><div class="host-action-val">Verify</div></div>
+      <div class="sc">
+        <div class="sc-hdr"><div style="display:flex;align-items:center;gap:7px"><div class="nb" style="width:28px;height:28px;background:#111"><i class="ti ti-award" style="font-size:14px;color:#888" aria-hidden="true"></i></div><div><div class="sc-eyebrow">Verification</div><div class="sc-title">Review Queue</div></div></div><span class="sc-badge badge-sub">1 Pending</span></div>
+        <div class="rq-item">
+          <div class="rq-top"><div style="display:flex;align-items:center;gap:7px"><div class="av">RK</div><div><div class="rq-name">Riya Kapoor</div><div class="rq-sub">XRDM Impact Sprint – Final Hackathon Submission</div></div></div><span class="status-pill s-submitted">Submitted</span></div>
+          <div class="section-lbl" style="margin-top:8px">Submitted Proof</div>
+          <div class="proof-link"><div class="pl-left"><div class="pl-icon"><i class="ti ti-brand-github" aria-hidden="true"></i></div><div><div class="pl-name">GitHub 1</div><div class="pl-url">https://github.com/riya/xrdm-impa…</div></div></div><span class="pl-open">Open</span></div>
+          <div class="proof-link"><div class="pl-left"><div class="pl-icon"><i class="ti ti-brand-google-drive" aria-hidden="true"></i></div><div><div class="pl-name">Drive 2</div><div class="pl-url">https://drive.google.com/riya-demo</div></div></div><span class="pl-open">Open</span></div>
+          <div class="proof-link"><div class="pl-left"><div class="pl-icon"><i class="ti ti-presentation" aria-hidden="true"></i></div><div><div class="pl-name">Deck 3</div><div class="pl-url">https://slides.example.com/riya-d…</div></div></div><span class="pl-open">Open</span></div>
+          <div class="sc-note">Repository, demo drive folder, and deck are ready for review.</div>
+          <div style="display:flex;gap:6px;margin-top:8px">
+            <div class="act-btn primary" style="flex:1"><i class="ti ti-check" aria-hidden="true"></i>Verify</div>
+            <div class="act-btn danger" style="flex:1"><i class="ti ti-x" aria-hidden="true"></i>Return</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="bnav"><div class="bni"><i class="ti ti-home" aria-hidden="true"></i><span>Home</span></div><div class="bni act"><div class="bni-rooms"><i class="ti ti-bolt" aria-hidden="true"></i><span>Rooms</span></div></div><div class="bni"><i class="ti ti-user" aria-hidden="true"></i><span>Profile</span></div></div>
+  </div>
+
+  <!-- HOST: Award XRDM -->
+  <div class="phone">
+    <div class="sb"><span class="t">10:55</span><div class="ic"><i class="ti ti-signal-4g" aria-hidden="true"></i><i class="ti ti-wifi" aria-hidden="true"></i><i class="ti ti-battery-2" aria-hidden="true"></i></div></div>
+    <div class="topnav"><div style="display:flex;align-items:center;gap:5px"><div class="logo-r">R</div><div class="logo-dm"><span>D</span>M</div></div><div class="tnv"><div class="nb"><i class="ti ti-bell" aria-hidden="true"></i></div><div class="nb"><i class="ti ti-menu-2" aria-hidden="true"></i></div><div class="nb"><i class="ti ti-user" aria-hidden="true"></i></div></div></div>
+    <div class="body">
+      <div class="back-btn"><i class="ti ti-arrow-left" aria-hidden="true"></i>Hack Rooms</div>
+      <div class="room-hdr"><div class="rh-top"><div><div class="rh-eyebrow">Inside Hack Room</div><div class="rh-title">XRDM Impact Sprint</div></div><div class="role-pill role-host">Host</div></div><div class="stats-row"><div class="stat-box"><div class="sb-n">3</div><div class="sb-l">Participants</div></div><div class="stat-box"><div class="sb-n">3</div><div class="sb-l">Tasks</div></div><div class="stat-box"><div class="sb-n">1</div><div class="sb-l">Winners</div></div></div></div>
+      <div class="qa-back"><i class="ti ti-arrow-left" aria-hidden="true"></i><div><div class="qa-back-txt">Quick Actions</div></div></div>
+      <div style="margin-bottom:6px"><div class="host-action-lbl">Host Action</div><div class="host-action-val">Award XRDM</div></div>
+      <div class="sc" style="border-color:#2a2000">
+        <div class="sc-hdr"><div style="display:flex;align-items:center;gap:7px"><div class="nb" style="width:28px;height:28px;background:#111"><i class="ti ti-trophy" style="font-size:14px;color:#c09000" aria-hidden="true"></i></div><div><div class="sc-eyebrow" style="color:#c09000">Announcement</div><div class="sc-title">Announce Winners</div></div></div><span class="sc-badge badge-gold">1 Ready</span></div>
+        <div class="award-card">
+          <div class="award-top"><div style="display:flex;align-items:center;gap:7px"><div class="av amber">AM</div><div><div class="award-name">Arjun Mehta</div><div class="award-sub">XRDM Impact Sprint – Spot Challenge: Funniest Failure Recovery</div></div></div><span class="status-pill s-verified">Verified</span></div>
+          <div class="section-lbl">Submitted Proof</div>
+          <div class="proof-link"><div class="pl-left"><div class="pl-icon"><i class="ti ti-link" aria-hidden="true"></i></div><div><div class="pl-name">URL 1</div><div class="pl-url">https://example.com/arjun-recover…</div></div></div><span class="pl-open">Open</span></div>
+          <div class="sc-note">Submitted a concise write-up with screenshots.</div>
+          <div class="feedback-lbl">Host Feedback</div>
+          <div class="feedback-box">Verified. Fun story and clear proof.</div>
+          <div class="award-lbl">XRDM Award</div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <div class="finput" style="margin-bottom:0;width:80px">75</div>
+            <div class="act-btn primary" style="flex:1;margin-top:0"><i class="ti ti-trophy" aria-hidden="true"></i>Award XRDM</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="bnav"><div class="bni"><i class="ti ti-home" aria-hidden="true"></i><span>Home</span></div><div class="bni act"><div class="bni-rooms"><i class="ti ti-bolt" aria-hidden="true"></i><span>Rooms</span></div></div><div class="bni"><i class="ti ti-user" aria-hidden="true"></i><span>Profile</span></div></div>
+  </div>
+
+  <!-- HOST: History -->
+  <div class="phone">
+    <div class="sb"><span class="t">10:55</span><div class="ic"><i class="ti ti-signal-4g" aria-hidden="true"></i><i class="ti ti-wifi" aria-hidden="true"></i><i class="ti ti-battery-2" aria-hidden="true"></i></div></div>
+    <div class="topnav"><div style="display:flex;align-items:center;gap:5px"><div class="logo-r">R</div><div class="logo-dm"><span>D</span>M</div></div><div class="tnv"><div class="nb"><i class="ti ti-bell" aria-hidden="true"></i></div><div class="nb"><i class="ti ti-menu-2" aria-hidden="true"></i></div><div class="nb"><i class="ti ti-user" aria-hidden="true"></i></div></div></div>
+    <div class="body">
+      <div class="back-btn"><i class="ti ti-arrow-left" aria-hidden="true"></i>Hack Rooms</div>
+      <div class="room-hdr"><div class="rh-top"><div><div class="rh-eyebrow">Inside Hack Room</div><div class="rh-title">XRDM Impact Sprint</div></div><div class="role-pill role-host">Host</div></div><div class="stats-row"><div class="stat-box"><div class="sb-n">3</div><div class="sb-l">Participants</div></div><div class="stat-box"><div class="sb-n">3</div><div class="sb-l">Tasks</div></div><div class="stat-box"><div class="sb-n">1</div><div class="sb-l">Winners</div></div></div></div>
+      <div class="qa-back"><i class="ti ti-arrow-left" aria-hidden="true"></i><div><div class="qa-back-txt">Quick Actions</div></div></div>
+      <div style="margin-bottom:6px"><div class="host-action-lbl">Host Action</div><div class="host-action-val">History</div></div>
+      <div class="sc" style="border-color:#2a2000">
+        <div class="sc-hdr"><div style="display:flex;align-items:center;gap:7px"><div class="nb" style="width:28px;height:28px;background:#111"><i class="ti ti-clock" style="font-size:14px;color:#c09000" aria-hidden="true"></i></div><div><div class="sc-eyebrow" style="color:#c09000">Verified Proof</div><div class="sc-title">History</div></div></div><span class="sc-badge badge-gold">2 Verified</span></div>
+        <div class="rq-item">
+          <div class="rq-top"><div style="display:flex;align-items:center;gap:7px"><div class="av purple">AM</div><div><div class="rq-name">Arjun Mehta</div><div class="rq-sub">XRDM Impact Sprint – Spot Challenge: Funniest Failure Recovery</div></div></div><span class="status-pill s-verified">Verified</span></div>
+          <div class="section-lbl" style="margin-top:7px">Submitted Proof</div>
+          <div class="proof-link"><div class="pl-left"><div class="pl-icon"><i class="ti ti-link" aria-hidden="true"></i></div><div><div class="pl-name">URL 1</div><div class="pl-url">https://example.com/arjun-recover…</div></div></div><span class="pl-open">Open</span></div>
+          <div class="sc-note">Submitted a concise write-up with screenshots.</div>
+          <div class="sc-note" style="margin-top:4px">Verified. Fun story and clear proof.</div>
+        </div>
+        <div class="rq-item">
+          <div class="rq-top"><div style="display:flex;align-items:center;gap:7px"><div class="av amber">NR</div><div><div class="rq-name">Nisha Rao</div><div class="rq-sub">XRDM Impact Sprint – Quick Maths Focus Round</div></div></div><span class="status-pill s-winner">Winner</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="bnav"><div class="bni"><i class="ti ti-home" aria-hidden="true"></i><span>Home</span></div><div class="bni act"><div class="bni-rooms"><i class="ti ti-bolt" aria-hidden="true"></i><span>Rooms</span></div></div><div class="bni"><i class="ti ti-user" aria-hidden="true"></i><span>Profile</span></div></div>
+  </div>
+
+  <!-- HOST: Awards Certificates -->
+  <div class="phone">
+    <div class="sb"><span class="t">10:55</span><div class="ic"><i class="ti ti-signal-4g" aria-hidden="true"></i><i class="ti ti-wifi" aria-hidden="true"></i><i class="ti ti-battery-2" aria-hidden="true"></i></div></div>
+    <div class="topnav"><div style="display:flex;align-items:center;gap:5px"><div class="logo-r">R</div><div class="logo-dm"><span>D</span>M</div></div><div class="tnv"><div class="nb"><i class="ti ti-bell" aria-hidden="true"></i></div><div class="nb"><i class="ti ti-menu-2" aria-hidden="true"></i></div><div class="nb"><i class="ti ti-user" aria-hidden="true"></i></div></div></div>
+    <div class="body">
+      <div class="back-btn"><i class="ti ti-arrow-left" aria-hidden="true"></i>Hack Rooms</div>
+      <div class="room-hdr"><div class="rh-top"><div><div class="rh-eyebrow">Inside Hack Room</div><div class="rh-title">XRDM Impact Sprint</div></div><div class="role-pill role-host">Host</div></div><div class="stats-row"><div class="stat-box"><div class="sb-n">3</div><div class="sb-l">Participants</div></div><div class="stat-box"><div class="sb-n">3</div><div class="sb-l">Tasks</div></div><div class="stat-box"><div class="sb-n">1</div><div class="sb-l">Winners</div></div></div></div>
+      <div class="qa-back"><i class="ti ti-arrow-left" aria-hidden="true"></i><div><div class="qa-back-txt">Quick Actions</div></div></div>
+      <div style="margin-bottom:6px"><div class="host-action-lbl">Host Action</div><div class="host-action-val">Awards</div></div>
+      <div class="tab-row">
+        <div class="tab-b active"><i class="ti ti-award" style="font-size:11px;margin-right:3px" aria-hidden="true"></i>Certificates</div>
+        <div class="tab-b"><i class="ti ti-diamond" style="font-size:11px;margin-right:3px" aria-hidden="true"></i>NFT Badges</div>
+      </div>
+      <div class="sc" style="border-color:#2a2000">
+        <div class="sc-hdr"><div style="display:flex;align-items:center;gap:7px"><div class="nb" style="width:28px;height:28px;background:#111"><i class="ti ti-award" style="font-size:14px;color:#c09000" aria-hidden="true"></i></div><div><div class="sc-eyebrow" style="color:#c09000">Issue</div><div class="sc-title">Participant Certificates</div></div></div><span class="sc-badge badge-gold">3 Members</span></div>
+        <div class="flbl">Certificate Title</div>
+        <div class="finput">Participant Certificate</div>
+        <div class="flbl">Certificate Note</div>
+        <div class="ftextarea">Issued for verified participation in this hack room.</div>
+        <div class="flbl">XRDM Attached</div>
+        <div class="finput">0</div>
+        <div class="flbl">Recipients</div>
+        <div class="proof-tags"><span class="ptag">All participants</span><span class="ptag amber">Riya Kapoor</span></div>
+        <div class="act-btn primary"><i class="ti ti-send" aria-hidden="true"></i>Issue Certificate</div>
+      </div>
+    </div>
+    <div class="bnav"><div class="bni"><i class="ti ti-home" aria-hidden="true"></i><span>Home</span></div><div class="bni act"><div class="bni-rooms"><i class="ti ti-bolt" aria-hidden="true"></i><span>Rooms</span></div></div><div class="bni"><i class="ti ti-user" aria-hidden="true"></i><span>Profile</span></div></div>
+  </div>
+
+  <!-- HOST: Awards NFT Badges -->
+  <div class="phone">
+    <div class="sb"><span class="t">10:55</span><div class="ic"><i class="ti ti-signal-4g" aria-hidden="true"></i><i class="ti ti-wifi" aria-hidden="true"></i><i class="ti ti-battery-2" aria-hidden="true"></i></div></div>
+    <div class="topnav"><div style="display:flex;align-items:center;gap:5px"><div class="logo-r">R</div><div class="logo-dm"><span>D</span>M</div></div><div class="tnv"><div class="nb"><i class="ti ti-bell" aria-hidden="true"></i></div><div class="nb"><i class="ti ti-menu-2" aria-hidden="true"></i></div><div class="nb"><i class="ti ti-user" aria-hidden="true"></i></div></div></div>
+    <div class="body">
+      <div class="back-btn"><i class="ti ti-arrow-left" aria-hidden="true"></i>Hack Rooms</div>
+      <div class="room-hdr"><div class="rh-top"><div><div class="rh-eyebrow">Inside Hack Room</div><div class="rh-title">XRDM Impact Sprint</div></div><div class="role-pill role-host">Host</div></div><div class="stats-row"><div class="stat-box"><div class="sb-n">3</div><div class="sb-l">Participants</div></div><div class="stat-box"><div class="sb-n">3</div><div class="sb-l">Tasks</div></div><div class="stat-box"><div class="sb-n">1</div><div class="sb-l">Winners</div></div></div></div>
+      <div class="qa-back"><i class="ti ti-arrow-left" aria-hidden="true"></i><div><div class="qa-back-txt">Quick Actions</div></div></div>
+      <div style="margin-bottom:6px"><div class="host-action-lbl">Host Action</div><div class="host-action-val">Awards</div></div>
+      <div class="tab-row">
+        <div class="tab-b"><i class="ti ti-award" style="font-size:11px;margin-right:3px" aria-hidden="true"></i>Certificates</div>
+        <div class="tab-b active-gold active"><i class="ti ti-diamond" style="font-size:11px;margin-right:3px" aria-hidden="true"></i>NFT Badges</div>
+      </div>
+      <div class="sc" style="border-color:#2a2000">
+        <div class="sc-hdr"><div style="display:flex;align-items:center;gap:7px"><div class="nb" style="width:28px;height:28px;background:#111"><i class="ti ti-diamond" style="font-size:14px;color:#c09000" aria-hidden="true"></i></div><div><div class="sc-eyebrow" style="color:#c09000">Winner NFT</div><div class="sc-title">NFT Badges</div></div></div><span class="sc-badge badge-gold">3 Team Members</span></div>
+        <div class="flbl">Winner Source</div>
+        <div class="proof-tags" style="margin-bottom:8px"><span class="ptag amber">Quick Maths Focus Round</span></div>
+        <div class="flbl">NFT Badge Name</div>
+        <div class="finput">Quick Fix Winner</div>
+        <div class="flbl">Badge Description</div>
+        <div class="ftextarea">Awarded to the winning team for standout hackathon impact.</div>
+        <div class="flbl">XRDM Attached</div>
+        <div class="finput">0</div>
+        <div class="act-btn primary"><i class="ti ti-diamond" aria-hidden="true"></i>Issue NFT Badge</div>
+      </div>
+    </div>
+    <div class="bnav"><div class="bni"><i class="ti ti-home" aria-hidden="true"></i><span>Home</span></div><div class="bni act"><div class="bni-rooms"><i class="ti ti-bolt" aria-hidden="true"></i><span>Rooms</span></div></div><div class="bni"><i class="ti ti-user" aria-hidden="true"></i><span>Profile</span></div></div>
+  </div>
+
+  <!-- HOST: Games -->
+  <div class="phone">
+    <div class="sb"><span class="t">10:55</span><div class="ic"><i class="ti ti-signal-4g" aria-hidden="true"></i><i class="ti ti-wifi" aria-hidden="true"></i><i class="ti ti-battery-2" aria-hidden="true"></i></div></div>
+    <div class="topnav"><div style="display:flex;align-items:center;gap:5px"><div class="logo-r">R</div><div class="logo-dm"><span>D</span>M</div></div><div class="tnv"><div class="nb"><i class="ti ti-bell" aria-hidden="true"></i></div><div class="nb"><i class="ti ti-menu-2" aria-hidden="true"></i></div><div class="nb"><i class="ti ti-user" aria-hidden="true"></i></div></div></div>
+    <div class="body">
+      <div class="back-btn"><i class="ti ti-arrow-left" aria-hidden="true"></i>Hack Rooms</div>
+      <div class="room-hdr"><div class="rh-top"><div><div class="rh-eyebrow">Inside Hack Room</div><div class="rh-title">XRDM Impact Sprint</div></div><div class="role-pill role-host">Host</div></div><div class="stats-row"><div class="stat-box"><div class="sb-n">3</div><div class="sb-l">Participants</div></div><div class="stat-box"><div class="sb-n">3</div><div class="sb-l">Tasks</div></div><div class="stat-box"><div class="sb-n">1</div><div class="sb-l">Winners</div></div></div></div>
+      <div class="qa-back"><i class="ti ti-arrow-left" aria-hidden="true"></i><div><div class="qa-back-txt">Quick Actions</div></div></div>
+      <div style="margin-bottom:6px"><div class="host-action-lbl">Host Action</div><div class="host-action-val">Games</div></div>
+      <div class="sc">
+        <div class="sc-hdr"><div style="display:flex;align-items:center;gap:7px"><div class="nb" style="width:28px;height:28px;background:#111"><i class="ti ti-device-gamepad-2" style="font-size:14px;color:#888" aria-hidden="true"></i></div><div><div class="sc-eyebrow">Host Menu</div><div class="sc-title">Challenges and Games</div></div></div><span class="sc-badge badge-green">2 Live</span></div>
+        <div class="tab-row">
+          <div class="tab-b active"><i class="ti ti-sparkles" style="font-size:11px;margin-right:3px" aria-hidden="true"></i>Challenge</div>
+          <div class="tab-b"><i class="ti ti-device-gamepad-2" style="font-size:11px;margin-right:3px" aria-hidden="true"></i>Game</div>
+        </div>
+        <div style="margin-bottom:6px"><div class="sc-eyebrow">Organizer Track</div><div class="sc-title" style="margin-top:2px;font-size:12px">Create Challenge Card</div></div>
+        <div class="flbl">Challenge Name</div>
+        <div class="finput">10-minute UX fix sprint</div>
+        <div class="flbl">Challenge Date and Time</div>
+        <div class="finput">2026-06-20T17:00:00.000Z</div>
+        <div class="flbl">Rules / Brief</div>
+        <div class="ftextarea">Describe the fun challenge, who can join, and how winners will be picked.</div>
+        <div class="act-btn primary"><i class="ti ti-bolt" aria-hidden="true"></i>Launch Challenge</div>
+      </div>
+    </div>
+    <div class="bnav"><div class="bni"><i class="ti ti-home" aria-hidden="true"></i><span>Home</span></div><div class="bni act"><div class="bni-rooms"><i class="ti ti-bolt" aria-hidden="true"></i><span>Rooms</span></div></div><div class="bni"><i class="ti ti-user" aria-hidden="true"></i><span>Profile</span></div></div>
+  </div>
+
+  <!-- HOST: Leaderboard -->
+  <div class="phone">
+    <div class="sb"><span class="t">10:55</span><div class="ic"><i class="ti ti-signal-4g" aria-hidden="true"></i><i class="ti ti-wifi" aria-hidden="true"></i><i class="ti ti-battery-2" aria-hidden="true"></i></div></div>
+    <div class="topnav"><div style="display:flex;align-items:center;gap:5px"><div class="logo-r">R</div><div class="logo-dm"><span>D</span>M</div></div><div class="tnv"><div class="nb"><i class="ti ti-bell" aria-hidden="true"></i></div><div class="nb"><i class="ti ti-menu-2" aria-hidden="true"></i></div><div class="nb"><i class="ti ti-user" aria-hidden="true"></i></div></div></div>
+    <div class="body">
+      <div class="back-btn"><i class="ti ti-arrow-left" aria-hidden="true"></i>Hack Rooms</div>
+      <div class="room-hdr"><div class="rh-top"><div><div class="rh-eyebrow">Inside Hack Room</div><div class="rh-title">XRDM Impact Sprint</div></div><div class="role-pill role-host">Host</div></div><div class="stats-row"><div class="stat-box"><div class="sb-n">3</div><div class="sb-l">Participants</div></div><div class="stat-box"><div class="sb-n">3</div><div class="sb-l">Tasks</div></div><div class="stat-box"><div class="sb-n">1</div><div class="sb-l">Winners</div></div></div></div>
+      <div class="qa-back"><i class="ti ti-arrow-left" aria-hidden="true"></i><div><div class="qa-back-txt">Quick Actions</div></div></div>
+      <div style="margin-bottom:6px"><div class="host-action-lbl">Host Action</div><div class="host-action-val">Leaderboard</div></div>
+      <div class="sc" style="border-color:#2a2000">
+        <div class="sc-hdr"><div style="display:flex;align-items:center;gap:7px"><div class="nb" style="width:28px;height:28px;background:#111"><i class="ti ti-chart-bar" style="font-size:14px;color:#c09000" aria-hidden="true"></i></div><div><div class="sc-eyebrow" style="color:#c09000">Room Rank</div><div class="sc-title">Leaderboard</div></div></div><span class="sc-badge badge-gold">1 Ranked</span></div>
+        <div class="lb-row"><div class="lb-rank">#1</div><div class="lb-info"><div class="lb-name">Nisha Rao</div><div class="lb-email">nisha@rdm.test</div></div><div><div class="lb-xrdm">+75 XRDM</div><div class="lb-wins">1 wins</div></div></div>
+        <div class="lb-row" style="opacity:.7"><div class="lb-rank" style="color:#888">#2</div><div class="lb-info"><div class="lb-name">Arjun Mehta</div><div class="lb-email">arjun@rdm.test</div></div><div><div class="lb-xrdm" style="color:#888">+50 XRDM</div><div class="lb-wins">0 wins</div></div></div>
+        <div class="lb-row" style="opacity:.6"><div class="lb-rank" style="color:#555">#3</div><div class="lb-info"><div class="lb-name">Riya Kapoor</div><div class="lb-email">riya@rdm.test</div></div><div><div class="lb-xrdm" style="color:#555">+30 XRDM</div><div class="lb-wins">0 wins</div></div></div>
+      </div>
+    </div>
+    <div class="bnav"><div class="bni"><i class="ti ti-home" aria-hidden="true"></i><span>Home</span></div><div class="bni act"><div class="bni-rooms"><i class="ti ti-bolt" aria-hidden="true"></i><span>Rooms</span></div></div><div class="bni"><i class="ti ti-user" aria-hidden="true"></i><span>Profile</span></div></div>
+  </div>
+
+  <!-- HOST: Room Profile -->
+  <div class="phone">
+    <div class="sb"><span class="t">10:55</span><div class="ic"><i class="ti ti-signal-4g" aria-hidden="true"></i><i class="ti ti-wifi" aria-hidden="true"></i><i class="ti ti-battery-2" aria-hidden="true"></i></div></div>
+    <div class="topnav"><div style="display:flex;align-items:center;gap:5px"><div class="logo-r">R</div><div class="logo-dm"><span>D</span>M</div></div><div class="tnv"><div class="nb"><i class="ti ti-bell" aria-hidden="true"></i></div><div class="nb"><i class="ti ti-menu-2" aria-hidden="true"></i></div><div class="nb"><i class="ti ti-user" aria-hidden="true"></i></div></div></div>
+    <div class="body">
+      <div class="back-btn"><i class="ti ti-arrow-left" aria-hidden="true"></i>Hack Rooms</div>
+      <div class="room-hdr"><div class="rh-top"><div><div class="rh-eyebrow">Inside Hack Room</div><div class="rh-title">XRDM Impact Sprint</div></div><div class="role-pill role-host">Host</div></div><div class="stats-row"><div class="stat-box"><div class="sb-n">3</div><div class="sb-l">Participants</div></div><div class="stat-box"><div class="sb-n">3</div><div class="sb-l">Tasks</div></div><div class="stat-box"><div class="sb-n">1</div><div class="sb-l">Winners</div></div></div></div>
+      <div class="qa-back"><i class="ti ti-arrow-left" aria-hidden="true"></i><div><div class="qa-back-txt">Quick Actions</div></div></div>
+      <div style="margin-bottom:6px"><div class="host-action-lbl">Host Action</div><div class="host-action-val">Profile</div></div>
+      <div class="sc">
+        <div style="display:flex;align-items:center;gap:7px;margin-bottom:10px"><div class="nb" style="width:28px;height:28px;background:#111"><i class="ti ti-user-circle" style="font-size:14px;color:#888" aria-hidden="true"></i></div><div><div class="sc-eyebrow">Room</div><div class="sc-title">Profile</div></div></div>
+        <div class="rp-field"><div class="rpf-lbl">Room Name</div><div class="rpf-val">XRDM Impact Sprint</div></div>
+        <div class="rp-field"><div class="rpf-lbl">Host</div><div class="rpf-val">Yash Diwan</div></div>
+        <div class="rp-field"><div class="rpf-lbl">Invite Code</div><div class="rpf-val" style="color:#1D9E75">HR-XRDM24</div></div>
+        <div class="rp-field"><div class="rpf-lbl">Status</div><div class="rpf-val" style="color:#1D9E75">active</div></div>
+        <div class="act-btn primary"><i class="ti ti-share" aria-hidden="true"></i>Share Invite</div>
+      </div>
+    </div>
+    <div class="bnav"><div class="bni"><i class="ti ti-home" aria-hidden="true"></i><span>Home</span></div><div class="bni act"><div class="bni-rooms"><i class="ti ti-bolt" aria-hidden="true"></i><span>Rooms</span></div></div><div class="bni"><i class="ti ti-user" aria-hidden="true"></i><span>Profile</span></div></div>
+  </div>
+</div>
+
+<!-- ══ PARTICIPANT COLUMN ══ -->
+<div class="col">
+  <div class="col-lbl">Participant flow</div>
+
+  <!-- PARTICIPANT: Quick Actions -->
+  <div class="phone">
+    <div class="sb"><span class="t">10:55</span><div class="ic"><i class="ti ti-signal-4g" aria-hidden="true"></i><i class="ti ti-wifi" aria-hidden="true"></i><i class="ti ti-battery-2" aria-hidden="true"></i></div></div>
+    <div class="topnav"><div style="display:flex;align-items:center;gap:5px"><div class="logo-r">R</div><div class="logo-dm"><span>D</span>M</div></div><div class="tnv"><div class="nb"><i class="ti ti-bell" aria-hidden="true"></i></div><div class="nb"><i class="ti ti-menu-2" aria-hidden="true"></i></div><div class="nb"><i class="ti ti-user" aria-hidden="true"></i></div></div></div>
+    <div class="body">
+      <div class="back-btn"><i class="ti ti-arrow-left" aria-hidden="true"></i>Hack Rooms</div>
+      <div class="room-hdr">
+        <div class="rh-top"><div><div class="rh-eyebrow">Inside Hack Room</div><div class="rh-title">AI Agents Hack Room</div><div class="rh-desc">Participant track for agent workflows, proof, certificates, games, and wallet rewards.</div></div><div class="role-pill role-part">Participant</div></div>
+        <div class="stats-row"><div class="stat-box"><div class="sb-n">3</div><div class="sb-l">Participants</div></div><div class="stat-box"><div class="sb-n">3</div><div class="sb-l">Tasks</div></div><div class="stat-box"><div class="sb-n">1</div><div class="sb-l">Winners</div></div></div>
+      </div>
+      <div class="section-lbl">Quick Actions</div>
+      <div class="qa-grid">
+        <div class="qa-item"><div class="qa-icon"><i class="ti ti-send" aria-hidden="true"></i></div><div class="qa-label">Submit Task</div></div>
+        <div class="qa-item"><div class="qa-icon"><i class="ti ti-clock" aria-hidden="true"></i></div><div class="qa-label">History</div></div>
+        <div class="qa-item"><div class="qa-icon"><i class="ti ti-device-gamepad-2" aria-hidden="true"></i></div><div class="qa-label">Games</div></div>
+        <div class="qa-item"><div class="qa-icon"><i class="ti ti-wallet" aria-hidden="true"></i></div><div class="qa-label">Wallet</div></div>
+      </div>
+    </div>
+    <div class="bnav"><div class="bni"><i class="ti ti-home" aria-hidden="true"></i><span>Home</span></div><div class="bni act"><div class="bni-rooms"><i class="ti ti-bolt" aria-hidden="true"></i><span>Rooms</span></div></div><div class="bni"><i class="ti ti-user" aria-hidden="true"></i><span>Profile</span></div></div>
+  </div>
+
+  <!-- PARTICIPANT: Submit Task -->
+  <div class="phone">
+    <div class="sb"><span class="t">10:55</span><div class="ic"><i class="ti ti-signal-4g" aria-hidden="true"></i><i class="ti ti-wifi" aria-hidden="true"></i><i class="ti ti-battery-2" aria-hidden="true"></i></div></div>
+    <div class="topnav"><div style="display:flex;align-items:center;gap:5px"><div class="logo-r">R</div><div class="logo-dm"><span>D</span>M</div></div><div class="tnv"><div class="nb"><i class="ti ti-bell" aria-hidden="true"></i></div><div class="nb"><i class="ti ti-menu-2" aria-hidden="true"></i></div><div class="nb"><i class="ti ti-user" aria-hidden="true"></i></div></div></div>
+    <div class="body">
+      <div class="back-btn"><i class="ti ti-arrow-left" aria-hidden="true"></i>Hack Rooms</div>
+      <div class="room-hdr"><div class="rh-top"><div><div class="rh-eyebrow">Inside Hack Room</div><div class="rh-title">AI Agents Hack Room</div></div><div class="role-pill role-part">Participant</div></div><div class="stats-row"><div class="stat-box"><div class="sb-n">3</div><div class="sb-l">Participants</div></div><div class="stat-box"><div class="sb-n">3</div><div class="sb-l">Tasks</div></div><div class="stat-box"><div class="sb-n">1</div><div class="sb-l">Winners</div></div></div></div>
+      <div class="qa-back"><i class="ti ti-arrow-left" aria-hidden="true"></i><div><div class="qa-back-txt">Quick Actions</div></div></div>
+      <div style="margin-bottom:6px"><div class="host-action-lbl">Participant Action</div><div class="host-action-val">Submit Task</div></div>
+      <div class="sc">
+        <div class="sc-hdr"><div style="display:flex;align-items:center;gap:7px"><div class="nb" style="width:28px;height:28px;background:#111"><i class="ti ti-send" style="font-size:14px;color:#888" aria-hidden="true"></i></div><div><div class="sc-eyebrow">Participant</div><div class="sc-title">Submit Task</div></div></div><span class="sc-badge badge-green">1 Task</span></div>
+        <div class="submit-task-card">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between"><div><div class="st-title">Final Agent Demo Submission</div><div class="st-meta">AI Agents Hack Room · Due Jun 29, 2026 07:00 PM</div></div><span class="status-pill s-submitted">Submitted</span></div>
+          <div class="st-desc">Submit a GitHub link, Drive walkthrough, and public deployment URL for the agent demo.</div>
+          <div class="proof-tags" style="margin-top:7px"><span class="ptag">Task</span><span class="ptag">GitHub</span><span class="ptag">Drive</span><span class="ptag amber">URL</span></div>
+        </div>
+        <div style="background:#1a2a1e;border:.5px solid #1D9E75;border-radius:10px;padding:9px 10px;margin-bottom:6px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><div class="sc-eyebrow">Submit Proof</div><span style="font-size:11px;font-weight:600;color:#1D9E75">+70 XRDM</span></div>
+          <div class="sc-title" style="margin-bottom:8px">Final Agent Demo Submission</div>
+          <div class="flbl">GitHub Proof</div>
+          <div class="finput">https://github.com/team/project</div>
+          <div class="flbl">Drive Proof</div>
+          <div class="finput">https://drive.google.com/...</div>
+          <div class="flbl">URL Proof</div>
+          <div class="finput">https://demo.example.com</div>
+          <div class="act-btn primary"><i class="ti ti-send" aria-hidden="true"></i>Submit Proof</div>
+        </div>
+      </div>
+    </div>
+    <div class="bnav"><div class="bni"><i class="ti ti-home" aria-hidden="true"></i><span>Home</span></div><div class="bni act"><div class="bni-rooms"><i class="ti ti-bolt" aria-hidden="true"></i><span>Rooms</span></div></div><div class="bni"><i class="ti ti-user" aria-hidden="true"></i><span>Profile</span></div></div>
+  </div>
+
+  <!-- PARTICIPANT: History -->
+  <div class="phone">
+    <div class="sb"><span class="t">10:55</span><div class="ic"><i class="ti ti-signal-4g" aria-hidden="true"></i><i class="ti ti-wifi" aria-hidden="true"></i><i class="ti ti-battery-2" aria-hidden="true"></i></div></div>
+    <div class="topnav"><div style="display:flex;align-items:center;gap:5px"><div class="logo-r">R</div><div class="logo-dm"><span>D</span>M</div></div><div class="tnv"><div class="nb"><i class="ti ti-bell" aria-hidden="true"></i></div><div class="nb"><i class="ti ti-menu-2" aria-hidden="true"></i></div><div class="nb"><i class="ti ti-user" aria-hidden="true"></i></div></div></div>
+    <div class="body">
+      <div class="back-btn"><i class="ti ti-arrow-left" aria-hidden="true"></i>Hack Rooms</div>
+      <div class="room-hdr"><div class="rh-top"><div><div class="rh-eyebrow">Inside Hack Room</div><div class="rh-title">AI Agents Hack Room</div></div><div class="role-pill role-part">Participant</div></div><div class="stats-row"><div class="stat-box"><div class="sb-n">3</div><div class="sb-l">Participants</div></div><div class="stat-box"><div class="sb-n">3</div><div class="sb-l">Tasks</div></div><div class="stat-box"><div class="sb-n">1</div><div class="sb-l">Winners</div></div></div></div>
+      <div class="qa-back"><i class="ti ti-arrow-left" aria-hidden="true"></i><div><div class="qa-back-txt">Quick Actions</div></div></div>
+      <div style="margin-bottom:6px"><div class="host-action-lbl">Participant Action</div><div class="host-action-val">History</div></div>
+      <div class="sc">
+        <div class="sc-hdr"><div style="display:flex;align-items:center;gap:7px"><div class="nb" style="width:28px;height:28px;background:#111"><i class="ti ti-clock" style="font-size:14px;color:#888" aria-hidden="true"></i></div><div><div class="sc-eyebrow">Participant</div><div class="sc-title">History</div></div></div><span class="sc-badge badge-green">4 Records</span></div>
+        <div style="display:flex;gap:6px;margin-bottom:8px">
+          <div class="stat-box" style="flex:1"><div class="sb-n">3</div><div class="sb-l">Room Tasks</div></div>
+          <div class="stat-box" style="flex:1"><div class="sb-n">4</div><div class="sb-l">Proof Records</div></div>
+        </div>
+        <div class="section-lbl">Submitted</div>
+        <div class="rq-item">
+          <div class="rq-top"><div><div class="rq-name">Final Agent Demo Submission</div><div class="rq-sub">AI Agents Hack Room</div></div><span class="status-pill s-submitted">Submitted</span></div>
+          <div class="section-lbl" style="margin-top:7px">Submitted Proof</div>
+          <div class="proof-link"><div class="pl-left"><div class="pl-icon"><i class="ti ti-brand-github" aria-hidden="true"></i></div><div><div class="pl-name">GitHub 1</div><div class="pl-url">https://github.com/yash/agent-demo</div></div></div><span class="pl-open">Open</span></div>
+          <div class="proof-link"><div class="pl-left"><div class="pl-icon"><i class="ti ti-brand-google-drive" aria-hidden="true"></i></div><div><div class="pl-name">Drive 2</div><div class="pl-url">https://drive.google.com/yash-age…</div></div></div><span class="pl-open">Open</span></div>
+          <div class="proof-link"><div class="pl-left"><div class="pl-icon"><i class="ti ti-link" aria-hidden="true"></i></div><div><div class="pl-name">URL 3</div><div class="pl-url">https://demo.yash.dev</div></div></div><span class="pl-open">Open</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="bnav"><div class="bni"><i class="ti ti-home" aria-hidden="true"></i><span>Home</span></div><div class="bni act"><div class="bni-rooms"><i class="ti ti-bolt" aria-hidden="true"></i><span>Rooms</span></div></div><div class="bni"><i class="ti ti-user" aria-hidden="true"></i><span>Profile</span></div></div>
+  </div>
+
+  <!-- PARTICIPANT: Games -->
+  <div class="phone">
+    <div class="sb"><span class="t">10:55</span><div class="ic"><i class="ti ti-signal-4g" aria-hidden="true"></i><i class="ti ti-wifi" aria-hidden="true"></i><i class="ti ti-battery-2" aria-hidden="true"></i></div></div>
+    <div class="topnav"><div style="display:flex;align-items:center;gap:5px"><div class="logo-r">R</div><div class="logo-dm"><span>D</span>M</div></div><div class="tnv"><div class="nb"><i class="ti ti-bell" aria-hidden="true"></i></div><div class="nb"><i class="ti ti-menu-2" aria-hidden="true"></i></div><div class="nb"><i class="ti ti-user" aria-hidden="true"></i></div></div></div>
+    <div class="body">
+      <div class="back-btn"><i class="ti ti-arrow-left" aria-hidden="true"></i>Hack Rooms</div>
+      <div class="room-hdr"><div class="rh-top"><div><div class="rh-eyebrow">Inside Hack Room</div><div class="rh-title">AI Agents Hack Room</div></div><div class="role-pill role-part">Participant</div></div><div class="stats-row"><div class="stat-box"><div class="sb-n">3</div><div class="sb-l">Participants</div></div><div class="stat-box"><div class="sb-n">3</div><div class="sb-l">Tasks</div></div><div class="stat-box"><div class="sb-n">1</div><div class="sb-l">Winners</div></div></div></div>
+      <div class="qa-back"><i class="ti ti-arrow-left" aria-hidden="true"></i><div><div class="qa-back-txt">Quick Actions</div></div></div>
+      <div style="margin-bottom:6px"><div class="host-action-lbl">Participant Action</div><div class="host-action-val">Games</div></div>
+      <div class="sc">
+        <div class="sc-hdr"><div style="display:flex;align-items:center;gap:7px"><div class="nb" style="width:28px;height:28px;background:#111"><i class="ti ti-device-gamepad-2" style="font-size:14px;color:#888" aria-hidden="true"></i></div><div><div class="sc-eyebrow">Participant</div><div class="sc-title">Games</div></div></div><span class="sc-badge badge-green">2 Live</span></div>
+        <div class="rq-item" style="border-color:#2a2000">
+          <div style="display:flex;align-items:center;gap:7px;margin-bottom:6px"><div class="nb" style="width:28px;height:28px;background:#1a1800;border-color:#2a2000"><i class="ti ti-cards" style="font-size:14px;color:#c09000" aria-hidden="true"></i></div><div><div class="rq-name">Play, submit, get verified</div><div class="rq-sub">Host game cards can become proof. Practice games are just for a quick reset.</div></div></div>
+        </div>
+        <div class="section-lbl">Host Game Cards</div>
+        <div class="game-card" style="background:#1a1800;border-color:#2a2000">
+          <div class="game-icon"><i class="ti ti-cards" aria-hidden="true"></i></div>
+          <div class="game-body">
+            <div style="display:flex;align-items:center;justify-content:space-between"><div class="game-name">Memory Match Sprint</div><span class="status-pill s-verified">Verified</span></div>
+            <div class="game-meta">Memory Match · Due Jun 25, 2026 02:00 PM</div>
+            <div class="game-desc">Complete the Memory Match mini-game and submit the generated score proof.</div>
+            <div class="proof-tags" style="margin-top:6px"><span class="ptag">Game</span><span class="ptag amber">Score Proof</span></div>
+          </div>
+        </div>
+        <div class="section-lbl">Spot Challenges</div>
+        <div class="sc-card">
+          <div style="display:flex;align-items:center;justify-content:space-between"><div class="sc-card-title">Spot Challenge: Prompt Rescue</div><span class="status-pill s-returned">Returned</span></div>
+          <div class="sc-card-meta">Due Jun 24, 2026 · +40 XRDM</div>
+        </div>
+      </div>
+    </div>
+    <div class="bnav"><div class="bni"><i class="ti ti-home" aria-hidden="true"></i><span>Home</span></div><div class="bni act"><div class="bni-rooms"><i class="ti ti-bolt" aria-hidden="true"></i><span>Rooms</span></div></div><div class="bni"><i class="ti ti-user" aria-hidden="true"></i><span>Profile</span></div></div>
+  </div>
+
+  <!-- PARTICIPANT: Memory Match Game -->
+  <div class="phone">
+    <div class="sb"><span class="t">10:55</span><div class="ic"><i class="ti ti-signal-4g" aria-hidden="true"></i><i class="ti ti-wifi" aria-hidden="true"></i><i class="ti ti-battery-2" aria-hidden="true"></i></div></div>
+    <div class="topnav"><div style="display:flex;align-items:center;gap:5px"><div class="logo-r">R</div><div class="logo-dm"><span>D</span>M</div></div><div class="tnv"><div class="nb"><i class="ti ti-bell" aria-hidden="true"></i></div><div class="nb"><i class="ti ti-menu-2" aria-hidden="true"></i></div><div class="nb"><i class="ti ti-user" aria-hidden="true"></i></div></div></div>
+    <div class="body">
+      <div class="back-btn"><i class="ti ti-arrow-left" aria-hidden="true"></i>Hack Rooms</div>
+      <div class="room-hdr"><div class="rh-top"><div><div class="rh-eyebrow">Inside Hack Room</div><div class="rh-title">AI Agents Hack Room</div></div><div class="role-pill role-part">Participant</div></div><div class="stats-row"><div class="stat-box"><div class="sb-n">3</div><div class="sb-l">Participants</div></div><div class="stat-box"><div class="sb-n">3</div><div class="sb-l">Tasks</div></div><div class="stat-box"><div class="sb-n">1</div><div class="sb-l">Winners</div></div></div></div>
+      <div class="qa-back"><i class="ti ti-arrow-left" aria-hidden="true"></i><div><div class="qa-back-txt">Quick Actions</div></div></div>
+      <div style="margin-bottom:6px"><div class="host-action-lbl">Participant Action</div><div class="host-action-val">Games</div></div>
+      <div class="mm-card">
+        <div class="mm-top">
+          <div style="display:flex;align-items:center;gap:7px"><div class="game-icon" style="width:28px;height:28px"><i class="ti ti-cards" style="font-size:14px" aria-hidden="true"></i></div><div><div class="mm-title">Memory Match</div><div style="font-size:9px;color:#666">Host assignment</div></div></div>
+          <div class="mm-close"><i class="ti ti-x" aria-hidden="true"></i></div>
+        </div>
+        <div class="mm-stats"><div class="mm-stat"><div class="mm-stat-n">0</div><div class="mm-stat-l">Moves</div></div><div class="mm-stat"><div class="mm-stat-n">0</div><div class="mm-stat-l">Matched</div></div></div>
+        <div class="mm-grid"><div class="mm-cell"><div class="mm-q">?</div></div><div class="mm-cell"><div class="mm-q">?</div></div><div class="mm-cell"><div class="mm-q">?</div></div><div class="mm-cell"><div class="mm-q">?</div></div><div class="mm-cell"><div class="mm-q">?</div></div><div class="mm-cell"><div class="mm-q">?</div></div><div class="mm-cell"><div class="mm-q">?</div></div><div class="mm-cell"><div class="mm-q">?</div></div></div>
+        <div style="background:#111;border:.5px solid #1e1e1e;border-radius:7px;padding:8px;margin-top:8px;font-size:10px;color:#666;text-align:center">Play, submit, get verified</div>
+      </div>
+    </div>
+    <div class="bnav"><div class="bni"><i class="ti ti-home" aria-hidden="true"></i><span>Home</span></div><div class="bni act"><div class="bni-rooms"><i class="ti ti-bolt" aria-hidden="true"></i><span>Rooms</span></div></div><div class="bni"><i class="ti ti-user" aria-hidden="true"></i><span>Profile</span></div></div>
+  </div>
+
+  <!-- PARTICIPANT: Wallet -->
+  <div class="phone">
+    <div class="sb"><span class="t">10:55</span><div class="ic"><i class="ti ti-signal-4g" aria-hidden="true"></i><i class="ti ti-wifi" aria-hidden="true"></i><i class="ti ti-battery-2" aria-hidden="true"></i></div></div>
+    <div class="topnav"><div style="display:flex;align-items:center;gap:5px"><div class="logo-r">R</div><div class="logo-dm"><span>D</span>M</div></div><div class="tnv"><div class="nb"><i class="ti ti-bell" aria-hidden="true"></i></div><div class="nb"><i class="ti ti-menu-2" aria-hidden="true"></i></div><div class="nb"><i class="ti ti-user" aria-hidden="true"></i></div></div></div>
+    <div class="body">
+      <div class="back-btn"><i class="ti ti-arrow-left" aria-hidden="true"></i>Hack Rooms</div>
+      <div class="room-hdr"><div class="rh-top"><div><div class="rh-eyebrow">Inside Hack Room</div><div class="rh-title">AI Agents Hack Room</div></div><div class="role-pill role-part">Participant</div></div><div class="stats-row"><div class="stat-box"><div class="sb-n">3</div><div class="sb-l">Participants</div></div><div class="stat-box"><div class="sb-n">3</div><div class="sb-l">Tasks</div></div><div class="stat-box"><div class="sb-n">1</div><div class="sb-l">Winners</div></div></div></div>
+      <div class="qa-back"><i class="ti ti-arrow-left" aria-hidden="true"></i><div><div class="qa-back-txt">Quick Actions</div></div></div>
+      <div style="margin-bottom:6px"><div class="host-action-lbl">Participant Action</div><div class="host-action-val">Wallet</div></div>
+      <div class="wallet-card">
+        <div class="wallet-icon"><i class="ti ti-wallet" aria-hidden="true"></i></div>
+        <div class="wallet-title">XRDM Wallet</div>
+        <div class="wallet-desc">Certificates, NFT badges, winner awards, and verified proof issued on the in-app So.Good Ledger.</div>
+        <div class="wallet-pill"><i class="ti ti-database" style="font-size:10px;margin-right:3px" aria-hidden="true"></i>Issued – Ledger</div>
+      </div>
+      <div class="sc">
+        <div class="sc-eyebrow" style="margin-bottom:4px">My XRDM Balance</div>
+        <div class="bal-row"><div class="bal-n">180</div><div class="bal-unit">XRDM</div></div>
+        <div class="bal-stats">
+          <div class="bal-stat"><div class="bs-n">2</div><div class="bs-l">Verified</div></div>
+          <div class="bal-stat"><div class="bs-n">2</div><div class="bs-l">Certificates</div></div>
+          <div class="bal-stat"><div class="bs-n">1</div><div class="bs-l">NFTs</div></div>
+        </div>
+      </div>
+      <div class="sc" style="border-color:#2a2000">
+        <div class="sc-hdr"><div style="display:flex;align-items:center;gap:7px"><div class="nb" style="width:28px;height:28px;background:#111"><i class="ti ti-diamond" style="font-size:14px;color:#c09000" aria-hidden="true"></i></div><div><div class="sc-eyebrow" style="color:#c09000">Wallet</div><div class="sc-title">My NFT Badges</div></div></div><span class="sc-badge badge-gold">1 Badge</span></div>
+        <div class="award-card">
+          <div class="award-top"><div><div class="award-name">Quick Fix Winner</div><div class="award-sub">Awarded for standout hackathon impact · Quick Maths Focus Round</div></div><span class="sc-badge badge-gold">NFT</span></div>
+          <div class="xrdm-val"><i class="ti ti-diamond" aria-hidden="true"></i>+75 XRDM attached</div>
+        </div>
+      </div>
+    </div>
+    <div class="bnav"><div class="bni"><i class="ti ti-home" aria-hidden="true"></i><span>Home</span></div><div class="bni act"><div class="bni-rooms"><i class="ti ti-bolt" aria-hidden="true"></i><span>Rooms</span></div></div><div class="bni"><i class="ti ti-user" aria-hidden="true"></i><span>Profile</span></div></div>
+  </div>
+</div>
+
+</div>

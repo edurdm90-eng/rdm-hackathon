@@ -5,7 +5,7 @@ import { z } from "zod";
 import { protectedProcedure, router } from "../index";
 
 const proofTypeSchema = z.enum(["github", "drive", "file", "url", "video", "deck", "game_score"]);
-const taskKindSchema = z.enum(["task", "challenge", "game"]);
+const taskKindSchema = z.enum(["task", "challenge", "game", "special"]);
 const gameTypeSchema = z.enum(["memory_match", "breath_timer", "quick_maths"]);
 const rewardKindSchema = z.enum([
   "participant_certificate",
@@ -43,6 +43,9 @@ type HackTaskRecord = {
   hostId: string;
   kind?: z.infer<typeof taskKindSchema>;
   gameType?: z.infer<typeof gameTypeSchema>;
+  assignedToEmail?: string;
+  assignedToName?: string;
+  assignedToUserId?: string;
   title: string;
   description: string;
   dueAt: string;
@@ -96,10 +99,32 @@ type HackRewardRecord = {
   updatedAt: string;
 };
 
+type HackNotificationRecord = {
+  _id: string;
+  roomId: string;
+  hostId: string;
+  hostName: string;
+  title: string;
+  message: string;
+  recipientIds: string[];
+  recipientEmails: string[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+type AuthUserRecord = {
+  _id?: { toString: () => string };
+  email: string;
+  id?: string;
+  name?: string;
+};
+
 const roomCollection = () => client.collection<HackRoomRecord>("hack_rooms");
 const taskCollection = () => client.collection<HackTaskRecord>("hack_tasks");
 const submissionCollection = () => client.collection<HackSubmissionRecord>("hack_submissions");
 const rewardCollection = () => client.collection<HackRewardRecord>("hack_rewards");
+const notificationCollection = () => client.collection<HackNotificationRecord>("hack_notifications");
+const userCollection = () => client.collection<AuthUserRecord>("user");
 
 function now() {
   return new Date().toISOString();
@@ -149,6 +174,30 @@ async function requireHostedRoom(roomId: string, hostId: string) {
   return room;
 }
 
+function getUserId(user: AuthUserRecord) {
+  return user.id ?? user._id?.toString() ?? "";
+}
+
+async function findRegisteredUserByEmail(email: string) {
+  return userCollection().findOne({
+    email: {
+      $options: "i",
+      $regex: `^${email.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
+    },
+  });
+}
+
+function isSpecialTaskForUser(task: HackTaskRecord, user: { email: string; id: string }) {
+  if ((task.kind ?? "task") !== "special") {
+    return true;
+  }
+
+  return (
+    task.assignedToUserId === user.id ||
+    task.assignedToEmail?.toLowerCase() === user.email.toLowerCase()
+  );
+}
+
 function byNewest<T extends { createdAt?: string; submittedAt?: string }>(left: T, right: T) {
   const leftDate = left.submittedAt ?? left.createdAt ?? "";
   const rightDate = right.submittedAt ?? right.createdAt ?? "";
@@ -188,8 +237,14 @@ export const hackRoomRouter = router({
     const joinedRoomIds = joinedRooms.map((room) => room._id);
     const visibleRoomIds = [...new Set([...hostedRoomIds, ...joinedRoomIds])];
 
-    const [visibleTasks, mySubmissions, hostSubmissions, visibleWinnerSubmissions, visibleRewards] =
-      await Promise.all([
+    const [
+      rawVisibleTasks,
+      mySubmissions,
+      hostSubmissions,
+      visibleWinnerSubmissions,
+      visibleRewards,
+      visibleNotifications,
+    ] = await Promise.all([
         visibleRoomIds.length
           ? taskCollection().find({ roomId: { $in: visibleRoomIds } }).toArray()
           : [],
@@ -212,8 +267,22 @@ export const hackRoomRouter = router({
               })
               .toArray()
           : [],
+        visibleRoomIds.length
+          ? notificationCollection()
+              .find({
+                $or: [
+                  { roomId: { $in: hostedRoomIds } },
+                  { recipientIds: user.id },
+                  { recipientEmails: user.email.toLowerCase() },
+                ],
+              })
+              .toArray()
+          : [],
       ]);
 
+    const visibleTasks = rawVisibleTasks.filter(
+      (task) => hostedRoomIds.includes(task.roomId) || isSpecialTaskForUser(task, user),
+    );
     const roomById = new Map([...hostedRooms, ...joinedRooms].map((room) => [room._id, room]));
     const taskById = new Map(visibleTasks.map((task) => [task._id, task]));
 
@@ -242,6 +311,10 @@ export const hackRoomRouter = router({
         roomName: roomById.get(task.roomId)?.name ?? "Hack room",
         inviteCode: roomById.get(task.roomId)?.inviteCode ?? "",
       })),
+      notifications: visibleNotifications.sort(byNewest).map((notification) => ({
+        ...notification,
+        roomName: roomById.get(notification.roomId)?.name ?? "Hack room",
+      })),
       mySubmissions: mySubmissions.sort(byNewest).map((submission) => {
         const task = taskById.get(submission.taskId);
         const room = roomById.get(submission.roomId);
@@ -267,6 +340,9 @@ export const hackRoomRouter = router({
       stats: {
         activeRooms: hostedRooms.length,
         joinedRooms: joinedRooms.length,
+        notifications: visibleNotifications.filter((notification) =>
+          notification.recipientIds.includes(user.id),
+        ).length,
         participants: hostedRooms.reduce((total, room) => total + room.participants.length, 0),
         pendingSubmissions: hostSubmissions.filter((submission) => submission.status === "submitted")
           .length,
@@ -349,6 +425,7 @@ export const hackRoomRouter = router({
         roomId: z.string().min(1),
         kind: taskKindSchema.default("task"),
         gameType: gameTypeSchema.optional(),
+        assignedToEmail: z.string().trim().max(254).optional(),
         title: z.string().trim().min(3).max(100),
         description: z.string().trim().min(10).max(700),
         dueAt: z.string().trim().min(3).max(80),
@@ -357,10 +434,49 @@ export const hackRoomRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      await requireHostedRoom(input.roomId, ctx.session.user.id);
+      const room = await requireHostedRoom(input.roomId, ctx.session.user.id);
+      const assignedEmail = input.assignedToEmail?.trim().toLowerCase();
+      let assignedUser: AuthUserRecord | null = null;
+      let assignedParticipant: ParticipantRecord | undefined;
+
+      if (input.kind === "special") {
+        if (!assignedEmail) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Enter the registered participant email for this special task",
+          });
+        }
+
+        assignedUser = await findRegisteredUserByEmail(assignedEmail);
+
+        if (!assignedUser) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "No registered user uses that email address",
+          });
+        }
+
+        const assignedUserId = getUserId(assignedUser);
+        assignedParticipant = room.participants.find(
+          (participant) =>
+            participant.email.toLowerCase() === assignedEmail ||
+            participant.userId === assignedUserId,
+        );
+
+        if (!assignedParticipant) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "That registered user has not joined this room yet",
+          });
+        }
+      }
+
       const timestamp = now();
       const task: HackTaskRecord = {
         _id: makeId("task"),
+        assignedToEmail: assignedParticipant?.email.toLowerCase(),
+        assignedToName: assignedParticipant?.name ?? assignedUser?.name,
+        assignedToUserId: assignedParticipant?.userId ?? (assignedUser ? getUserId(assignedUser) : undefined),
         gameType: input.kind === "game" ? (input.gameType ?? "memory_match") : undefined,
         roomId: input.roomId,
         hostId: ctx.session.user.id,
@@ -404,8 +520,10 @@ export const hackRoomRouter = router({
       const isParticipant = room.participants.some(
         (participant) => participant.userId === ctx.session.user.id,
       );
+      const isSpecialAssignee =
+        (task.kind ?? "task") === "special" && isSpecialTaskForUser(task, ctx.session.user);
 
-      if (!isParticipant) {
+      if (!isParticipant && !isSpecialAssignee) {
         throw new TRPCError({
           code: "FORBIDDEN",
           message: "Join this hack room before submitting proof",
@@ -490,6 +608,42 @@ export const hackRoomRouter = router({
 
       await submissionCollection().insertOne(submission);
       return submission;
+    }),
+
+  sendRoomNotification: protectedProcedure
+    .input(
+      z.object({
+        roomId: z.string().min(1),
+        title: z.string().trim().min(3).max(100),
+        message: z.string().trim().min(3).max(500),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const room = await requireHostedRoom(input.roomId, ctx.session.user.id);
+
+      if (!room.participants.length) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Add participants before sending a room notification",
+        });
+      }
+
+      const timestamp = now();
+      const notification: HackNotificationRecord = {
+        _id: makeId("note"),
+        createdAt: timestamp,
+        hostId: ctx.session.user.id,
+        hostName: ctx.session.user.name,
+        message: input.message,
+        recipientEmails: room.participants.map((participant) => participant.email.toLowerCase()),
+        recipientIds: room.participants.map((participant) => participant.userId),
+        roomId: room._id,
+        title: input.title,
+        updatedAt: timestamp,
+      };
+
+      await notificationCollection().insertOne(notification);
+      return notification;
     }),
 
   approveSubmission: protectedProcedure

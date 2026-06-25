@@ -37,8 +37,10 @@ type HackTask = DashboardData["tasks"][number];
 type HackRoom = DashboardData["hostedRooms"][number];
 type HackSubmission = DashboardData["hostSubmissions"][number];
 type HackReward = DashboardData["rewards"][number];
+type HackNotification = DashboardData["notifications"][number];
 type Role = "participant" | "host";
-type TaskKind = "task" | "challenge" | "game";
+type TaskKind = "task" | "challenge" | "game" | "special";
+type AssignmentMode = TaskKind | "notification";
 type RoomTab =
   | "assign"
   | "awards"
@@ -90,6 +92,7 @@ const proofTypeOptions: Array<{ label: string; value: ProofType }> = [
 const defaultRegularProofTypes: Array<ProofType> = ["github", "drive"];
 const defaultSpotProofTypes: Array<ProofType> = ["url"];
 const defaultGameProofTypes: Array<ProofType> = ["game_score"];
+const defaultSpecialProofTypes: Array<ProofType> = ["url"];
 const gameTypeOptions: Array<{
   description: string;
   icon: React.ComponentProps<typeof Ionicons>["name"];
@@ -131,6 +134,7 @@ const emptyRoomForm = {
 };
 
 const emptyTaskForm = {
+  assignedToEmail: "",
   description: "",
   dueAt: "",
   gameType: "memory_match" as GameType,
@@ -407,16 +411,25 @@ function HomeDashboard({ user }: { user: SessionUser }) {
   const hostedRooms = dashboard.data?.hostedRooms ?? [];
   const joinedRooms = dashboard.data?.joinedRooms ?? [];
   const recentSubmissions = dashboard.data?.mySubmissions ?? [];
+  const notifications = dashboard.data?.notifications ?? [];
 
   const handleSignOut = async () => {
     await authClient.signOut();
     await queryClient.invalidateQueries();
   };
 
+  const handleNotifications = () => {
+    setMessage({
+      text: notificationBannerMessage(notifications),
+      tone: notifications.length ? "violet" : "cyan",
+    });
+  };
+
   return (
     <View style={styles.screen}>
       <AppHeader
-        onNotificationPress={() => setMessage({ text: "No new notifications right now", tone: "cyan" })}
+        notificationCount={notifications.length}
+        onNotificationPress={handleNotifications}
         onProfilePress={handleSignOut}
       />
       <ScrollView
@@ -554,16 +567,25 @@ function ProfileDashboard({ user }: { user: SessionUser }) {
   const dashboard = useQuery(trpc.hackRoom.dashboard.queryOptions());
   const [message, setMessage] = useState<{ text: string; tone: Tone } | null>(null);
   const stats = dashboard.data?.stats;
+  const notifications = dashboard.data?.notifications ?? [];
 
   const handleSignOut = async () => {
     await authClient.signOut();
     await queryClient.invalidateQueries();
   };
 
+  const handleNotifications = () => {
+    setMessage({
+      text: notificationBannerMessage(notifications),
+      tone: notifications.length ? "violet" : "cyan",
+    });
+  };
+
   return (
     <View style={styles.screen}>
       <AppHeader
-        onNotificationPress={() => setMessage({ text: "No new notifications right now", tone: "cyan" })}
+        notificationCount={notifications.length}
+        onNotificationPress={handleNotifications}
         onProfilePress={handleSignOut}
       />
       <ScrollView
@@ -628,6 +650,7 @@ function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
 
   const hostedRooms = dashboard.data?.hostedRooms ?? [];
   const joinedRooms = dashboard.data?.joinedRooms ?? [];
+  const notifications = dashboard.data?.notifications ?? [];
   const allRooms = useMemo(() => {
     const seen = new Set<string>();
     const rooms: Array<{ role: Role; room: HackRoom }> = [];
@@ -682,7 +705,10 @@ function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
   };
 
   const handleNotifications = () => {
-    setMessage({ text: "No new notifications right now", tone: "cyan" });
+    setMessage({
+      text: notificationBannerMessage(notifications),
+      tone: notifications.length ? "violet" : "cyan",
+    });
   };
 
   const handleShareCode = async (room: HackRoom) => {
@@ -701,7 +727,11 @@ function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
 
   return (
     <View style={styles.screen}>
-      <AppHeader onNotificationPress={handleNotifications} onProfilePress={handleSignOut} />
+      <AppHeader
+        notificationCount={notifications.length}
+        onNotificationPress={handleNotifications}
+        onProfilePress={handleSignOut}
+      />
       <ScrollView
         contentContainerStyle={styles.dashboardContent}
         keyboardShouldPersistTaps="handled"
@@ -769,6 +799,7 @@ function HackRoomDetailDashboard({
   const [activeParticipantTab, setActiveParticipantTab] = useState<ParticipantTab | null>(null);
   const [taskForm, setTaskForm] = useState(emptyTaskForm);
   const [taskKind, setTaskKind] = useState<TaskKind>("task");
+  const [assignmentMode, setAssignmentMode] = useState<AssignmentMode>("task");
   const [proofTypes, setProofTypes] = useState<Array<ProofType>>(defaultRegularProofTypes);
   const [selectedTaskId, setSelectedTaskId] = useState("");
   const [submitForm, setSubmitForm] = useState(emptySubmitForm);
@@ -784,6 +815,7 @@ function HackRoomDetailDashboard({
   const hostSubmissions = dashboard.data?.hostSubmissions ?? [];
   const visibleWinners = dashboard.data?.visibleWinners ?? [];
   const rewards = dashboard.data?.rewards ?? [];
+  const notifications = dashboard.data?.notifications ?? [];
   const allRooms = useMemo(() => {
     const seen = new Set<string>();
     const rooms: Array<{ role: Role; room: HackRoom }> = [];
@@ -822,6 +854,10 @@ function HackRoomDetailDashboard({
   const roomRewards = useMemo(
     () => rewards.filter((reward) => reward.roomId === roomId),
     [rewards, roomId],
+  );
+  const roomNotifications = useMemo(
+    () => notifications.filter((notification) => notification.roomId === roomId),
+    [notifications, roomId],
   );
   const myRoomRewards = useMemo(
     () => roomRewards.filter((reward) =>
@@ -863,8 +899,22 @@ function HackRoomDetailDashboard({
       onError: (error) => setMessage({ text: error.message, tone: "red" }),
       onSuccess: async () => {
         setTaskForm(emptyTaskForm);
+        setAssignmentMode("task");
+        setTaskKind("task");
         setProofTypes(defaultRegularProofTypes);
-        setMessage({ text: "Room assignment published for all participants", tone: "violet" });
+        setMessage({ text: "Room assignment published", tone: "violet" });
+        await invalidateDashboard();
+      },
+    }),
+  );
+
+  const sendRoomNotification = useMutation(
+    trpc.hackRoom.sendRoomNotification.mutationOptions({
+      onError: (error) => setMessage({ text: error.message, tone: "red" }),
+      onSuccess: async () => {
+        setTaskForm(emptyTaskForm);
+        setAssignmentMode("task");
+        setMessage({ text: "Notification nudged to all room participants", tone: "violet" });
         await invalidateDashboard();
       },
     }),
@@ -928,7 +978,8 @@ function HackRoomDetailDashboard({
     approveSubmission.isPending ||
     selectWinner.isPending ||
     returnSubmission.isPending ||
-    issueReward.isPending;
+    issueReward.isPending ||
+    sendRoomNotification.isPending;
 
   const handleSignOut = async () => {
     await authClient.signOut();
@@ -936,7 +987,10 @@ function HackRoomDetailDashboard({
   };
 
   const handleNotifications = () => {
-    setMessage({ text: "No new notifications right now", tone: "cyan" });
+    setMessage({
+      text: notificationBannerMessage(roomNotifications),
+      tone: roomNotifications.length ? "violet" : "cyan",
+    });
   };
 
   const handleBackToRooms = () => {
@@ -963,12 +1017,30 @@ function HackRoomDetailDashboard({
     const taskProofTypes = normalizeTaskProofTypes(kind, proofTypes);
 
     createTask.mutate({
+      assignedToEmail: kind === "special" ? taskForm.assignedToEmail : undefined,
       description: taskForm.description,
       dueAt: taskForm.dueAt,
       gameType: kind === "game" ? taskForm.gameType : undefined,
       kind,
       proofTypes: taskProofTypes,
       rewardXrdm: Number(taskForm.rewardXrdm),
+      roomId: selectedRoom._id,
+      title: taskForm.title,
+    });
+  };
+
+  const handleSendRoomNotification = () => {
+    if (!selectedRoom) {
+      setMessage({ text: "Room is still loading", tone: "red" });
+      return;
+    }
+    if (selectedRoomRole !== "host") {
+      setMessage({ text: "Only the host can nudge this room", tone: "red" });
+      return;
+    }
+
+    sendRoomNotification.mutate({
+      message: taskForm.description,
       roomId: selectedRoom._id,
       title: taskForm.title,
     });
@@ -1065,7 +1137,11 @@ function HackRoomDetailDashboard({
 
   return (
     <View style={styles.screen}>
-      <AppHeader onNotificationPress={handleNotifications} onProfilePress={handleSignOut} />
+      <AppHeader
+        notificationCount={roomNotifications.length}
+        onNotificationPress={handleNotifications}
+        onProfilePress={handleSignOut}
+      />
       <ScrollView
         contentContainerStyle={styles.dashboardContent}
         keyboardShouldPersistTaps="handled"
@@ -1108,6 +1184,7 @@ function HackRoomDetailDashboard({
           <RoomWorkspace
             activeParticipantTab={activeParticipantTab}
             activeRoomTab={activeRoomTab}
+            assignmentMode={assignmentMode}
             approvedSubmissions={approvedHostSubmissions}
             approveSubmissionPending={approveSubmission.isPending}
             awardBySubmission={awardBySubmission}
@@ -1121,6 +1198,7 @@ function HackRoomDetailDashboard({
             onReturnSubmission={handleReturnSubmission}
             onRoomTabChange={setActiveRoomTab}
             onIssueReward={handleIssueReward}
+            onSendRoomNotification={handleSendRoomNotification}
             onSelectTask={setSelectedTaskId}
             onSelectWinner={handleSelectWinner}
             onShareRoom={handleShareCode}
@@ -1137,11 +1215,13 @@ function HackRoomDetailDashboard({
             selectedTask={selectedTask}
             selectedTaskId={selectedTaskId}
             selectWinnerPending={selectWinner.isPending}
+            sendRoomNotificationPending={sendRoomNotification.isPending}
             issueRewardPending={issueReward.isPending}
             setAwardBySubmission={setAwardBySubmission}
             setFeedbackBySubmission={setFeedbackBySubmission}
             setProofTypes={setProofTypes}
             setRewardForm={setRewardForm}
+            setAssignmentMode={setAssignmentMode}
             setSubmitForm={setSubmitForm}
             setTaskForm={setTaskForm}
             setTaskKind={setTaskKind}
@@ -1414,6 +1494,7 @@ function SelectableRoomCard({
 function RoomWorkspace({
   activeParticipantTab,
   activeRoomTab,
+  assignmentMode,
   approvedSubmissions,
   approveSubmissionPending,
   awardBySubmission,
@@ -1428,6 +1509,7 @@ function RoomWorkspace({
   onParticipantTabChange,
   onReturnSubmission,
   onRoomTabChange,
+  onSendRoomNotification,
   onSelectTask,
   onSelectWinner,
   onShareRoom,
@@ -1444,7 +1526,9 @@ function RoomWorkspace({
   selectedTask,
   selectedTaskId,
   selectWinnerPending,
+  sendRoomNotificationPending,
   setAwardBySubmission,
+  setAssignmentMode,
   setFeedbackBySubmission,
   setProofTypes,
   setRewardForm,
@@ -1459,6 +1543,7 @@ function RoomWorkspace({
 }: {
   activeParticipantTab: ParticipantTab | null;
   activeRoomTab: RoomTab | null;
+  assignmentMode: AssignmentMode;
   approvedSubmissions: DashboardData["hostSubmissions"];
   approveSubmissionPending: boolean;
   awardBySubmission: Record<string, string>;
@@ -1473,6 +1558,7 @@ function RoomWorkspace({
   onParticipantTabChange: (tab: ParticipantTab | null) => void;
   onReturnSubmission: (submission: HackSubmission) => void;
   onRoomTabChange: (tab: RoomTab | null) => void;
+  onSendRoomNotification: () => void;
   onSelectTask: (taskId: string) => void;
   onSelectWinner: (submission: HackSubmission) => void;
   onShareRoom: (room: HackRoom) => void;
@@ -1489,7 +1575,9 @@ function RoomWorkspace({
   selectedTask?: HackTask;
   selectedTaskId: string;
   selectWinnerPending: boolean;
+  sendRoomNotificationPending: boolean;
   setAwardBySubmission: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  setAssignmentMode: React.Dispatch<React.SetStateAction<AssignmentMode>>;
   setFeedbackBySubmission: React.Dispatch<React.SetStateAction<Record<string, string>>>;
   setProofTypes: React.Dispatch<React.SetStateAction<Array<ProofType>>>;
   setRewardForm: React.Dispatch<React.SetStateAction<ReturnType<typeof makeEmptyRewardForm>>>;
@@ -1533,6 +1621,7 @@ function RoomWorkspace({
       {roomRole === "host" ? (
         <HostRoomWorkspace
           activeRoomTab={activeRoomTab}
+          assignmentMode={assignmentMode}
           approvedSubmissions={approvedSubmissions}
           approveSubmissionPending={approveSubmissionPending}
           awardBySubmission={awardBySubmission}
@@ -1545,6 +1634,7 @@ function RoomWorkspace({
           onIssueReward={onIssueReward}
           onReturnSubmission={onReturnSubmission}
           onRoomTabChange={onRoomTabChange}
+          onSendRoomNotification={onSendRoomNotification}
           onSelectWinner={onSelectWinner}
           onShareRoom={onShareRoom}
           pendingSubmissions={pendingSubmissions}
@@ -1555,7 +1645,9 @@ function RoomWorkspace({
           room={room}
           roomTasks={roomTasks}
           selectWinnerPending={selectWinnerPending}
+          sendRoomNotificationPending={sendRoomNotificationPending}
           setAwardBySubmission={setAwardBySubmission}
+          setAssignmentMode={setAssignmentMode}
           setFeedbackBySubmission={setFeedbackBySubmission}
           setProofTypes={setProofTypes}
           setRewardForm={setRewardForm}
@@ -1588,6 +1680,7 @@ function RoomWorkspace({
 
 function HostRoomWorkspace({
   activeRoomTab,
+  assignmentMode,
   approvedSubmissions,
   approveSubmissionPending,
   awardBySubmission,
@@ -1600,6 +1693,7 @@ function HostRoomWorkspace({
   onIssueReward,
   onReturnSubmission,
   onRoomTabChange,
+  onSendRoomNotification,
   onSelectWinner,
   onShareRoom,
   pendingSubmissions,
@@ -1610,7 +1704,9 @@ function HostRoomWorkspace({
   room,
   roomTasks,
   selectWinnerPending,
+  sendRoomNotificationPending,
   setAwardBySubmission,
+  setAssignmentMode,
   setFeedbackBySubmission,
   setProofTypes,
   setRewardForm,
@@ -1621,6 +1717,7 @@ function HostRoomWorkspace({
   winnerSubmissions,
 }: {
   activeRoomTab: RoomTab | null;
+  assignmentMode: AssignmentMode;
   approvedSubmissions: DashboardData["hostSubmissions"];
   approveSubmissionPending: boolean;
   awardBySubmission: Record<string, string>;
@@ -1633,6 +1730,7 @@ function HostRoomWorkspace({
   onIssueReward: (kind: RewardKind) => void;
   onReturnSubmission: (submission: HackSubmission) => void;
   onRoomTabChange: (tab: RoomTab | null) => void;
+  onSendRoomNotification: () => void;
   onSelectWinner: (submission: HackSubmission) => void;
   onShareRoom: (room: HackRoom) => void;
   pendingSubmissions: DashboardData["hostSubmissions"];
@@ -1643,7 +1741,9 @@ function HostRoomWorkspace({
   room: HackRoom;
   roomTasks: DashboardData["tasks"];
   selectWinnerPending: boolean;
+  sendRoomNotificationPending: boolean;
   setAwardBySubmission: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  setAssignmentMode: React.Dispatch<React.SetStateAction<AssignmentMode>>;
   setFeedbackBySubmission: React.Dispatch<React.SetStateAction<Record<string, string>>>;
   setProofTypes: React.Dispatch<React.SetStateAction<Array<ProofType>>>;
   setRewardForm: React.Dispatch<React.SetStateAction<ReturnType<typeof makeEmptyRewardForm>>>;
@@ -1654,6 +1754,7 @@ function HostRoomWorkspace({
   winnerSubmissions: DashboardData["hostSubmissions"];
 }) {
   const challengeTasks = roomTasks.filter((task) => task.kind === "challenge" || task.kind === "game");
+  const challengeComposerKind: TaskKind = taskKind === "game" ? "game" : "challenge";
   const leaderboardRows = winnerSubmissions
     .reduce<
       Array<{
@@ -1780,18 +1881,29 @@ function HostRoomWorkspace({
 
       {activeRoomTab === "assign" ? (
         <AssignmentComposer
-          createTaskPending={createTaskPending}
-          fixedKind={taskKind === "challenge" ? "challenge" : "task"}
+          createTaskPending={createTaskPending || sendRoomNotificationPending}
+          fixedKind={assignmentMode}
           onKindChange={(kind) => {
-            setTaskKind(kind);
-            setProofTypes(kind === "task" ? defaultRegularProofTypes : defaultSpotProofTypes);
+            setAssignmentMode(kind);
+            if (kind !== "notification") {
+              setTaskKind(kind);
+            }
+            setProofTypes(
+              kind === "task"
+                ? defaultRegularProofTypes
+                : kind === "special"
+                  ? defaultSpecialProofTypes
+                  : defaultSpotProofTypes,
+            );
             setTaskForm({
               ...emptyTaskForm,
-              rewardXrdm: kind === "task" ? "20" : "10",
+              rewardXrdm: kind === "task" ? "20" : kind === "special" ? "15" : "10",
             });
           }}
           onCreateTask={onCreateTask}
+          onSendNotification={onSendRoomNotification}
           proofTypes={proofTypes}
+          sendNotificationPending={sendRoomNotificationPending}
           setProofTypes={setProofTypes}
           setTaskForm={setTaskForm}
           showAssignmentToggle
@@ -1879,7 +1991,7 @@ function HostRoomWorkspace({
         >
           <View style={styles.kindSwitchRow}>
             <KindButton
-              active={taskKind === "challenge"}
+              active={challengeComposerKind === "challenge"}
               icon="sparkles-outline"
               label="Challenge"
               onPress={() => {
@@ -1892,7 +2004,7 @@ function HostRoomWorkspace({
               }}
             />
             <KindButton
-              active={taskKind === "game"}
+              active={challengeComposerKind === "game"}
               icon="game-controller-outline"
               label="Game"
               onPress={() => {
@@ -1907,13 +2019,13 @@ function HostRoomWorkspace({
           </View>
           <AssignmentComposer
             createTaskPending={createTaskPending}
-            fixedKind={taskKind === "task" ? "challenge" : taskKind}
+            fixedKind={challengeComposerKind}
             onCreateTask={onCreateTask}
             proofTypes={proofTypes}
             setProofTypes={setProofTypes}
             setTaskForm={setTaskForm}
             taskForm={taskForm}
-            title={taskKind === "game" ? "Create Game Card" : "Create Challenge Card"}
+            title={challengeComposerKind === "game" ? "Create Game Card" : "Create Challenge Card"}
           />
           <View style={styles.divider} />
           <View style={styles.listStack}>
@@ -2087,7 +2199,9 @@ function ParticipantRoomWorkspace({
   submitProofPending: boolean;
 }) {
   const [activeGameSession, setActiveGameSession] = useState<MiniGameSession | null>(null);
-  const regularTasks = roomTasks.filter((task) => (task.kind ?? "task") === "task");
+  const regularTasks = roomTasks.filter((task) =>
+    ["task", "special"].includes(task.kind ?? "task"),
+  );
   const gameTasks = roomTasks.filter((task) => task.kind === "challenge" || task.kind === "game");
   const participantActions: Array<{
     icon: React.ComponentProps<typeof Ionicons>["name"];
@@ -2170,7 +2284,9 @@ function ParticipantRoomWorkspace({
           onSelectTask={onSelectTask}
           onSubmitProof={onSubmitProof}
           regularTasks={regularTasks}
-          selectedTask={selectedTask?.kind === "task" ? selectedTask : undefined}
+          selectedTask={
+            ["task", "special"].includes(selectedTask?.kind ?? "task") ? selectedTask : undefined
+          }
           selectedTaskId={selectedTaskId}
           setSubmitForm={setSubmitForm}
           submitForm={submitForm}
@@ -3483,7 +3599,9 @@ function AssignmentComposer({
   fixedKind,
   onKindChange,
   onCreateTask,
+  onSendNotification,
   proofTypes,
+  sendNotificationPending = false,
   setProofTypes,
   setTaskForm,
   showAssignmentToggle = false,
@@ -3491,10 +3609,12 @@ function AssignmentComposer({
   title,
 }: {
   createTaskPending: boolean;
-  fixedKind: TaskKind;
-  onKindChange?: (kind: TaskKind) => void;
+  fixedKind: AssignmentMode;
+  onKindChange?: (kind: AssignmentMode) => void;
   onCreateTask: (kind: TaskKind) => void;
+  onSendNotification?: () => void;
   proofTypes: Array<ProofType>;
+  sendNotificationPending?: boolean;
   setProofTypes: React.Dispatch<React.SetStateAction<Array<ProofType>>>;
   setTaskForm: React.Dispatch<React.SetStateAction<typeof emptyTaskForm>>;
   showAssignmentToggle?: boolean;
@@ -3504,13 +3624,24 @@ function AssignmentComposer({
   const isRegularTask = fixedKind === "task";
   const isSpotChallenge = fixedKind === "challenge";
   const isGame = fixedKind === "game";
-  const effectiveProofTypes = normalizeTaskProofTypes(fixedKind, proofTypes);
+  const isSpecialTask = fixedKind === "special";
+  const isNotification = fixedKind === "notification";
+  const effectiveProofTypes = isNotification ? [] : normalizeTaskProofTypes(fixedKind, proofTypes);
   const selectableProofTypeOptions = isGame
     ? proofTypeOptions.filter((option) => option.value === "game_score")
     : proofTypeOptions.filter((option) => option.value !== "game_score");
+  const canSubmitNotification =
+    isNotification && taskForm.title.trim() && taskForm.description.trim() && !sendNotificationPending;
+  const canSubmitTask =
+    !isNotification &&
+    taskForm.title.trim() &&
+    taskForm.description.trim() &&
+    taskForm.dueAt.trim() &&
+    (!isSpecialTask || taskForm.assignedToEmail.trim()) &&
+    !createTaskPending;
 
   const handleProofTypePress = (proofType: ProofType) => {
-    if (isGame) {
+    if (isGame || isNotification) {
       return;
     }
 
@@ -3530,6 +3661,41 @@ function AssignmentComposer({
     });
   };
 
+  const badgeLabel = isSpecialTask
+    ? "One participant"
+    : isNotification
+      ? "Room nudge"
+      : "All participants";
+  const badgeTone: Tone = isSpecialTask ? "orange" : isNotification ? "violet" : "cyan";
+  const fieldLabel = isNotification
+    ? "Notification title"
+    : isGame
+      ? "Game name"
+      : isSpotChallenge
+        ? "Challenge name"
+        : "Assignment title";
+  const dateLabel = isGame
+    ? "Game date and time"
+    : isSpotChallenge
+      ? "Challenge date and time"
+      : isSpecialTask
+        ? "Special task due date and time"
+        : "Due date and time";
+  const descriptionLabel = isNotification
+    ? "Message"
+    : isSpotChallenge || isGame
+      ? "Rules / brief"
+      : "Description";
+  const descriptionPlaceholder = isNotification
+    ? "Nudge everyone with the next step, reminder, or deadline."
+    : isGame
+      ? "Tell participants what score, attempt, or result the host will verify."
+      : isSpotChallenge
+        ? "Describe the fun challenge, who can join, and how winners will be picked."
+        : isSpecialTask
+          ? "Give this participant a focused follow-up task and explain the expected proof."
+          : "Submit a functional demo. GitHub and Drive proof are mandatory.";
+
   return (
     <View style={styles.assignmentComposer}>
       <View style={styles.sectionHeadingRow}>
@@ -3537,44 +3703,81 @@ function AssignmentComposer({
           <Text style={styles.sectionEyebrow}>Organizer Track</Text>
           <Text style={styles.sectionTitleSmall}>{title}</Text>
         </View>
-        <StatusPill label="All participants" tone="violet" />
+        <StatusPill label={badgeLabel} tone={badgeTone} />
       </View>
 
       {showAssignmentToggle ? (
-        <View style={styles.kindSwitchRow}>
-          <KindButton
-            active={isRegularTask}
-            icon="clipboard-outline"
-            label="Regular Task"
-            onPress={() => onKindChange?.("task")}
-          />
-          <KindButton
-            active={isSpotChallenge}
-            icon="flash-outline"
-            label="Spot Challenge"
-            onPress={() => onKindChange?.("challenge")}
-          />
-        </View>
+        <>
+          <View style={styles.kindSwitchRow}>
+            <KindButton
+              active={isRegularTask}
+              icon="clipboard-outline"
+              label="Regular Task"
+              onPress={() => onKindChange?.("task")}
+            />
+            <KindButton
+              active={isSpotChallenge}
+              icon="flash-outline"
+              label="Spot Challenge"
+              onPress={() => onKindChange?.("challenge")}
+            />
+          </View>
+          <View style={styles.kindSwitchRow}>
+            <KindButton
+              active={isSpecialTask}
+              icon="star-outline"
+              label="Special Task"
+              onPress={() => onKindChange?.("special")}
+            />
+            <KindButton
+              active={isNotification}
+              icon="notifications-outline"
+              label="Notification"
+              onPress={() => onKindChange?.("notification")}
+            />
+          </View>
+        </>
       ) : null}
 
-      <Field label={isGame ? "Game name" : isSpotChallenge ? "Challenge name" : "Assignment title"}>
+      {isSpecialTask ? (
+        <Field label="Registered participant email">
+          <HackTextInput
+            autoCapitalize="none"
+            keyboardType="email-address"
+            onChangeText={(value) =>
+              setTaskForm((current) => ({ ...current, assignedToEmail: value }))
+            }
+            placeholder="participant@company.com"
+            value={taskForm.assignedToEmail}
+          />
+        </Field>
+      ) : null}
+
+      <Field label={fieldLabel}>
         <HackTextInput
           onChangeText={(value) => setTaskForm((current) => ({ ...current, title: value }))}
           placeholder={
-            fixedKind === "game"
+            fixedKind === "notification"
+              ? "Final submission reminder"
+              : fixedKind === "game"
               ? "Bug bash arena"
               : fixedKind === "challenge"
                 ? "10-minute UX fix sprint"
+                : fixedKind === "special"
+                  ? "Private API integration follow-up"
                 : "Build a working prototype"
           }
           value={taskForm.title}
         />
       </Field>
-      <DateTimeField
-        label={isGame ? "Game date and time" : isSpotChallenge ? "Challenge date and time" : "Due date and time"}
-        onChange={(value) => setTaskForm((current) => ({ ...current, dueAt: value }))}
-        value={taskForm.dueAt}
-      />
+
+      {!isNotification ? (
+        <DateTimeField
+          label={dateLabel}
+          onChange={(value) => setTaskForm((current) => ({ ...current, dueAt: value }))}
+          value={taskForm.dueAt}
+        />
+      ) : null}
 
       {isGame ? (
         <Field label="Mini-game type">
@@ -3612,72 +3815,105 @@ function AssignmentComposer({
         </Field>
       ) : null}
 
-      <Field label={isSpotChallenge || isGame ? "Rules / brief" : "Description"}>
+      <Field label={descriptionLabel}>
         <HackTextInput
           multiline
           onChangeText={(value) =>
             setTaskForm((current) => ({ ...current, description: value }))
           }
-          placeholder={
-            isGame
-              ? "Tell participants what score, attempt, or result the host will verify."
-              : isSpotChallenge
-              ? "Describe the fun challenge, who can join, and how winners will be picked."
-              : "Submit a functional demo. GitHub and Drive proof are mandatory."
-          }
+          placeholder={descriptionPlaceholder}
           style={styles.textAreaLarge}
           value={taskForm.description}
         />
       </Field>
 
-      <Field label={isGame ? "Game proof" : isRegularTask ? "Expected proof" : "Challenge proof"}>
-        <View style={styles.proofGrid}>
-          {selectableProofTypeOptions.map((option) => {
-            const active = effectiveProofTypes.includes(option.value);
-            const locked =
-              isGame || (isRegularTask && defaultRegularProofTypes.includes(option.value));
-            return (
-              <Pressable
-                accessibilityRole="button"
-                key={option.value}
-                onPress={() => handleProofTypePress(option.value)}
-                style={[
-                  styles.proofChip,
-                  active && styles.proofChipActive,
-                  locked && styles.proofChipLocked,
-                ]}
-              >
-                <Text style={[styles.proofChipText, active && styles.proofChipTextActive]}>
-                  {option.label}
-                  {locked ? " required" : ""}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      </Field>
+      {!isNotification ? (
+        <Field
+          label={
+            isGame
+              ? "Game proof"
+              : isRegularTask
+                ? "Expected proof"
+                : isSpecialTask
+                  ? "Special task proof"
+                  : "Challenge proof"
+          }
+        >
+          <View style={styles.proofGrid}>
+            {selectableProofTypeOptions.map((option) => {
+              const active = effectiveProofTypes.includes(option.value);
+              const locked =
+                isGame || (isRegularTask && defaultRegularProofTypes.includes(option.value));
+              return (
+                <Pressable
+                  accessibilityRole="button"
+                  key={option.value}
+                  onPress={() => handleProofTypePress(option.value)}
+                  style={[
+                    styles.proofChip,
+                    active && styles.proofChipActive,
+                    locked && styles.proofChipLocked,
+                  ]}
+                >
+                  <Text style={[styles.proofChipText, active && styles.proofChipTextActive]}>
+                    {option.label}
+                    {locked ? " required" : ""}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </Field>
+      ) : null}
 
-      <Field label="XRDM reward">
-        <HackTextInput
-          keyboardType="number-pad"
-          onChangeText={(value) => setTaskForm((current) => ({ ...current, rewardXrdm: value }))}
-          placeholder="20"
-          value={taskForm.rewardXrdm}
-        />
-      </Field>
+      {!isNotification ? (
+        <Field label="XRDM reward">
+          <HackTextInput
+            keyboardType="number-pad"
+            onChangeText={(value) => setTaskForm((current) => ({ ...current, rewardXrdm: value }))}
+            placeholder="20"
+            value={taskForm.rewardXrdm}
+          />
+        </Field>
+      ) : null}
 
       <HackButton
-        disabled={
-          !taskForm.title.trim() ||
-          !taskForm.description.trim() ||
-          !taskForm.dueAt.trim() ||
-          createTaskPending
+        disabled={isNotification ? !canSubmitNotification : !canSubmitTask}
+        icon={
+          isNotification
+            ? "notifications-outline"
+            : isGame
+              ? "game-controller-outline"
+              : isSpotChallenge
+                ? "flash-outline"
+                : isSpecialTask
+                  ? "star-outline"
+                  : "send-outline"
         }
-        icon={isGame ? "game-controller-outline" : isSpotChallenge ? "flash-outline" : "send-outline"}
-        label={isGame ? "Create Game Card" : isSpotChallenge ? "Create Spot Challenge" : "Publish Regular Task"}
-        loading={createTaskPending}
-        onPress={() => onCreateTask(fixedKind)}
-        tone={isGame ? "gold" : isSpotChallenge ? "orange" : "violet"}
+        label={
+          isNotification
+            ? "Send Notification"
+            : isGame
+              ? "Create Game Card"
+              : isSpotChallenge
+                ? "Create Spot Challenge"
+                : isSpecialTask
+                  ? "Create Special Task"
+                  : "Publish Regular Task"
+        }
+        loading={isNotification ? sendNotificationPending : createTaskPending}
+        onPress={() =>
+          isNotification ? onSendNotification?.() : onCreateTask(fixedKind as TaskKind)
+        }
+        tone={
+          isNotification
+            ? "violet"
+            : isGame
+              ? "gold"
+              : isSpotChallenge || isSpecialTask
+                ? "orange"
+                : "violet"
+        }
       />
     </View>
   );
@@ -4396,9 +4632,11 @@ function HostTrack({
 }
 
 function AppHeader({
+  notificationCount = 0,
   onNotificationPress,
   onProfilePress,
 }: {
+  notificationCount?: number;
   onNotificationPress: () => void;
   onProfilePress: () => void;
 }) {
@@ -4421,6 +4659,7 @@ function AppHeader({
         <View style={styles.homeHeaderActions}>
           <HeaderIconButton
             accessibilityLabel="Notifications"
+            badgeCount={notificationCount}
             icon="notifications-outline"
             onPress={onNotificationPress}
           />
@@ -4443,11 +4682,13 @@ function AppHeader({
 
 function HeaderIconButton({
   accessibilityLabel,
+  badgeCount = 0,
   icon,
   onPress,
   tone = "default",
 }: {
   accessibilityLabel: string;
+  badgeCount?: number;
   icon: React.ComponentProps<typeof Ionicons>["name"];
   onPress: () => void;
   tone?: "default" | "profile";
@@ -4466,6 +4707,11 @@ function HeaderIconButton({
       ]}
     >
       <Ionicons name={icon} size={22} color={color} />
+      {badgeCount > 0 ? (
+        <View style={styles.headerBadge}>
+          <Text style={styles.headerBadgeText}>{badgeCount > 9 ? "9+" : badgeCount}</Text>
+        </View>
+      ) : null}
     </Pressable>
   );
 }
@@ -4938,6 +5184,14 @@ function TaskCard({
       <Text numberOfLines={3} style={styles.cardDescription}>
         {task.description}
       </Text>
+      {task.kind === "special" && task.assignedToEmail ? (
+        <View style={styles.specialAssigneeRow}>
+          <Ionicons name="person-outline" size={13} color={theme.warning} />
+          <Text numberOfLines={1} style={styles.specialAssigneeText}>
+            For {task.assignedToName || task.assignedToEmail}
+          </Text>
+        </View>
+      ) : null}
       <View style={styles.proofTypeRow}>
         <Text style={styles.proofTypeLabel}>{kindLabel(task.kind ?? "task")}</Text>
         {getTaskProofTypes(task).map((proofType) => (
@@ -5171,12 +5425,20 @@ function normalizeTaskProofTypes(kind: TaskKind, proofTypes: Array<ProofType>) {
     return defaultGameProofTypes;
   }
 
+  if (kind === "special") {
+    return proofTypes.length ? [...new Set(proofTypes)] : defaultSpecialProofTypes;
+  }
+
   return proofTypes.length ? [...new Set(proofTypes)] : defaultSpotProofTypes;
 }
 
 function getTaskProofTypes(task?: Pick<HackTask, "kind" | "proofTypes">) {
   if (task?.kind === "game") {
     return defaultGameProofTypes;
+  }
+
+  if (task?.kind === "special") {
+    return task.proofTypes?.length ? task.proofTypes : defaultSpecialProofTypes;
   }
 
   return task?.proofTypes?.length ? task.proofTypes : defaultSpotProofTypes;
@@ -5281,7 +5543,17 @@ function statusTone(status?: SubmissionStatus) {
 function kindLabel(kind: TaskKind) {
   if (kind === "challenge") return "Challenge";
   if (kind === "game") return "Game";
+  if (kind === "special") return "Special";
   return "Task";
+}
+
+function notificationBannerMessage(notifications: Array<HackNotification>) {
+  if (!notifications.length) {
+    return "No new notifications right now";
+  }
+
+  const latest = notifications[0];
+  return `${latest.title} - ${latest.roomName}: ${latest.message}`;
 }
 
 function getInitials(name: string) {
@@ -5712,6 +5984,26 @@ const styles = StyleSheet.create({
     height: 36,
     justifyContent: "center",
     width: 36,
+  },
+  headerBadge: {
+    alignItems: "center",
+    backgroundColor: theme.warning,
+    borderColor: theme.background,
+    borderRadius: 999,
+    borderWidth: 1,
+    height: 15,
+    justifyContent: "center",
+    minWidth: 15,
+    paddingHorizontal: 3,
+    position: "absolute",
+    right: -2,
+    top: -3,
+  },
+  headerBadgeText: {
+    color: "#170900",
+    fontFamily: Platform.select({ default: "monospace" }),
+    fontSize: 8,
+    fontWeight: "900",
   },
   headerProfileButton: {
     backgroundColor: theme.panelStrong,
@@ -6977,6 +7269,25 @@ const styles = StyleSheet.create({
     gap: 9,
     marginTop: 9,
     padding: 10,
+  },
+  specialAssigneeRow: {
+    alignItems: "center",
+    backgroundColor: theme.warningDark,
+    borderColor: theme.warningBorder,
+    borderRadius: 7,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 6,
+    marginTop: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+  },
+  specialAssigneeText: {
+    color: theme.warning,
+    flex: 1,
+    fontFamily: Platform.select({ default: "monospace" }),
+    fontSize: 10,
+    fontWeight: "800",
   },
   taskCard: {
     backgroundColor: theme.surface,
