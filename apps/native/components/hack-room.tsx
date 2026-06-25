@@ -46,6 +46,7 @@ type RoomTab =
   | "awards"
   | "challenges"
   | "created"
+  | "games"
   | "history"
   | "leaderboard"
   | "participants"
@@ -511,7 +512,7 @@ function HomeDashboard({ user }: { user: SessionUser }) {
             <HomeHubTile
               icon="game-controller-outline"
               label="Games"
-              meta="Play and submit score"
+              meta="Play mini games"
               onPress={() => router.push("/hack-room")}
               tone="lime"
             />
@@ -1777,8 +1778,8 @@ function HostRoomWorkspace({
   winnerSubmissions: DashboardData["hostSubmissions"];
 }) {
   const [historyTaskId, setHistoryTaskId] = useState("");
-  const challengeTasks = roomTasks.filter((task) => task.kind === "challenge" || task.kind === "game");
-  const challengeComposerKind: TaskKind = taskKind === "game" ? "game" : "challenge";
+  const challengeTasks = roomTasks.filter((task) => task.kind === "challenge");
+  const challengeProofTypes = proofTypes.filter((proofType) => proofType !== "game_score");
   const leaderboardRows = winnerSubmissions
     .reduce<
       Array<{
@@ -1820,11 +1821,23 @@ function HostRoomWorkspace({
     { icon: "time-outline", id: "history", label: "History" },
     { icon: "trophy-outline", id: "winners", label: "Award XRDM" },
     { icon: "ribbon-outline", id: "awards", label: "Awards" },
-    { icon: "game-controller-outline", id: "challenges", label: "Games" },
+    { icon: "flash-outline", id: "challenges", label: "Challenges" },
+    { icon: "game-controller-outline", id: "games", label: "Games" },
     { icon: "podium-outline", id: "leaderboard", label: "Leaderboard" },
     { icon: "person-circle-outline", id: "profile", label: "Profile" },
   ];
   const activeAction = hostQuickActions.find((action) => action.id === activeRoomTab);
+  const openHostAction = (tab: RoomTab) => {
+    if (tab === "challenges") {
+      setTaskKind("challenge");
+      setProofTypes(defaultSpotProofTypes);
+      setTaskForm((current) => ({
+        ...current,
+        rewardXrdm: current.rewardXrdm || "10",
+      }));
+    }
+    onRoomTabChange(tab);
+  };
 
   if (!activeRoomTab) {
     return (
@@ -1838,7 +1851,7 @@ function HostRoomWorkspace({
                 icon={action.icon}
                 key={action.id}
                 label={action.label}
-                onPress={() => onRoomTabChange(action.id)}
+                onPress={() => openHostAction(action.id)}
                 tone="violet"
               />
             ))}
@@ -2003,47 +2016,19 @@ function HostRoomWorkspace({
         <Panel
           action={<CounterLabel label={`${challengeTasks.length} live`} />}
           eyebrow="Host Menu"
-          icon="game-controller-outline"
-          title="Challenges and Games"
+          icon="flash-outline"
+          title="Challenges"
           tone="violet"
         >
-          <View style={styles.kindSwitchRow}>
-            <KindButton
-              active={challengeComposerKind === "challenge"}
-              icon="sparkles-outline"
-              label="Challenge"
-              onPress={() => {
-                setTaskKind("challenge");
-                setProofTypes(defaultSpotProofTypes);
-                setTaskForm({
-                  ...emptyTaskForm,
-                  rewardXrdm: "10",
-                });
-              }}
-            />
-            <KindButton
-              active={challengeComposerKind === "game"}
-              icon="game-controller-outline"
-              label="Game"
-              onPress={() => {
-                setTaskKind("game");
-                setProofTypes(defaultGameProofTypes);
-                setTaskForm({
-                  ...emptyTaskForm,
-                  rewardXrdm: "15",
-                });
-              }}
-            />
-          </View>
           <AssignmentComposer
             createTaskPending={createTaskPending}
-            fixedKind={challengeComposerKind}
+            fixedKind="challenge"
             onCreateTask={onCreateTask}
-            proofTypes={proofTypes}
+            proofTypes={challengeProofTypes}
             setProofTypes={setProofTypes}
             setTaskForm={setTaskForm}
             taskForm={taskForm}
-            title={challengeComposerKind === "game" ? "Create Game Card" : "Create Challenge Card"}
+            title="Create Challenge Card"
           />
           <View style={styles.divider} />
           <View style={styles.listStack}>
@@ -2053,13 +2038,15 @@ function HostRoomWorkspace({
               ))
             ) : (
               <EmptyState
-                icon="game-controller-outline"
-                text="Create challenge or game cards for participants to complete with proof."
+                icon="flash-outline"
+                text="Create spot challenges for participants to complete with proof."
               />
             )}
           </View>
         </Panel>
       ) : null}
+
+      {activeRoomTab === "games" ? <HostGamesPanel /> : null}
 
       {activeRoomTab === "winners" ? (
         <Panel
@@ -2204,7 +2191,6 @@ function HostCreatedTasksPanel({
     { icon: "clipboard-outline", kind: "task", label: "Regular" },
     { icon: "person-outline", kind: "special", label: "Special" },
     { icon: "sparkles-outline", kind: "challenge", label: "Challenge" },
-    { icon: "game-controller-outline", kind: "game", label: "Game" },
   ];
 
   const historyCountByTask = new Map<string, number>();
@@ -2257,7 +2243,7 @@ function HostCreatedTasksPanel({
         ) : (
           <EmptyState
             icon="layers-outline"
-            text="Created regular tasks, special tasks, challenges, and games will appear here."
+            text="Created regular tasks, special tasks, and challenges will appear here."
           />
         )}
       </View>
@@ -2406,6 +2392,20 @@ function CreatedTaskLogCard({
   );
 }
 
+function HostGamesPanel() {
+  return (
+    <Panel
+      action={<CounterLabel label={`${gameTypeOptions.length} games`} />}
+      eyebrow="Host Play"
+      icon="game-controller-outline"
+      title="Games"
+      tone="lime"
+    >
+      <MiniGamePlaySurface tone="lime" />
+    </Panel>
+  );
+}
+
 function ParticipantRoomWorkspace({
   activeParticipantTab,
   mySubmissions,
@@ -2435,11 +2435,10 @@ function ParticipantRoomWorkspace({
   submitForm: typeof emptySubmitForm;
   submitProofPending: boolean;
 }) {
-  const [activeGameSession, setActiveGameSession] = useState<MiniGameSession | null>(null);
   const regularTasks = roomTasks.filter((task) =>
     ["task", "special"].includes(task.kind ?? "task"),
   );
-  const gameTasks = roomTasks.filter((task) => task.kind === "challenge" || task.kind === "game");
+  const challengeTasks = roomTasks.filter((task) => task.kind === "challenge");
   const participantActions: Array<{
     icon: React.ComponentProps<typeof Ionicons>["name"];
     id: ParticipantTab;
@@ -2457,11 +2456,10 @@ function ParticipantRoomWorkspace({
       const selectedRegularTask = regularTasks.find((task) => task._id === selectedTaskId);
       onSelectTask(selectedRegularTask?._id ?? regularTasks[0]._id);
     }
-    if (action === "games" && gameTasks.length) {
-      const selectedGameTask = gameTasks.find((task) => task._id === selectedTaskId);
-      onSelectTask(selectedGameTask?._id ?? gameTasks[0]._id);
+    if (action === "games" && challengeTasks.length) {
+      const selectedChallengeTask = challengeTasks.find((task) => task._id === selectedTaskId);
+      onSelectTask(selectedChallengeTask?._id ?? challengeTasks[0]._id);
     }
-    setActiveGameSession(null);
     onParticipantTabChange(action);
   };
 
@@ -2493,7 +2491,6 @@ function ParticipantRoomWorkspace({
         <Pressable
           accessibilityRole="button"
           onPress={() => {
-            setActiveGameSession(null);
             onParticipantTabChange(null);
           }}
           style={({ pressed }) => [
@@ -2537,25 +2534,9 @@ function ParticipantRoomWorkspace({
 
       {activeParticipantTab === "games" ? (
         <ParticipantGamesPanel
-          activeGameSession={activeGameSession}
-          gameTasks={gameTasks}
+          challengeTasks={challengeTasks}
           mySubmissions={mySubmissions}
-          onCompleteGame={(result, task) => {
-            if (task) {
-              onSelectTask(task._id);
-              setSubmitForm((current) => ({
-                ...current,
-                notes: result.notes,
-                proofItems: {
-                  ...current.proofItems,
-                  game_score: result.proofValue,
-                },
-                proofUrl: result.proofValue,
-              }));
-            }
-          }}
           onSelectTask={onSelectTask}
-          onSetGameSession={setActiveGameSession}
           onSubmitProof={onSubmitProof}
           selectedTask={selectedTask}
           selectedTaskId={selectedTaskId}
@@ -2717,12 +2698,9 @@ function ParticipantHistoryPanel({
 }
 
 function ParticipantGamesPanel({
-  activeGameSession,
-  gameTasks,
+  challengeTasks,
   mySubmissions,
-  onCompleteGame,
   onSelectTask,
-  onSetGameSession,
   onSubmitProof,
   selectedTask,
   selectedTaskId,
@@ -2730,12 +2708,9 @@ function ParticipantGamesPanel({
   submitForm,
   submitProofPending,
 }: {
-  activeGameSession: MiniGameSession | null;
-  gameTasks: DashboardData["tasks"];
+  challengeTasks: DashboardData["tasks"];
   mySubmissions: DashboardData["mySubmissions"];
-  onCompleteGame: (result: MiniGameResult, task?: HackTask) => void;
   onSelectTask: (taskId: string) => void;
-  onSetGameSession: React.Dispatch<React.SetStateAction<MiniGameSession | null>>;
   onSubmitProof: () => void;
   selectedTask?: HackTask;
   selectedTaskId: string;
@@ -2743,10 +2718,7 @@ function ParticipantGamesPanel({
   submitForm: typeof emptySubmitForm;
   submitProofPending: boolean;
 }) {
-  const challengeTasks = gameTasks.filter((task) => task.kind === "challenge");
-  const assignedGames = gameTasks.filter((task) => task.kind === "game");
-  const selectedProofTask =
-    selectedTask?.kind === "challenge" || selectedTask?.kind === "game" ? selectedTask : undefined;
+  const selectedProofTask = selectedTask?.kind === "challenge" ? selectedTask : undefined;
   const selectedSubmission = selectedProofTask
     ? mySubmissions.find((submission) => submission.taskId === selectedProofTask._id)
     : undefined;
@@ -2755,57 +2727,13 @@ function ParticipantGamesPanel({
   return (
     <View style={styles.trackStack}>
       <Panel
-        action={<CounterLabel label={`${gameTasks.length} live`} />}
+        action={<CounterLabel label={`${gameTypeOptions.length} games`} />}
         eyebrow="Participant"
         icon="game-controller-outline"
         title="Games"
         tone="cyan"
       >
-        {activeGameSession ? (
-          <MiniGamePlayer
-            onBack={() => onSetGameSession(null)}
-            onComplete={(result) => onCompleteGame(result, activeGameSession.task)}
-            session={activeGameSession}
-          />
-        ) : null}
-
-        <View style={styles.gamesBanner}>
-          <Ionicons name="game-controller-outline" size={24} color={theme.participant} />
-          <View style={styles.profileText}>
-            <Text style={styles.gamesBannerTitle}>Play, submit, get verified</Text>
-            <Text style={styles.gamesBannerText}>
-              Host game cards can become proof. Practice games are just for a quick reset.
-            </Text>
-          </View>
-        </View>
-
-        <Text style={styles.sectionEyebrow}>Host Game Cards</Text>
-        <View style={styles.listStack}>
-          {assignedGames.length ? (
-            assignedGames.map((task) => {
-              const submission = mySubmissions.find((item) => item.taskId === task._id);
-              const gameType = getTaskGameType(task);
-              return (
-                <GameAssignmentCard
-                  key={task._id}
-                  onPress={() => {
-                    onSelectTask(task._id);
-                    onSetGameSession({ mode: "assignment", task, type: gameType });
-                  }}
-                  selected={selectedTaskId === task._id}
-                  status={submission?.status}
-                  task={task}
-                />
-              );
-            })
-          ) : (
-            <EmptyState
-              icon="game-controller-outline"
-              text="Host-created game cards will appear here."
-            />
-          )}
-        </View>
-
+        <MiniGamePlaySurface tone="cyan" />
         <View style={styles.divider} />
         <Text style={styles.sectionEyebrow}>Spot Challenges</Text>
         <View style={styles.listStack}>
@@ -2843,26 +2771,6 @@ function ParticipantGamesPanel({
           <SubmissionHoldCard submission={selectedSubmission} />
         ) : null}
 
-        <View style={styles.divider} />
-        <Text style={styles.sectionEyebrow}>Practice / Play Now</Text>
-        <ScrollView
-          contentContainerStyle={styles.practiceGameShelf}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-        >
-          {gameTypeOptions.map((option) => (
-            <Pressable
-              accessibilityRole="button"
-              key={option.value}
-              onPress={() => onSetGameSession({ mode: "practice", type: option.value })}
-              style={({ pressed }) => [styles.practiceGameCard, pressed && styles.pressed]}
-            >
-              <Ionicons name={option.icon} size={22} color={theme.participant} />
-              <Text style={styles.practiceGameTitle}>{option.label}</Text>
-              <Text style={styles.practiceGameMeta}>Practice</Text>
-            </Pressable>
-          ))}
-        </ScrollView>
       </Panel>
     </View>
   );
@@ -3084,6 +2992,71 @@ function GameAssignmentCard({
   );
 }
 
+function MiniGamePlaySurface({ tone }: { tone: Tone }) {
+  const [activeGameSession, setActiveGameSession] = useState<MiniGameSession | null>(null);
+  const [latestResult, setLatestResult] = useState<MiniGameResult | null>(null);
+  const toneColors = getToneColors(tone);
+
+  return (
+    <View style={styles.miniGamePlayStack}>
+      {activeGameSession ? (
+        <MiniGamePlayer
+          onBack={() => setActiveGameSession(null)}
+          onComplete={setLatestResult}
+          session={activeGameSession}
+        />
+      ) : null}
+
+      <View
+        style={[
+          styles.gamesBanner,
+          { backgroundColor: toneColors.bg, borderColor: toneColors.border },
+        ]}
+      >
+        <Ionicons name="game-controller-outline" size={24} color={toneColors.fg} />
+        <View style={styles.profileText}>
+          <Text style={[styles.gamesBannerTitle, { color: toneColors.fg }]}>Play mini-games</Text>
+          <Text style={styles.gamesBannerText}>
+            Quick in-app games for a reset. They do not create assignments or submit proof.
+          </Text>
+        </View>
+      </View>
+
+      {latestResult ? (
+        <View style={styles.latestGameResultCard}>
+          <View style={styles.cardTopRow}>
+            <View style={styles.taskTitleBlock}>
+              <Text style={styles.latestGameResultTitle}>{latestResult.title}</Text>
+              <Text style={styles.latestGameResultText}>{latestResult.notes}</Text>
+            </View>
+            <StatusPill label={`${latestResult.score} pts`} tone="gold" />
+          </View>
+        </View>
+      ) : null}
+
+      <Text style={styles.sectionEyebrow}>Play Now</Text>
+      <ScrollView
+        contentContainerStyle={styles.practiceGameShelf}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+      >
+        {gameTypeOptions.map((option) => (
+          <Pressable
+            accessibilityRole="button"
+            key={option.value}
+            onPress={() => setActiveGameSession({ mode: "practice", type: option.value })}
+            style={({ pressed }) => [styles.practiceGameCard, pressed && styles.pressed]}
+          >
+            <Ionicons name={option.icon} size={22} color={theme.participant} />
+            <Text style={styles.practiceGameTitle}>{option.label}</Text>
+            <Text style={styles.practiceGameMeta}>Play</Text>
+          </Pressable>
+        ))}
+      </ScrollView>
+    </View>
+  );
+}
+
 function MiniGamePlayer({
   onBack,
   onComplete,
@@ -3103,9 +3076,7 @@ function MiniGamePlayer({
         </View>
         <View style={styles.taskTitleBlock}>
           <Text style={styles.cardTitle}>{gameInfo.label}</Text>
-          <Text style={styles.cardMeta}>
-            {session.mode === "assignment" ? "Host assignment" : "Practice mode"}
-          </Text>
+          <Text style={styles.cardMeta}>Play mode</Text>
         </View>
         <Pressable
           accessibilityRole="button"
@@ -3198,7 +3169,7 @@ function MemoryMatchGame({ onComplete }: { onComplete: (result: MiniGameResult) 
           );
         })}
       </View>
-      {completed ? <StatusPill label="Result ready for proof" tone="gold" /> : null}
+      {completed ? <StatusPill label="Game complete" tone="gold" /> : null}
     </View>
   );
 }
@@ -3241,7 +3212,7 @@ function BreathTimerGame({ onComplete }: { onComplete: (result: MiniGameResult) 
         <Text style={styles.breathTime}>{secondsLeft}s</Text>
       </View>
       <Text style={styles.gamesBannerText}>
-        Follow the phase. Finish after a short reset to create a game result.
+        Follow the phase. Finish after a short reset to save a local result.
       </Text>
       <View style={styles.gameControlRow}>
         <HackButton
@@ -3258,7 +3229,7 @@ function BreathTimerGame({ onComplete }: { onComplete: (result: MiniGameResult) 
           tone="gold"
         />
       </View>
-      {completed ? <StatusPill label="Result ready for proof" tone="gold" /> : null}
+      {completed ? <StatusPill label="Game complete" tone="gold" /> : null}
     </View>
   );
 }
@@ -3317,7 +3288,7 @@ function QuickMathsGame({ onComplete }: { onComplete: (result: MiniGameResult) =
           tone="cyan"
         />
       </View>
-      {completed ? <StatusPill label="Result ready for proof" tone="gold" /> : null}
+      {completed ? <StatusPill label="Game complete" tone="gold" /> : null}
     </View>
   );
 }
@@ -6746,6 +6717,24 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 10,
   },
+  latestGameResultCard: {
+    backgroundColor: theme.awardDark,
+    borderColor: theme.awardBorder,
+    borderRadius: 10,
+    borderWidth: 1,
+    padding: 10,
+  },
+  latestGameResultText: {
+    color: theme.muted,
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 3,
+  },
+  latestGameResultTitle: {
+    color: theme.award,
+    fontSize: 13,
+    fontWeight: "900",
+  },
   gamesBanner: {
     alignItems: "center",
     backgroundColor: theme.limeDark,
@@ -7107,6 +7096,9 @@ const styles = StyleSheet.create({
   miniGameStack: {
     gap: 12,
     marginTop: 12,
+  },
+  miniGamePlayStack: {
+    gap: 10,
   },
   miniGameStatRow: {
     flexDirection: "row",
