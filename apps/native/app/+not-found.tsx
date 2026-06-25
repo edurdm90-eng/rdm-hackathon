@@ -13,7 +13,12 @@ export default function NotFoundScreen() {
       <Stack.Screen options={{ headerShown: false, title: "Not Found" }} />
       <SafeAreaView edges={["top", "right", "bottom", "left"]} style={styles.screen}>
         <View style={styles.header}>
-          <Image accessibilityIgnoresInvertColors source={rdmLogo} style={styles.logo} />
+          <Image
+            accessibilityIgnoresInvertColors
+            resizeMode="contain"
+            source={rdmLogo}
+            style={styles.logo}
+          />
         </View>
 
         <View style={styles.card}>
@@ -94,7 +99,6 @@ const styles = StyleSheet.create({
   },
   logo: {
     height: 38,
-    resizeMode: "contain",
     width: 112,
   },
   pressed: {

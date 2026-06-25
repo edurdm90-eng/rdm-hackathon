@@ -13,7 +13,12 @@ export default function Modal() {
       <Stack.Screen options={{ headerShown: false }} />
       <SafeAreaView edges={["top", "right", "bottom", "left"]} style={styles.screen}>
         <View style={styles.header}>
-          <Image accessibilityIgnoresInvertColors source={rdmLogo} style={styles.logo} />
+          <Image
+            accessibilityIgnoresInvertColors
+            resizeMode="contain"
+            source={rdmLogo}
+            style={styles.logo}
+          />
           <Pressable
             accessibilityLabel="Close modal"
             accessibilityRole="button"
@@ -112,7 +117,6 @@ const styles = StyleSheet.create({
   },
   logo: {
     height: 38,
-    resizeMode: "contain",
     width: 112,
   },
   pressed: {

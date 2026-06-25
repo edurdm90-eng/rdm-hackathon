@@ -319,7 +319,12 @@ function AuthGateway() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <Image accessibilityIgnoresInvertColors source={rdmLogo} style={styles.authLogo} />
+        <Image
+          accessibilityIgnoresInvertColors
+          resizeMode="cover"
+          source={rdmLogo}
+          style={styles.authLogo}
+        />
 
         <View style={styles.authCard}>
           <SegmentedToggle
@@ -4407,7 +4412,12 @@ function AppHeader({
   return (
     <SafeAreaView edges={["top"]} style={styles.homeHeaderSafe}>
       <View style={styles.homeHeader}>
-        <Image accessibilityIgnoresInvertColors source={rdmLogo} style={styles.homeHeaderLogo} />
+        <Image
+          accessibilityIgnoresInvertColors
+          resizeMode="cover"
+          source={rdmLogo}
+          style={styles.homeHeaderLogo}
+        />
         <View style={styles.homeHeaderActions}>
           <HeaderIconButton
             accessibilityLabel="Notifications"
@@ -5340,7 +5350,6 @@ const styles = StyleSheet.create({
   authLogo: {
     height: 92,
     marginBottom: 12,
-    resizeMode: "cover",
     width: 240,
   },
   authScrollContent: {
@@ -5726,7 +5735,6 @@ const styles = StyleSheet.create({
   },
   homeHeaderLogo: {
     height: 32,
-    resizeMode: "cover",
     width: 86,
   },
   homeHeaderSafe: {

@@ -78,7 +78,12 @@ function XrdmDrawerContent({ navigation }: DrawerContentProps) {
   return (
     <View style={styles.drawer}>
       <View style={styles.drawerBrand}>
-        <Image accessibilityIgnoresInvertColors source={rdmLogo} style={styles.drawerLogo} />
+        <Image
+          accessibilityIgnoresInvertColors
+          resizeMode="contain"
+          source={rdmLogo}
+          style={styles.drawerLogo}
+        />
         <Text style={styles.drawerEyebrow}>Hack Room</Text>
         <Text style={styles.drawerTitle}>RDM Command</Text>
       </View>
@@ -211,7 +216,6 @@ const styles = StyleSheet.create({
   },
   drawerLogo: {
     height: 34,
-    resizeMode: "contain",
     width: 104,
   },
   drawerNav: {
