@@ -44,7 +44,6 @@ type AssignmentMode = TaskKind | "notification";
 type RoomTab =
   | "assign"
   | "awards"
-  | "challenges"
   | "created"
   | "games"
   | "history"
@@ -1778,8 +1777,6 @@ function HostRoomWorkspace({
   winnerSubmissions: DashboardData["hostSubmissions"];
 }) {
   const [historyTaskId, setHistoryTaskId] = useState("");
-  const challengeTasks = roomTasks.filter((task) => task.kind === "challenge");
-  const challengeProofTypes = proofTypes.filter((proofType) => proofType !== "game_score");
   const leaderboardRows = winnerSubmissions
     .reduce<
       Array<{
@@ -1821,23 +1818,11 @@ function HostRoomWorkspace({
     { icon: "time-outline", id: "history", label: "History" },
     { icon: "trophy-outline", id: "winners", label: "Award XRDM" },
     { icon: "ribbon-outline", id: "awards", label: "Awards" },
-    { icon: "flash-outline", id: "challenges", label: "Challenges" },
     { icon: "game-controller-outline", id: "games", label: "Games" },
     { icon: "podium-outline", id: "leaderboard", label: "Leaderboard" },
     { icon: "person-circle-outline", id: "profile", label: "Profile" },
   ];
   const activeAction = hostQuickActions.find((action) => action.id === activeRoomTab);
-  const openHostAction = (tab: RoomTab) => {
-    if (tab === "challenges") {
-      setTaskKind("challenge");
-      setProofTypes(defaultSpotProofTypes);
-      setTaskForm((current) => ({
-        ...current,
-        rewardXrdm: current.rewardXrdm || "10",
-      }));
-    }
-    onRoomTabChange(tab);
-  };
 
   if (!activeRoomTab) {
     return (
@@ -1851,7 +1836,7 @@ function HostRoomWorkspace({
                 icon={action.icon}
                 key={action.id}
                 label={action.label}
-                onPress={() => openHostAction(action.id)}
+                onPress={() => onRoomTabChange(action.id)}
                 tone="violet"
               />
             ))}
@@ -2010,40 +1995,6 @@ function HostRoomWorkspace({
           roomTasks={roomTasks}
           selectedTaskId={historyTaskId}
         />
-      ) : null}
-
-      {activeRoomTab === "challenges" ? (
-        <Panel
-          action={<CounterLabel label={`${challengeTasks.length} live`} />}
-          eyebrow="Host Menu"
-          icon="flash-outline"
-          title="Challenges"
-          tone="violet"
-        >
-          <AssignmentComposer
-            createTaskPending={createTaskPending}
-            fixedKind="challenge"
-            onCreateTask={onCreateTask}
-            proofTypes={challengeProofTypes}
-            setProofTypes={setProofTypes}
-            setTaskForm={setTaskForm}
-            taskForm={taskForm}
-            title="Create Challenge Card"
-          />
-          <View style={styles.divider} />
-          <View style={styles.listStack}>
-            {challengeTasks.length ? (
-              challengeTasks.map((task) => (
-                <TaskCard key={task._id} onPress={() => {}} selected={false} task={task} />
-              ))
-            ) : (
-              <EmptyState
-                icon="flash-outline"
-                text="Create spot challenges for participants to complete with proof."
-              />
-            )}
-          </View>
-        </Panel>
       ) : null}
 
       {activeRoomTab === "games" ? <HostGamesPanel /> : null}
