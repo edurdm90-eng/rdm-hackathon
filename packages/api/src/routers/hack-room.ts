@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { client } from "@rdm-hack/db";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
@@ -135,7 +136,7 @@ function now() {
 }
 
 function makeId(prefix: string) {
-  return `${prefix}_${crypto.randomUUID()}`;
+  return `${prefix}_${randomUUID()}`;
 }
 
 function makeInviteCode() {
