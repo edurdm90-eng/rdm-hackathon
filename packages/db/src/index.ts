@@ -1,5 +1,6 @@
-import { env } from "@rdm-hack/env/server";
 import mongoose from "mongoose";
+
+import { env } from "../../env/src/server.js";
 
 await mongoose.connect(env.DATABASE_URL, {
   dbName: env.DATABASE_NAME,

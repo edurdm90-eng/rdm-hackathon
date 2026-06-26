@@ -1,5 +1,6 @@
-import { auth } from "@rdm-hack/auth";
 import type { Context as HonoContext } from "hono";
+
+import { auth } from "../../auth/src/index.js";
 
 export type CreateContextOptions = {
   context: HonoContext;

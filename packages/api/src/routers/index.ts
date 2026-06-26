@@ -1,5 +1,5 @@
-import { protectedProcedure, publicProcedure, router } from "../index";
-import { hackRoomRouter } from "./hack-room";
+import { protectedProcedure, publicProcedure, router } from "../index.js";
+import { hackRoomRouter } from "./hack-room.js";
 
 export const appRouter = router({
   healthCheck: publicProcedure.query(() => {

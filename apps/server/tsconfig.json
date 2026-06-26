@@ -3,10 +3,18 @@
   "compilerOptions": {
     "composite": true,
     "outDir": "dist",
+    "rootDir": "../..",
     "paths": {
       "@/*": ["./src/*"]
     },
     "jsx": "react-jsx",
     "jsxImportSource": "hono/jsx"
-  }
+  },
+  "include": [
+    "src",
+    "../../packages/api/src",
+    "../../packages/auth/src",
+    "../../packages/db/src",
+    "../../packages/env/src"
+  ]
 }

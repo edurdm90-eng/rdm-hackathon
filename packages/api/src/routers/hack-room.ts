@@ -1,8 +1,8 @@
-import { client } from "@rdm-hack/db";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
-import { protectedProcedure, router } from "../index";
+import { client } from "../../../db/src/index.js";
+import { protectedProcedure, router } from "../index.js";
 
 const proofTypeSchema = z.enum(["github", "drive", "file", "url", "video", "deck", "game_score"]);
 const taskKindSchema = z.enum(["task", "challenge", "game", "special"]);

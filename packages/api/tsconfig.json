@@ -5,6 +5,13 @@
     "declarationMap": true,
     "sourceMap": true,
     "outDir": "dist",
+    "rootDir": "../..",
     "composite": true
-  }
+  },
+  "include": [
+    "src",
+    "../auth/src",
+    "../db/src",
+    "../env/src"
+  ]
 }

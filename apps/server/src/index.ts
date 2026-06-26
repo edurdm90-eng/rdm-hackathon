@@ -1,11 +1,12 @@
 import { trpcServer } from "@hono/trpc-server";
-import { createContext } from "@rdm-hack/api/context";
-import { appRouter } from "@rdm-hack/api/routers/index";
-import { auth } from "@rdm-hack/auth";
-import { env } from "@rdm-hack/env/server";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
+
+import { createContext } from "../../../packages/api/src/context.js";
+import { appRouter } from "../../../packages/api/src/routers/index.js";
+import { auth } from "../../../packages/auth/src/index.js";
+import { env } from "../../../packages/env/src/server.js";
 
 const app = new Hono();
 

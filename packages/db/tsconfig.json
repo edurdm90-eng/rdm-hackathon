@@ -5,6 +5,11 @@
     "declarationMap": true,
     "sourceMap": true,
     "outDir": "dist",
+    "rootDir": "../..",
     "composite": true
-  }
+  },
+  "include": [
+    "src",
+    "../env/src"
+  ]
 }

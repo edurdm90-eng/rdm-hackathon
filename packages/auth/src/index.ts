@@ -1,8 +1,9 @@
 import { expo } from "@better-auth/expo";
-import { client } from "@rdm-hack/db";
-import { env } from "@rdm-hack/env/server";
 import { betterAuth } from "better-auth";
 import { mongodbAdapter } from "better-auth/adapters/mongodb";
+
+import { client } from "../../db/src/index.js";
+import { env } from "../../env/src/server.js";
 
 export function createAuth() {
   return betterAuth({
