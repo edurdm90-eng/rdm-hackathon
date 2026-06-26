@@ -5117,7 +5117,7 @@ function AppHeader({
       <View style={styles.homeHeader}>
         <Image
           accessibilityIgnoresInvertColors
-          resizeMode="cover"
+          resizeMode="contain"
           source={rdmLogo}
           style={styles.homeHeaderLogo}
         />
@@ -6729,8 +6729,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   homeHeaderLogo: {
-    height: 32,
-    width: 86,
+    height: 38,
+    width: 112,
   },
   homeHeaderSafe: {
     backgroundColor: theme.background,
