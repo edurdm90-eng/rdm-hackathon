@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { client } from "@rdm-hack/db";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
@@ -131,12 +130,18 @@ const rewardCollection = () => client.collection<HackRewardRecord>("hack_rewards
 const notificationCollection = () => client.collection<HackNotificationRecord>("hack_notifications");
 const userCollection = () => client.collection<AuthUserRecord>("user");
 
+let idCounter = 0;
+
 function now() {
   return new Date().toISOString();
 }
 
 function makeId(prefix: string) {
-  return `${prefix}_${randomUUID()}`;
+  idCounter = (idCounter + 1) % 1_000_000;
+  const timestamp = Date.now().toString(36);
+  const randomPart = Math.random().toString(36).slice(2, 12);
+  const counter = idCounter.toString(36).padStart(4, "0");
+  return `${prefix}_${timestamp}${randomPart}${counter}`;
 }
 
 function makeInviteCode() {
