@@ -12,6 +12,7 @@ Hack Room supports a complete room-based hackathon loop:
 - Participants join rooms with invite codes.
 - Hosts create regular tasks, spot challenges, special tasks, and notifications from `Assignments`.
 - Participants submit proof with required fields: student name, team name, description, GitHub/Drive links, and any other configured proof fields.
+- Participants can attach teammate emails to a submission using a multi-recipient chip field.
 - Hosts verify, return, or award submissions.
 - Hosts announce winners from verified submissions, assign XRDM, and can search by team/student/email/assignment.
 - Hosts issue certificates and NFT badge records from the awards/reward ledger flow.
@@ -189,11 +190,12 @@ The native shell has:
    - Team name
    - Description
    - Required proof links/items
-5. After proof is submitted, the submit card collapses while it is under verification.
-6. If the host returns proof, the form reopens with feedback.
-7. Use `Games` to play mini-games and view spot challenges.
-8. Use `History` to track submitted, returned, verified, and winner states.
-9. Use `Wallet` for XRDM, certificates, NFT badges, and ledger rows.
+5. Optional teammate emails can be added as chips before submitting.
+6. After proof is submitted, the submit card collapses while it is under verification.
+7. If the host returns proof, the form reopens with feedback.
+8. Use `Games` to play mini-games and view spot challenges.
+9. Use `History` to track submitted, returned, verified, and winner states.
+10. Use `Wallet` for XRDM, certificates, NFT badges, and ledger rows.
 
 ## Important API Procedures
 

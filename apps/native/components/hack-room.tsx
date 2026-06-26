@@ -173,6 +173,8 @@ function makeEmptySubmitForm(submitterName = "") {
     proofItems: makeEmptyProofItems(),
     proofUrl: "",
     submitterName,
+    teamMateEmailDraft: "",
+    teamMateEmails: [] as Array<string>,
     teamName: "",
   };
 }
@@ -1059,9 +1061,28 @@ function HackRoomDetailDashboard({
     const submitterName = submitForm.submitterName.trim();
     const teamName = submitForm.teamName.trim();
     const submissionDescription = submitForm.description.trim();
+    const rawTeamMateEmails = [
+      ...submitForm.teamMateEmails,
+      ...getEmailTokens(submitForm.teamMateEmailDraft),
+    ];
+    const invalidTeamMateEmails = getInvalidEmails(rawTeamMateEmails);
+    const teamMateEmails = normalizeEmails(rawTeamMateEmails);
 
     if (!submitterName || !teamName || !submissionDescription) {
       setMessage({ text: "Add your name, team name, and submission description", tone: "red" });
+      return;
+    }
+
+    if (invalidTeamMateEmails.length) {
+      setMessage({
+        text: `Check team mate email: ${invalidTeamMateEmails[0]}`,
+        tone: "red",
+      });
+      return;
+    }
+
+    if (teamMateEmails.length > 20) {
+      setMessage({ text: "Add up to 20 team mate emails", tone: "red" });
       return;
     }
 
@@ -1078,6 +1099,7 @@ function HackRoomDetailDashboard({
     submitProof.mutate({
       submissionDescription,
       submitterName,
+      teamMateEmails,
       teamName,
       notes: submitForm.notes,
       proofItems,
@@ -1817,6 +1839,7 @@ function HostRoomWorkspace({
           submission.participantEmail,
           submission.taskTitle,
           submission.roomName,
+          ...(submission.teamMateEmails ?? []),
         ]
           .filter(Boolean)
           .some((value) => value?.toLowerCase().includes(normalizedWinnerSearch)),
@@ -2825,6 +2848,8 @@ function TaskProofSubmitCard({
         </View>
       </View>
 
+      <TeamMateEmailComposer setSubmitForm={setSubmitForm} submitForm={submitForm} />
+
       <Field label="Description">
         <HackTextInput
           multiline
@@ -2867,6 +2892,102 @@ function TaskProofSubmitCard({
         tone={selectedTask?.kind === "game" ? "gold" : "cyan"}
       />
     </View>
+  );
+}
+
+function TeamMateEmailComposer({
+  setSubmitForm,
+  submitForm,
+}: {
+  setSubmitForm: React.Dispatch<React.SetStateAction<typeof emptySubmitForm>>;
+  submitForm: typeof emptySubmitForm;
+}) {
+  const addDraftEmails = () => {
+    setSubmitForm((current) => {
+      const tokens = getEmailTokens(current.teamMateEmailDraft);
+      if (!tokens.length) {
+        return current;
+      }
+
+      const validEmails = tokens.filter(isEmailLike);
+      const invalidEmails = tokens.filter((email) => !isEmailLike(email));
+
+      return {
+        ...current,
+        teamMateEmailDraft: invalidEmails.join(", "),
+        teamMateEmails: normalizeEmails([...current.teamMateEmails, ...validEmails]),
+      };
+    });
+  };
+
+  const removeEmail = (email: string) => {
+    setSubmitForm((current) => ({
+      ...current,
+      teamMateEmails: current.teamMateEmails.filter((item) => item !== email),
+    }));
+  };
+
+  const handleDraftChange = (value: string) => {
+    if (/[,\n;]/.test(value)) {
+      setSubmitForm((current) => {
+        const tokens = getEmailTokens(value);
+        const validEmails = tokens.filter(isEmailLike);
+        const invalidEmails = tokens.filter((email) => !isEmailLike(email));
+
+        return {
+          ...current,
+          teamMateEmailDraft: invalidEmails.join(", "),
+          teamMateEmails: normalizeEmails([...current.teamMateEmails, ...validEmails]),
+        };
+      });
+      return;
+    }
+
+    setSubmitForm((current) => ({ ...current, teamMateEmailDraft: value }));
+  };
+
+  return (
+    <Field label="Team mate emails">
+      <View style={styles.emailComposer}>
+        {submitForm.teamMateEmails.length ? (
+          <View style={styles.emailChipWrap}>
+            {submitForm.teamMateEmails.map((email) => (
+              <View key={email} style={styles.emailChip}>
+                <Text numberOfLines={1} style={styles.emailChipText}>
+                  {email}
+                </Text>
+                <Pressable
+                  accessibilityLabel={`Remove ${email}`}
+                  accessibilityRole="button"
+                  onPress={() => removeEmail(email)}
+                  style={({ pressed }) => [styles.emailChipRemove, pressed && styles.pressed]}
+                >
+                  <Ionicons name="close-outline" size={13} color={theme.participant} />
+                </Pressable>
+              </View>
+            ))}
+          </View>
+        ) : null}
+        <View style={styles.emailComposerInputRow}>
+          <HackTextInput
+            autoCapitalize="none"
+            keyboardType="email-address"
+            onChangeText={handleDraftChange}
+            onSubmitEditing={addDraftEmails}
+            placeholder="teammate@domain.com"
+            style={styles.emailComposerInput}
+            value={submitForm.teamMateEmailDraft}
+          />
+          <Pressable
+            accessibilityRole="button"
+            onPress={addDraftEmails}
+            style={({ pressed }) => [styles.emailAddButton, pressed && styles.pressed]}
+          >
+            <Ionicons name="add-outline" size={18} color="#03120c" />
+          </Pressable>
+        </View>
+      </View>
+    </Field>
   );
 }
 
@@ -5626,14 +5747,16 @@ function SubmissionMetaBlock({
     participantName: string;
     submissionDescription?: string;
     submitterName?: string;
+    teamMateEmails?: Array<string>;
     teamName?: string;
   };
 }) {
   const submittedBy = submission.submitterName?.trim() || submission.participantName;
   const teamName = submission.teamName?.trim();
   const description = submission.submissionDescription?.trim();
+  const teamMateEmails = submission.teamMateEmails ?? [];
 
-  if (!teamName && !description && !submission.submitterName?.trim()) {
+  if (!teamName && !description && !teamMateEmails.length && !submission.submitterName?.trim()) {
     return null;
   }
 
@@ -5651,6 +5774,18 @@ function SubmissionMetaBlock({
           <Text numberOfLines={1} style={styles.submissionMetaText}>
             {teamName}
           </Text>
+        </View>
+      ) : null}
+      {teamMateEmails.length ? (
+        <View style={styles.submissionMateBlock}>
+          <Text style={styles.submissionMetaLabel}>Mates</Text>
+          <View style={styles.submissionMateChips}>
+            {teamMateEmails.map((email) => (
+              <Text key={email} numberOfLines={1} style={styles.submissionMateChip}>
+                {email}
+              </Text>
+            ))}
+          </View>
         </View>
       ) : null}
       {description ? <Text style={styles.submissionDescriptionText}>{description}</Text> : null}
@@ -5862,6 +5997,28 @@ function getTaskProofTypes(task?: Pick<HackTask, "kind" | "proofTypes">) {
   }
 
   return task?.proofTypes?.length ? task.proofTypes : defaultSpotProofTypes;
+}
+
+function getEmailTokens(value: string) {
+  return value
+    .split(/[\s,;]+/)
+    .map((email) => email.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function isEmailLike(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+
+function normalizeEmails(values: Array<string>) {
+  return [...new Set(values.map((email) => email.trim().toLowerCase()).filter(isEmailLike))];
+}
+
+function getInvalidEmails(values: Array<string>) {
+  return values
+    .map((email) => email.trim().toLowerCase())
+    .filter(Boolean)
+    .filter((email) => !isEmailLike(email));
 }
 
 function buildProofItemsForTask(
@@ -6352,6 +6509,68 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 12,
     lineHeight: 18,
+  },
+  emailAddButton: {
+    alignItems: "center",
+    backgroundColor: theme.participant,
+    borderRadius: 8,
+    height: 36,
+    justifyContent: "center",
+    width: 38,
+  },
+  emailChip: {
+    alignItems: "center",
+    backgroundColor: theme.participantDark,
+    borderColor: theme.participantBorder,
+    borderRadius: 999,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 5,
+    maxWidth: "100%",
+    paddingLeft: 9,
+    paddingRight: 4,
+    paddingVertical: 4,
+  },
+  emailChipRemove: {
+    alignItems: "center",
+    backgroundColor: theme.backgroundAlt,
+    borderRadius: 999,
+    height: 20,
+    justifyContent: "center",
+    width: 20,
+  },
+  emailChipText: {
+    color: theme.participant,
+    flexShrink: 1,
+    fontFamily: Platform.select({ default: "monospace" }),
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  emailChipWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  emailComposer: {
+    backgroundColor: theme.backgroundAlt,
+    borderColor: theme.participantBorder,
+    borderRadius: 9,
+    borderWidth: 1,
+    gap: 7,
+    padding: 8,
+  },
+  emailComposerInput: {
+    backgroundColor: "transparent",
+    borderWidth: 0,
+    flex: 1,
+    minHeight: 36,
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+  },
+  emailComposerInputRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
   },
   eyebrow: {
     color: theme.participant,
@@ -7857,6 +8076,27 @@ const styles = StyleSheet.create({
     gap: 5,
     marginTop: 10,
     padding: 9,
+  },
+  submissionMateBlock: {
+    gap: 6,
+  },
+  submissionMateChip: {
+    backgroundColor: theme.backgroundAlt,
+    borderColor: theme.border,
+    borderRadius: 999,
+    borderWidth: 1,
+    color: theme.participant,
+    fontFamily: Platform.select({ default: "monospace" }),
+    fontSize: 9,
+    fontWeight: "800",
+    maxWidth: "100%",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  submissionMateChips: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 5,
   },
   submissionMetaLabel: {
     color: theme.dim,

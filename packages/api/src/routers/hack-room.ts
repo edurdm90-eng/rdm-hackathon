@@ -67,6 +67,7 @@ type HackSubmissionRecord = {
   notes: string;
   submissionDescription?: string;
   submitterName?: string;
+  teamMateEmails?: string[];
   teamName?: string;
   status: "submitted" | "approved" | "winner" | "returned";
   hostFeedback?: string;
@@ -507,6 +508,7 @@ export const hackRoomRouter = router({
         notes: z.string().trim().max(700).default(""),
         submissionDescription: z.string().trim().max(700).default(""),
         submitterName: z.string().trim().max(80).default(""),
+        teamMateEmails: z.array(z.string().trim().email()).max(20).default([]),
         teamName: z.string().trim().max(100).default(""),
       }),
     )
@@ -584,6 +586,7 @@ export const hackRoomRouter = router({
               notes: input.notes,
               submissionDescription: input.submissionDescription,
               submitterName: input.submitterName,
+              teamMateEmails: [...new Set(input.teamMateEmails.map((email) => email.toLowerCase()))],
               teamName: input.teamName,
               status: "submitted",
               submittedAt: timestamp,
@@ -612,6 +615,7 @@ export const hackRoomRouter = router({
         notes: input.notes,
         submissionDescription: input.submissionDescription,
         submitterName: input.submitterName,
+        teamMateEmails: [...new Set(input.teamMateEmails.map((email) => email.toLowerCase()))],
         teamName: input.teamName,
         status: "submitted",
         submittedAt: timestamp,
