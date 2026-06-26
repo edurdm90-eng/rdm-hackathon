@@ -8,7 +8,15 @@ import { env } from "../../env/src/server.js";
 export function createAuth() {
   return betterAuth({
     database: mongodbAdapter(client),
-    trustedOrigins: [env.CORS_ORIGIN, "rdm-hack://", "exp://", "http://localhost:8081"],
+    trustedOrigins: [
+      ...env.CORS_ORIGIN,
+      "rdm-hack://",
+      "exp://",
+      "exp://**",
+      "exp://*.exp.direct",
+      "http://localhost:8081",
+      "http://127.0.0.1:8081",
+    ],
     emailAndPassword: {
       enabled: true,
     },

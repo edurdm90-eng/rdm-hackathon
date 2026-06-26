@@ -9,12 +9,25 @@ import { auth } from "../../../packages/auth/src/index.js";
 import { env } from "../../../packages/env/src/server.js";
 
 const app = new Hono();
+const allowedOrigins = new Set(env.CORS_ORIGIN);
+
+function resolveCorsOrigin(origin: string) {
+  if (allowedOrigins.has("*")) {
+    return origin;
+  }
+
+  if (allowedOrigins.has(origin)) {
+    return origin;
+  }
+
+  return null;
+}
 
 app.use(logger());
 app.use(
   "/*",
   cors({
-    origin: env.CORS_ORIGIN,
+    origin: resolveCorsOrigin,
     allowMethods: ["GET", "POST", "OPTIONS"],
     allowHeaders: ["Content-Type", "Authorization"],
     credentials: true,
