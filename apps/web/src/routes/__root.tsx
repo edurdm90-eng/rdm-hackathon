@@ -1,8 +1,11 @@
 import { Toaster } from "@rdm-hack/ui/components/sonner";
 import type { QueryClient } from "@tanstack/react-query";
-import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
-import { HeadContent, Outlet, createRootRouteWithContext } from "@tanstack/react-router";
-import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
+import {
+  HeadContent,
+  Outlet,
+  createRootRouteWithContext,
+  useRouterState,
+} from "@tanstack/react-router";
 
 import Header from "@/components/header";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -20,11 +23,11 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
   head: () => ({
     meta: [
       {
-        title: "rdm-hack",
+        title: "RDM Hack Room",
       },
       {
         name: "description",
-        content: "rdm-hack is a web application",
+        content: "RDM Hack Room is a PWA for hackathon rooms, proof, winners, and XRDM rewards.",
       },
     ],
     links: [
@@ -37,6 +40,9 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
 });
 
 function RootComponent() {
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const showHeader = pathname !== "/login";
+
   return (
     <>
       <HeadContent />
@@ -46,14 +52,12 @@ function RootComponent() {
         disableTransitionOnChange
         storageKey="vite-ui-theme"
       >
-        <div className="grid grid-rows-[auto_1fr] h-svh">
-          <Header />
+        <div className={showHeader ? "grid h-svh grid-rows-[auto_1fr]" : "h-svh"}>
+          {showHeader ? <Header /> : null}
           <Outlet />
         </div>
         <Toaster richColors />
       </ThemeProvider>
-      <TanStackRouterDevtools position="bottom-left" />
-      <ReactQueryDevtools position="bottom" buttonPosition="bottom-right" />
     </>
   );
 }

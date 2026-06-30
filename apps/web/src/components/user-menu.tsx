@@ -48,7 +48,7 @@ export default function UserMenu() {
                 fetchOptions: {
                   onSuccess: () => {
                     navigate({
-                      to: "/",
+                      to: "/login",
                     });
                   },
                 },
