@@ -1,9 +1,9 @@
 import { Button } from "@rdm-hack/ui/components/button";
 import { Link } from "@tanstack/react-router";
-import { Bell, Bolt, ChevronRight, Home, Menu, ShieldCheck, User, UserCircle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { authClient } from "@/lib/auth-client";
+import { NativeIcon } from "@/lib/native-icons";
 
 export default function Header() {
   const { data: session } = authClient.useSession();
@@ -22,7 +22,7 @@ export default function Header() {
 
         <div className="flex h-full items-center gap-2">
           <HeaderButton label="Notifications" to="/dashboard">
-            <Bell className="size-[18px]" />
+            <NativeIcon className="size-[18px]" name="notifications-outline" />
           </HeaderButton>
           <AppMenu />
           {user ? (
@@ -34,7 +34,7 @@ export default function Header() {
                 type="button"
                 variant="outline"
               >
-                <User className="size-[18px]" />
+                <NativeIcon className="size-[18px]" name="person-circle-outline" />
               </Button>
             </Link>
           ) : (
@@ -44,7 +44,7 @@ export default function Header() {
                 className="grid size-10 rounded-[10px] border-[rgba(238,232,222,0.12)] bg-[#141618] p-0 text-[#EEE8DE] hover:bg-[#1A1D20]"
                 variant="outline"
               >
-                <User className="size-[18px]" />
+                <NativeIcon className="size-[18px]" name="person-circle-outline" />
               </Button>
             </Link>
           )}
@@ -95,7 +95,7 @@ function AppMenu() {
         type="button"
         variant="outline"
       >
-        <Menu className="size-[18px]" />
+        <NativeIcon className="size-[18px]" name="menu-outline" />
       </Button>
 
       {open ? (
@@ -113,21 +113,21 @@ function AppMenu() {
 
           <nav className="mt-3 grid gap-2">
             <DrawerMenuItem
-              icon={<Home className="size-[19px]" />}
+              icon={<NativeIcon className="size-[19px]" name="home-outline" />}
               label="Home"
               onSelect={() => setOpen(false)}
               to="/dashboard"
               tone="cyan"
             />
             <DrawerMenuItem
-              icon={<Bolt className="size-[19px]" />}
+              icon={<NativeIcon className="size-[19px]" name="flash-outline" />}
               label="Hack Rooms"
               onSelect={() => setOpen(false)}
               to="/hack-room"
               tone="violet"
             />
             <DrawerMenuItem
-              icon={<UserCircle className="size-[19px]" />}
+              icon={<NativeIcon className="size-[19px]" name="person-circle-outline" />}
               label="Profile"
               onSelect={() => setOpen(false)}
               to="/profile"
@@ -136,7 +136,7 @@ function AppMenu() {
           </nav>
 
           <div className="mt-3 flex items-center gap-2 rounded-[14px] border border-[rgba(238,232,222,0.12)] bg-[#1A1D20] p-3">
-            <ShieldCheck className="size-[18px] shrink-0 text-[#1EEAB0]" />
+            <NativeIcon className="size-[18px] shrink-0 text-[#1EEAB0]" name="shield-checkmark-outline" />
             <p className="text-xs leading-[18px] text-[#CCC6BA]">
               Organizer and participant flows stay in sync.
             </p>
@@ -176,7 +176,7 @@ function DrawerMenuItem({
     >
       {icon}
       <span className="flex-1">{label}</span>
-      <ChevronRight className="size-4" />
+      <NativeIcon className="size-4" name="chevron-forward-outline" />
     </Link>
   );
 }
