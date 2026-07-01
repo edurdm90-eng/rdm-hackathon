@@ -21,7 +21,6 @@ import {
 import { RoomEntryLink, WebAppScreen } from "./room-shell";
 import {
   Avatar,
-  Badge,
   EmptyState,
   ProfileField,
   QuickActionGrid,
@@ -63,10 +62,19 @@ export function HackRoomHomePwa({ user }: { user: SessionUser }) {
           Welcome back, {firstName(user.name)}. Your room activity, pending reviews, and XRDM progress live here.
         </p>
 
-        <div className="mt-3 flex flex-wrap gap-2">
-          <Badge tone="cyan">As Participant</Badge>
-          <Badge tone="violet">As Organizer</Badge>
-          {dashboard.isLoading ? <Badge tone="gold">Syncing</Badge> : null}
+        <div className="mt-3 flex overflow-hidden rounded-[9px] border border-[rgba(238,232,222,0.12)]">
+          <div className="flex min-h-9 flex-1 items-center justify-center gap-1.5 border-b-2 border-b-[#1EEAB0] bg-[#061F18]">
+            <NativeIcon className="size-3.5 text-[#1EEAB0]" name="person-outline" />
+            <span className="font-mono text-[9px] font-extrabold text-[#1EEAB0]">
+              As Participant
+            </span>
+          </div>
+          <div className="flex min-h-9 flex-1 items-center justify-center gap-1.5 border-b-2 border-b-[#A060FF] bg-[#160A2A]">
+            <NativeIcon className="size-3.5 text-[#A060FF]" name="trophy-outline" />
+            <span className="font-mono text-[9px] font-extrabold text-[#A060FF]">
+              As Organizer
+            </span>
+          </div>
         </div>
 
         <div className="mt-4 flex items-center gap-3 rounded-[11px] border border-[rgba(238,232,222,0.12)] bg-[#0D0F12] p-3">
@@ -75,6 +83,9 @@ export function HackRoomHomePwa({ user }: { user: SessionUser }) {
             <div className="truncate text-sm font-extrabold text-[#EEE8DE]">{user.name}</div>
             <div className="truncate text-xs text-[#626058]">{user.email}</div>
           </div>
+          {dashboard.isLoading ? (
+            <NativeIcon className="size-4 animate-spin text-[#F0C040]" name="refresh-outline" />
+          ) : null}
         </div>
 
         <div className="mt-3 grid grid-cols-3 gap-2">
