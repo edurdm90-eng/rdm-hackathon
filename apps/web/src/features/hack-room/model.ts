@@ -15,7 +15,6 @@ export type RoomEntry = { role: Role; room: HackRoom };
 export type TaskKind = "task" | "challenge" | "game" | "special";
 export type AssignmentMode = TaskKind | "notification";
 export type HostTab =
-  | "quick"
   | "assign"
   | "members"
   | "verify"
@@ -25,7 +24,7 @@ export type HostTab =
   | "games"
   | "leaderboard"
   | "profile";
-export type ParticipantTab = "quick" | "submit" | "history" | "games" | "wallet";
+export type ParticipantTab = "submit" | "history" | "games" | "wallet";
 export type ProofType = "github" | "drive" | "file" | "url" | "video" | "deck" | "game_score";
 export type RewardKind = HackReward["kind"];
 export type SubmissionStatus = DashboardData["mySubmissions"][number]["status"];
@@ -101,7 +100,6 @@ export const gameTypeOptions: Array<{
 ];
 
 export const hostTabs: Array<{ id: HostTab; icon: NativeIconComponent; label: string }> = [
-  { id: "quick", icon: createNativeIcon("flash-outline"), label: "Quick Actions" },
   { id: "assign", icon: createNativeIcon("clipboard-outline"), label: "Assignments" },
   { id: "members", icon: createNativeIcon("people-outline"), label: "Members" },
   { id: "verify", icon: createNativeIcon("shield-checkmark-outline"), label: "Verify" },
@@ -114,7 +112,6 @@ export const hostTabs: Array<{ id: HostTab; icon: NativeIconComponent; label: st
 ];
 
 export const participantTabs: Array<{ id: ParticipantTab; icon: NativeIconComponent; label: string }> = [
-  { id: "quick", icon: createNativeIcon("flash-outline"), label: "Quick Actions" },
   { id: "submit", icon: createNativeIcon("send-outline"), label: "Submit Task" },
   { id: "history", icon: createNativeIcon("time-outline"), label: "History" },
   { id: "games", icon: createNativeIcon("game-controller-outline"), label: "Games" },
@@ -129,7 +126,7 @@ export const hostTabSegments: Record<HostTab, RoomTabSegment> = {
   leaderboard: "leaderboard",
   members: "members",
   profile: "profile",
-  quick: "overview",
+
   rewards: "awards",
   verify: "verify",
 };
@@ -143,9 +140,8 @@ const hostTabsBySegment: Partial<Record<string, HostTab>> = {
   history: "history",
   leaderboard: "leaderboard",
   members: "members",
-  overview: "quick",
+  overview: "assign",
   profile: "profile",
-  quick: "quick",
   rewards: "rewards",
   verify: "verify",
 };
@@ -153,7 +149,7 @@ const hostTabsBySegment: Partial<Record<string, HostTab>> = {
 export const participantTabSegments: Record<ParticipantTab, RoomTabSegment> = {
   games: "games",
   history: "history",
-  quick: "overview",
+
   submit: "submit",
   wallet: "wallet",
 };
@@ -162,8 +158,7 @@ const participantTabsBySegment: Partial<Record<string, ParticipantTab>> = {
   assignments: "submit",
   games: "games",
   history: "history",
-  overview: "quick",
-  quick: "quick",
+  overview: "submit",
   submit: "submit",
   wallet: "wallet",
 };
@@ -344,11 +339,11 @@ export function canViewTaskForRole(task: HackTask, role: Role, user: SessionUser
 }
 
 export function getHostTabFromSegment(segment: string): HostTab {
-  return hostTabsBySegment[segment] ?? "quick";
+  return hostTabsBySegment[segment] ?? "assign";
 }
 
 export function getParticipantTabFromSegment(segment: string): ParticipantTab {
-  return participantTabsBySegment[segment] ?? "quick";
+  return participantTabsBySegment[segment] ?? "submit";
 }
 
 export function isParticipantSubmitTask(task: HackTask) {

@@ -69,28 +69,21 @@ function Tabs<T extends string>({
 
 function ActionScreen({
   children,
-  onBack,
   title,
 }: {
   children: React.ReactNode;
-  onBack: () => void;
   title: string;
 }) {
   return (
     <div className="grid gap-3">
-      <button
-        className="flex items-center gap-2 rounded-[9px] border border-[rgba(238,232,222,0.12)] bg-[#141618] px-3 py-2 text-left"
-        onClick={onBack}
-        type="button"
-      >
-        <NativeIcon className="size-4 text-[#9C9690]" name="arrow-back-outline" />
+      <div className="flex items-center gap-2 rounded-[9px] border border-[rgba(238,232,222,0.12)] bg-[#141618] px-3 py-2 text-left">
         <span>
           <span className="block font-mono text-[10px] uppercase tracking-[0.12em] text-[#626058]">
-            Host Action
+            Action
           </span>
           <span className="block text-base font-medium text-[#EEE8DE]">{title}</span>
         </span>
-      </button>
+      </div>
       {children}
     </div>
   );
@@ -576,9 +569,18 @@ function Avatar({ name, tone }: { name: string; tone: "cyan" | "violet" }) {
   );
 }
 
-function RoomRow({ role, room }: { role: Role; room: HackRoom }) {
+function RoomRow({ onClick, role, room }: { onClick?: () => void; role: Role; room: HackRoom }) {
+  const Component = onClick ? "button" : "div";
   return (
-    <div className="flex items-start gap-3 rounded-[9px] border border-[rgba(238,232,222,0.12)] bg-[#0D0F12] p-3">
+    <Component
+      className={`flex w-full items-start gap-3 rounded-[9px] border p-3 text-left transition ${
+        onClick
+          ? "border-[rgba(238,232,222,0.12)] bg-[#0D0F12] hover:border-[#1EEAB0]"
+          : "border-[rgba(238,232,222,0.12)] bg-[#0D0F12]"
+      }`}
+      onClick={onClick}
+      type={onClick ? "button" : undefined}
+    >
       <Avatar name={room.name} tone={role === "host" ? "violet" : "cyan"} />
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-medium text-[#EEE8DE]">{room.name}</div>
@@ -589,7 +591,7 @@ function RoomRow({ role, room }: { role: Role; room: HackRoom }) {
           {room.participants.length} participants - {room.inviteCode}
         </div>
       </div>
-    </div>
+    </Component>
   );
 }
 

@@ -2,7 +2,7 @@ import { Button } from "@rdm-hack/ui/components/button";
 import { Input } from "@rdm-hack/ui/components/input";
 import type * as React from "react";
 
-import { NativeIcon } from "@/lib/native-icons";
+import { NativeIcon, createNativeIcon } from "@/lib/native-icons";
 
 import { AssignmentComposer, ParticipantSubmitPanel, RoomCommandCenter } from "./forms";
 import { MiniGameArena, ParticipantGamesPanel } from "./mini-games";
@@ -24,6 +24,7 @@ import {
   type ParticipantTab,
   type ProofType,
   type RewardKind,
+  type Role,
   type SessionUser,
 } from "./model";
 import {
@@ -46,7 +47,67 @@ import {
   RoomRow,
   SectionCard,
   Tabs,
+  QuickActionGrid,
 } from "./shared-ui";
+
+export function LobbySurface({
+  allRooms,
+  createRoomPending,
+  inviteCode,
+  joinRoomPending,
+  onCreateRoom,
+  onInviteCodeChange,
+  onJoinRoom,
+  onRoomFormChange,
+  onSelectRoom,
+  roomForm,
+}: {
+  allRooms: Array<{ role: Role; room: HackRoom }>;
+  createRoomPending: boolean;
+  inviteCode: string;
+  joinRoomPending: boolean;
+  onCreateRoom: () => void;
+  onInviteCodeChange: (value: string) => void;
+  onJoinRoom: () => void;
+  onRoomFormChange: React.Dispatch<React.SetStateAction<typeof emptyRoomForm>>;
+  onSelectRoom: (roomId: string) => void;
+  roomForm: typeof emptyRoomForm;
+}) {
+  return (
+    <section className="grid gap-3">
+      <RoomCommandCenter
+        createRoomPending={createRoomPending}
+        inviteCode={inviteCode}
+        joinRoomPending={joinRoomPending}
+        onCreateRoom={onCreateRoom}
+        onInviteCodeChange={onInviteCodeChange}
+        onJoinRoom={onJoinRoom}
+        onRoomFormChange={onRoomFormChange}
+        roomForm={roomForm}
+        tone="violet"
+      />
+      <SectionCard eyebrow="Hack Rooms" title="Your Room Shelf" badge={`${allRooms.length} total`}>
+        <div className="grid gap-2">
+          {allRooms.length ? (
+            allRooms.map((entry) => (
+              <RoomRow
+                key={entry.room._id}
+                role={entry.role}
+                room={entry.room}
+                onClick={() => onSelectRoom(entry.room._id)}
+              />
+            ))
+          ) : (
+            <EmptyState
+              icon={<NativeIcon name="home-outline" />}
+              text="Create a hack room or join one with an invite code."
+            />
+          )}
+        </div>
+      </SectionCard>
+    </section>
+  );
+}
 
 function HostSurface({
   activeTab,
@@ -143,35 +204,10 @@ function HostSurface({
     <section>
       <Tabs activeTab={activeTab} onSelect={onSelectTab} tabs={hostTabs} />
 
-      {activeTab === "quick" && showRoomSetup ? (
-        <div className="mt-3 grid gap-3">
-          <RoomCommandCenter
-            createRoomPending={createRoomPending}
-            inviteCode={inviteCode}
-            joinRoomPending={joinRoomPending}
-            onCreateRoom={onCreateRoom}
-            onInviteCodeChange={onInviteCodeChange}
-            onJoinRoom={onJoinRoom}
-            onRoomFormChange={onRoomFormChange}
-            roomForm={roomForm}
-            tone="violet"
-          />
-          <SectionCard eyebrow="Host Rooms" title="Your Room Shelf" badge={`${hostedRooms.length} hosted`}>
-            <div className="grid gap-2">
-              {hostedRooms.length ? (
-                hostedRooms.map((hostedRoom) => (
-                  <RoomRow key={hostedRoom._id} room={hostedRoom} role="host" />
-                ))
-              ) : (
-                <EmptyState icon={<NativeIcon name="shield-outline" />} text="Create a hack room to unlock host actions." />
-              )}
-            </div>
-          </SectionCard>
-        </div>
-      ) : null}
+
 
       {activeTab === "assign" ? (
-        <ActionScreen title="Assignments" onBack={() => onSelectTab("quick")}>
+        <ActionScreen title="Assignments" >
           <AssignmentComposer
             assignmentMode={assignmentMode}
             createTaskPending={createTaskPending}
@@ -189,7 +225,7 @@ function HostSurface({
       ) : null}
 
       {activeTab === "members" ? (
-        <ActionScreen title="Members" onBack={() => onSelectTab("quick")}>
+        <ActionScreen title="Members" >
           <SectionCard badge={`${room?.participants.length ?? 0} joined`} eyebrow="Host Menu" title="Participants">
             {room ? (
               <>
@@ -223,7 +259,7 @@ function HostSurface({
       ) : null}
 
       {activeTab === "verify" ? (
-        <ActionScreen title="Verify" onBack={() => onSelectTab("quick")}>
+        <ActionScreen title="Verify" >
           <ReviewQueue
             feedbackBySubmission={feedbackBySubmission}
             onApproveSubmission={onApproveSubmission}
@@ -235,7 +271,7 @@ function HostSurface({
       ) : null}
 
       {activeTab === "history" ? (
-        <ActionScreen title="History" onBack={() => onSelectTab("quick")}>
+        <ActionScreen title="History" >
           <SubmissionList
             emptyText="Verified, returned, and winner records will appear here after review."
             submissions={historySubmissions}
@@ -246,7 +282,7 @@ function HostSurface({
       ) : null}
 
       {activeTab === "award" ? (
-        <ActionScreen title="Award XRDM" onBack={() => onSelectTab("quick")}>
+        <ActionScreen title="Award XRDM" >
           <AwardPanel
             approvedSubmissions={approvedSubmissions}
             awardBySubmission={{}}
@@ -260,7 +296,7 @@ function HostSurface({
       ) : null}
 
       {activeTab === "rewards" ? (
-        <ActionScreen title="Awards" onBack={() => onSelectTab("quick")}>
+        <ActionScreen title="Awards" >
           <RewardsPanel
             issueRewardPending={issueRewardPending}
             onIssueReward={onIssueReward}
@@ -274,7 +310,7 @@ function HostSurface({
       ) : null}
 
       {activeTab === "games" ? (
-        <ActionScreen title="Games" onBack={() => onSelectTab("quick")}>
+        <ActionScreen title="Games" >
           <AssignmentComposer
             assignmentMode={assignmentMode === "game" || assignmentMode === "challenge" ? assignmentMode : "challenge"}
             createTaskPending={createTaskPending}
@@ -292,13 +328,13 @@ function HostSurface({
       ) : null}
 
       {activeTab === "leaderboard" ? (
-        <ActionScreen title="Leaderboard" onBack={() => onSelectTab("quick")}>
+        <ActionScreen title="Leaderboard" >
           <LeaderboardPanel leaderboard={leaderboard} />
         </ActionScreen>
       ) : null}
 
       {activeTab === "profile" ? (
-        <ActionScreen title="Profile" onBack={() => onSelectTab("quick")}>
+        <ActionScreen title="Profile" >
           <RoomProfile
             onShareInvite={onShareInvite}
             onSignOut={onSignOut}
@@ -365,48 +401,10 @@ function ParticipantSurface({
     <section>
       <Tabs activeTab={activeTab} onSelect={onSelectTab} tabs={participantTabs} />
 
-      {activeTab === "quick" && showJoinTrack ? (
-        <div className="grid gap-3">
-          <SectionCard eyebrow="Participant Track" title="Join a Hack Room" badge={`${joinedRooms.length} joined`}>
-            <form
-              className="grid gap-3"
-              onSubmit={(event) => {
-                event.preventDefault();
-                onJoinRoom();
-              }}
-            >
-              <Field label="Invite Code">
-                <Input
-                  className="h-10 rounded-[9px] border-[#1EEAB0] bg-[#0D0F12] font-mono text-sm uppercase text-[#1EEAB0]"
-                  onChange={(event) => onInviteCodeChange(event.target.value)}
-                  placeholder="HR-ABC123"
-                  value={inviteCode}
-                />
-              </Field>
-              <Button
-                className="h-10 rounded-[10px] bg-[#1EEAB0] text-[#03120C] hover:bg-[#1EEAB0]/85"
-                disabled={!inviteCode.trim() || joinRoomPending}
-                type="submit"
-              >
-                <NativeIcon className="size-4" name="enter-outline" />
-                Join Room
-              </Button>
-            </form>
-            <div className="mt-3 grid gap-2">
-              {joinedRooms.length ? (
-                joinedRooms.map((joinedRoom) => (
-                  <RoomRow key={joinedRoom._id} room={joinedRoom} role="participant" />
-                ))
-              ) : (
-                <EmptyState icon={<NativeIcon name="key-outline" />} text="Paste the invite code from your organizer." />
-              )}
-            </div>
-          </SectionCard>
-        </div>
-      ) : null}
+
 
       {activeTab === "submit" ? (
-        <ActionScreen title="Submit Task" onBack={() => onSelectTab("quick")}>
+        <ActionScreen title="Submit Task" >
           <ParticipantSubmitPanel
             mySubmissions={mySubmissions}
             onSelectTask={onSelectTask}
@@ -424,13 +422,13 @@ function ParticipantSurface({
       ) : null}
 
       {activeTab === "history" ? (
-        <ActionScreen title="History" onBack={() => onSelectTab("quick")}>
+        <ActionScreen title="History" >
           <ParticipantHistoryPanel mySubmissions={mySubmissions} tasks={tasks} />
         </ActionScreen>
       ) : null}
 
       {activeTab === "games" ? (
-        <ActionScreen title="Games" onBack={() => onSelectTab("quick")}>
+        <ActionScreen title="Games" >
           <ParticipantGamesPanel
             mySubmissions={mySubmissions}
             onSelectTask={onSelectTask}
@@ -447,7 +445,7 @@ function ParticipantSurface({
       ) : null}
 
       {activeTab === "wallet" ? (
-        <ActionScreen title="Wallet" onBack={() => onSelectTab("quick")}>
+        <ActionScreen title="Wallet" >
           <WalletPanel myRewards={myRewards} mySubmissions={mySubmissions} room={room} />
         </ActionScreen>
       ) : null}

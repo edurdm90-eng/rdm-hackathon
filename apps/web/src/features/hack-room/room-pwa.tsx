@@ -48,7 +48,7 @@ import {
   type Tone,
 } from "./model";
 import { RoomHero, RoomSwitcher, WebAppScreen } from "./room-shell";
-import { HostSurface, ParticipantSurface } from "./surfaces";
+import { HostSurface, LobbySurface, ParticipantSurface } from "./surfaces";
 import { EmptyState, SectionCard, StatusBanner } from "./shared-ui";
 
 export default function HackRoomPwa({
@@ -62,8 +62,8 @@ export default function HackRoomPwa({
 }) {
   const navigate = useNavigate();
   const dashboard = useQuery(trpc.hackRoom.dashboard.queryOptions());
-  const [hostTab, setHostTab] = useState<HostTab>("quick");
-  const [participantTab, setParticipantTab] = useState<ParticipantTab>("quick");
+  const [hostTab, setHostTab] = useState<HostTab>("assign");
+  const [participantTab, setParticipantTab] = useState<ParticipantTab>("submit");
   const [activeRoomId, setActiveRoomId] = useState("");
   const [roomForm, setRoomForm] = useState(emptyRoomForm);
   const [inviteCode, setInviteCode] = useState("");
@@ -86,9 +86,10 @@ export default function HackRoomPwa({
   const rewards = dashboard.data?.rewards ?? [];
   const allRooms = useMemo(() => buildRoomEntries(hostedRooms, joinedRooms), [hostedRooms, joinedRooms]);
 
-  const activeSelectionId = roomId ?? activeRoomId;
-  const selectedRoomEntry =
-    allRooms.find((entry) => matchesRoomRouteParam(entry.room, activeSelectionId)) ?? (roomId ? undefined : allRooms[0]);
+  const activeSelectionId = roomId || activeRoomId;
+  const selectedRoomEntry = roomId
+    ? allRooms.find((entry) => matchesRoomRouteParam(entry.room, roomId))
+    : undefined;
   const selectedRoom = selectedRoomEntry?.room;
   const role = selectedRoomEntry?.role ?? "host";
   const selectedRoomId = selectedRoom?._id ?? "";
@@ -150,22 +151,7 @@ export default function HackRoomPwa({
     });
   }, [navigate, roomId, roomTab, selectedRoom]);
 
-  useEffect(() => {
-    if (roomId) {
-      return;
-    }
 
-    if (!allRooms.length) {
-      if (activeRoomId) {
-        setActiveRoomId("");
-      }
-      return;
-    }
-
-    if (!activeRoomId || !allRooms.some((entry) => entry.room._id === activeRoomId)) {
-      setActiveRoomId(allRooms[0].room._id);
-    }
-  }, [activeRoomId, allRooms]);
 
   useEffect(() => {
     if (!selectedTaskId || !roomTasks.some((task) => task._id === selectedTaskId)) {
@@ -528,22 +514,14 @@ export default function HackRoomPwa({
 
   return (
     <WebAppScreen activeNav="rooms">
-        {roomId ? (
-          <button
-            className="mb-3 flex items-center gap-2 rounded-[9px] border border-[rgba(238,232,222,0.12)] bg-[#141618] px-3 py-2 text-left"
-            onClick={() => navigate({ to: "/hack-room" })}
-            type="button"
-          >
-            <NativeIcon className="size-4 text-[#9C9690]" name="arrow-back-outline" />
-            <span className="text-sm font-medium text-[#EEE8DE]">Hack Rooms</span>
-          </button>
-        ) : (
-          <RoomSwitcher
-            activeRoomId={activeRoomId}
-            allRooms={allRooms}
-            onRoomChange={setActiveRoomId}
-          />
-        )}
+        <button
+          className="mb-3 flex items-center gap-2 rounded-[9px] border border-[rgba(238,232,222,0.12)] bg-[#141618] px-3 py-2 text-left"
+          onClick={() => navigate({ to: "/hack-room" })}
+          type="button"
+        >
+          <NativeIcon className="size-4 text-[#9C9690]" name="arrow-back-outline" />
+          <span className="text-sm font-medium text-[#EEE8DE]">Hack Rooms</span>
+        </button>
 
         <RoomHero
           role={role}
