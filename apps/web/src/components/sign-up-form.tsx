@@ -205,7 +205,7 @@ function AuthField({
   return (
     <div className="grid gap-1.5">
       <Label
-        className="font-mono text-[9px] uppercase tracking-[0.14em] text-[#626058]"
+        className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#626058]"
         htmlFor={name}
       >
         {label}

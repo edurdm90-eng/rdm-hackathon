@@ -100,46 +100,56 @@ function AppMenu() {
 
       {open ? (
         <div
-          className="absolute right-0 top-full z-50 mt-2 w-[292px] rounded-[16px] border border-[rgba(238,232,222,0.12)] bg-[#0A0C0F] p-3 text-[#EEE8DE] shadow-[0_18px_40px_rgba(0,0,0,0.45)]"
-          role="menu"
+          className="fixed inset-x-0 bottom-0 top-[64px] z-50 bg-[#0A0C0F]/70 backdrop-blur-[2px]"
+          onClick={() => setOpen(false)}
         >
-          <div className="rounded-[14px] border border-[rgba(238,232,222,0.12)] bg-[#141618] p-4">
-            <img alt="RDM" className="h-[34px] w-auto object-contain" src="/icons/rdm-logo.png" />
-            <div className="mt-3 font-mono text-[10px] font-black uppercase tracking-[0.2em] text-[#1EEAB0]">
-              Hack Room
+          <div className="mx-auto h-full w-full max-w-[560px] px-4 sm:px-0">
+            <div
+              className="ml-auto flex h-full w-[min(320px,calc(100vw-32px))] flex-col gap-3 border-l border-[rgba(238,232,222,0.12)] bg-[#0A0C0F] p-4 text-[#EEE8DE] shadow-[-18px_0_38px_rgba(0,0,0,0.38)]"
+              onClick={(event) => event.stopPropagation()}
+              role="menu"
+            >
+              <div className="rounded-[12px] border border-[rgba(238,232,222,0.12)] bg-[#141618] p-3.5">
+                <img alt="RDM" className="h-8 w-auto object-contain" src="/icons/rdm-logo.png" />
+                <div className="mt-3 font-mono text-[10px] font-black uppercase tracking-[0.18em] text-[#1EEAB0]">
+                  Hack Room
+                </div>
+                <div className="mt-1 text-[17px] font-black leading-6 tracking-normal text-[#EEE8DE]">
+                  RDM Command
+                </div>
+              </div>
+
+              <nav className="grid gap-2">
+                <DrawerMenuItem
+                  icon={<NativeIcon className="size-[18px]" name="home-outline" />}
+                  label="Home"
+                  onSelect={() => setOpen(false)}
+                  to="/dashboard"
+                  tone="cyan"
+                />
+                <DrawerMenuItem
+                  icon={<NativeIcon className="size-[18px]" name="flash-outline" />}
+                  label="Hack Rooms"
+                  onSelect={() => setOpen(false)}
+                  to="/hack-room"
+                  tone="violet"
+                />
+                <DrawerMenuItem
+                  icon={<NativeIcon className="size-[18px]" name="person-circle-outline" />}
+                  label="Profile"
+                  onSelect={() => setOpen(false)}
+                  to="/profile"
+                  tone="gold"
+                />
+              </nav>
+
+              <div className="mt-auto flex items-center gap-2.5 rounded-[12px] border border-[rgba(238,232,222,0.12)] bg-[#141618] p-3">
+                <NativeIcon className="size-[18px] shrink-0 text-[#1EEAB0]" name="shield-checkmark-outline" />
+                <p className="text-xs leading-[18px] text-[#CCC6BA]">
+                  Organizer and participant flows stay in sync.
+                </p>
+              </div>
             </div>
-            <div className="mt-1 text-xl font-black tracking-normal text-[#EEE8DE]">RDM Command</div>
-          </div>
-
-          <nav className="mt-3 grid gap-2">
-            <DrawerMenuItem
-              icon={<NativeIcon className="size-[19px]" name="home-outline" />}
-              label="Home"
-              onSelect={() => setOpen(false)}
-              to="/dashboard"
-              tone="cyan"
-            />
-            <DrawerMenuItem
-              icon={<NativeIcon className="size-[19px]" name="flash-outline" />}
-              label="Hack Rooms"
-              onSelect={() => setOpen(false)}
-              to="/hack-room"
-              tone="violet"
-            />
-            <DrawerMenuItem
-              icon={<NativeIcon className="size-[19px]" name="person-circle-outline" />}
-              label="Profile"
-              onSelect={() => setOpen(false)}
-              to="/profile"
-              tone="gold"
-            />
-          </nav>
-
-          <div className="mt-3 flex items-center gap-2 rounded-[14px] border border-[rgba(238,232,222,0.12)] bg-[#1A1D20] p-3">
-            <NativeIcon className="size-[18px] shrink-0 text-[#1EEAB0]" name="shield-checkmark-outline" />
-            <p className="text-xs leading-[18px] text-[#CCC6BA]">
-              Organizer and participant flows stay in sync.
-            </p>
           </div>
         </div>
       ) : null}
@@ -169,14 +179,14 @@ function DrawerMenuItem({
 
   return (
     <Link
-      className={`flex min-h-[52px] cursor-pointer items-center gap-2 rounded-[14px] border px-3 text-sm font-black outline-none transition ${toneClass}`}
+      className={`flex min-h-12 cursor-pointer items-center gap-2.5 rounded-[12px] border px-3 text-[13px] font-extrabold outline-none transition ${toneClass}`}
       onClick={onSelect}
       role="menuitem"
       to={to}
     >
       {icon}
       <span className="flex-1">{label}</span>
-      <NativeIcon className="size-4" name="chevron-forward-outline" />
+      <NativeIcon className="size-3.5" name="chevron-forward-outline" />
     </Link>
   );
 }

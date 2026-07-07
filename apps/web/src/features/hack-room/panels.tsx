@@ -70,82 +70,84 @@ function RewardsPanel({
   return (
     <div className="grid gap-3">
       <SectionCard badge={`${room?.participants.length ?? 0} members`} eyebrow="Issue" title="Certificates and NFT Badges">
-        <div className="mb-3 grid grid-cols-3 gap-2">
-          {(["participant_certificate", "winner_certificate", "winner_nft_badge"] as RewardKind[]).map((kind) => (
-            <TaskKindButton
-              active={rewardForm.kind === kind}
-              icon={
-                kind === "participant_certificate" ? (
-                  <NativeIcon className="size-4" name="ribbon-outline" />
-                ) : kind === "winner_certificate" ? (
-                  <NativeIcon className="size-4" name="trophy-outline" />
-                ) : (
-                  <NativeIcon className="size-4" name="diamond-outline" />
-                )
-              }
-              key={kind}
-              label={rewardKindLabel(kind)}
-              onClick={() => onRewardFormChange((current) => ({ ...current, kind }))}
-              tone="gold"
+        <div className="grid gap-3">
+          <div className="grid grid-cols-3 gap-2">
+            {(["participant_certificate", "winner_certificate", "winner_nft_badge"] as RewardKind[]).map((kind) => (
+              <TaskKindButton
+                active={rewardForm.kind === kind}
+                icon={
+                  kind === "participant_certificate" ? (
+                    <NativeIcon className="size-4" name="ribbon-outline" />
+                  ) : kind === "winner_certificate" ? (
+                    <NativeIcon className="size-4" name="trophy-outline" />
+                  ) : (
+                    <NativeIcon className="size-4" name="diamond-outline" />
+                  )
+                }
+                key={kind}
+                label={rewardKindLabel(kind)}
+                onClick={() => onRewardFormChange((current) => ({ ...current, kind }))}
+                tone="gold"
+              />
+            ))}
+          </div>
+          {rewardForm.kind === "participant_certificate" && room ? (
+            <RecipientSelector
+              onRewardFormChange={onRewardFormChange}
+              room={room}
+              selectedRecipientIds={rewardForm.recipientIds.length ? rewardForm.recipientIds : room.participants.map((p) => p.userId)}
             />
-          ))}
-        </div>
-        {rewardForm.kind === "participant_certificate" && room ? (
-          <RecipientSelector
-            onRewardFormChange={onRewardFormChange}
-            room={room}
-            selectedRecipientIds={rewardForm.recipientIds.length ? rewardForm.recipientIds : room.participants.map((p) => p.userId)}
-          />
-        ) : null}
-        {rewardForm.kind !== "participant_certificate" ? (
-          <WinnerSourceSelector
-            onRewardFormChange={onRewardFormChange}
-            rewardForm={rewardForm}
-            winnerSubmissions={winnerSubmissions}
-          />
-        ) : null}
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Award Title">
-            <Input
-              className="h-10 rounded-[9px] border-[rgba(238,232,222,0.12)] bg-[#0D0F12] text-sm text-[#CCC6BA]"
-              onChange={(event) => onRewardFormChange((current) => ({ ...current, title: event.target.value }))}
-              placeholder={rewardKindLabel(rewardForm.kind)}
-              value={rewardForm.title}
+          ) : null}
+          {rewardForm.kind !== "participant_certificate" ? (
+            <WinnerSourceSelector
+              onRewardFormChange={onRewardFormChange}
+              rewardForm={rewardForm}
+              winnerSubmissions={winnerSubmissions}
+            />
+          ) : null}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Award Title">
+              <Input
+                className="h-10 rounded-[9px] border-[rgba(238,232,222,0.12)] bg-[#0D0F12] text-[13px] text-[#CCC6BA]"
+                onChange={(event) => onRewardFormChange((current) => ({ ...current, title: event.target.value }))}
+                placeholder={rewardKindLabel(rewardForm.kind)}
+                value={rewardForm.title}
+              />
+            </Field>
+            <Field label="XRDM Attached">
+              <Input
+                className="h-10 rounded-[9px] border-[#F0C040] bg-[#241A00] font-mono text-[13px] text-[#F0C040]"
+                min={0}
+                onChange={(event) => onRewardFormChange((current) => ({ ...current, awardXrdm: event.target.value }))}
+                type="number"
+                value={rewardForm.awardXrdm}
+              />
+            </Field>
+          </div>
+          <Field label="Description">
+            <TextArea
+              onChange={(value) => onRewardFormChange((current) => ({ ...current, description: value }))}
+              placeholder="Issued for verified participation in this hack room."
+              value={rewardForm.description}
             />
           </Field>
-          <Field label="XRDM Attached">
-            <Input
-              className="h-10 rounded-[9px] border-[#F0C040] bg-[#241A00] font-mono text-sm text-[#F0C040]"
-              min={0}
-              onChange={(event) => onRewardFormChange((current) => ({ ...current, awardXrdm: event.target.value }))}
-              type="number"
-              value={rewardForm.awardXrdm}
+          <Field label="Ledger Note">
+            <TextArea
+              onChange={(value) => onRewardFormChange((current) => ({ ...current, ledgerNote: value }))}
+              placeholder="Record details for the So.Good ledger."
+              value={rewardForm.ledgerNote}
             />
           </Field>
+          <Button
+            className="h-11 w-full rounded-[10px] bg-[#F0C040] text-[#120d00] hover:bg-[#F0C040]/85"
+            disabled={issueRewardPending || !room}
+            onClick={() => onIssueReward(rewardForm.kind)}
+            type="button"
+          >
+            <NativeIcon className="size-4" name="send-outline" />
+            Issue {rewardKindLabel(rewardForm.kind)}
+          </Button>
         </div>
-        <Field label="Description">
-          <TextArea
-            onChange={(value) => onRewardFormChange((current) => ({ ...current, description: value }))}
-            placeholder="Issued for verified participation in this hack room."
-            value={rewardForm.description}
-          />
-        </Field>
-        <Field label="Ledger Note">
-          <TextArea
-            onChange={(value) => onRewardFormChange((current) => ({ ...current, ledgerNote: value }))}
-            placeholder="Record details for the So.Good ledger."
-            value={rewardForm.ledgerNote}
-          />
-        </Field>
-        <Button
-          className="mt-3 h-11 w-full rounded-[10px] bg-[#F0C040] text-[#120d00] hover:bg-[#F0C040]/85"
-          disabled={issueRewardPending || !room}
-          onClick={() => onIssueReward(rewardForm.kind)}
-          type="button"
-        >
-          <NativeIcon className="size-4" name="send-outline" />
-          Issue {rewardKindLabel(rewardForm.kind)}
-        </Button>
       </SectionCard>
 
       <SectionCard badge={`${rewards.length} issued`} eyebrow="Ledger" title="Issued Awards">
@@ -193,7 +195,7 @@ function AwardPanel({
                 <div className="grid gap-2 sm:grid-cols-[110px_1fr]">
                   <Field label="XRDM Award">
                     <Input
-                      className="h-10 rounded-[9px] border-[#F0C040] bg-[#241A00] font-mono text-sm text-[#F0C040]"
+                      className="h-10 rounded-[9px] border-[#F0C040] bg-[#241A00] font-mono text-[13px] text-[#F0C040]"
                       min={0}
                       onChange={(event) => onAwardChange(submission._id, event.target.value)}
                       type="number"
@@ -295,7 +297,7 @@ function ReviewCard({
         <div className="flex min-w-0 items-center gap-2">
           <Avatar name={submission.participantName} tone="cyan" />
           <div className="min-w-0">
-            <div className="truncate text-[13px] font-medium text-[#EEE8DE]">
+            <div className="truncate text-[13px] font-semibold text-[#EEE8DE]">
               {submission.participantName}
             </div>
             <div className="truncate text-[11px] text-[#626058]">
@@ -307,9 +309,9 @@ function ReviewCard({
       </div>
       <ProofItemsList proofItems={getSubmissionProofItems(submission)} />
       {submission.submissionDescription ? (
-        <p className="mt-2 text-xs leading-5 text-[#9C9690]">{submission.submissionDescription}</p>
+        <p className="mt-2 text-xs leading-[18px] text-[#9C9690]">{submission.submissionDescription}</p>
       ) : null}
-      {submission.notes ? <p className="mt-2 text-xs leading-5 text-[#626058]">{submission.notes}</p> : null}
+      {submission.notes ? <p className="mt-2 text-xs leading-[18px] text-[#626058]">{submission.notes}</p> : null}
       <Field label="Host Feedback">
         <TextArea onChange={onFeedbackChange} value={feedback} />
       </Field>
@@ -366,8 +368,8 @@ function WalletPanel({
         <div className="mx-auto mb-2 grid size-10 place-items-center rounded-[10px] border border-[#8A6A00] bg-[#0D0F12]">
           <NativeIcon className="size-5 text-[#F0C040]" name="wallet-outline" />
         </div>
-        <div className="text-[15px] font-medium text-[#F0C040]">XRDM Wallet</div>
-        <p className="mt-2 text-xs leading-5 text-[#9C9690]">
+        <div className="text-[13px] font-semibold text-[#F0C040]">XRDM Wallet</div>
+        <p className="mt-2 text-xs leading-[18px] text-[#9C9690]">
           Certificates, NFT badges, winner awards, and verified proof issued on the in-app So.Good Ledger.
         </p>
         <div className="mt-3 inline-flex items-center gap-1 rounded-[8px] border border-[#F0C040] bg-[#241A00] px-3 py-1 font-mono text-[10px] uppercase text-[#F0C040]">
@@ -379,7 +381,7 @@ function WalletPanel({
       <SectionCard eyebrow="My XRDM Balance" title={room?.name ?? "Wallet"} badge={`${balance} XRDM`}>
         <div className="mb-3 flex items-baseline gap-2">
           <div className="text-[32px] font-medium text-[#EEE8DE]">{balance}</div>
-          <div className="text-sm font-medium text-[#626058]">XRDM</div>
+          <div className="text-[13px] font-medium text-[#626058]">XRDM</div>
         </div>
         <div className="grid grid-cols-3 gap-2">
           <StatBox label="Verified" value={verifiedCount} tone="gold" />
@@ -429,9 +431,9 @@ function LeaderboardPanel({
               className="flex items-center gap-3 rounded-[10px] border border-[#8A6A00] bg-[#241A00] px-3 py-3"
               key={entry.email}
             >
-              <div className="w-7 font-mono text-sm font-semibold text-[#F0C040]">#{index + 1}</div>
+              <div className="w-7 font-mono text-[13px] font-semibold text-[#F0C040]">#{index + 1}</div>
               <div className="min-w-0 flex-1">
-                <div className="truncate text-[13px] font-medium text-[#EEE8DE]">{entry.name}</div>
+                <div className="truncate text-[13px] font-semibold text-[#EEE8DE]">{entry.name}</div>
                 <div className="truncate text-[11px] text-[#626058]">{entry.email}</div>
               </div>
               <div className="text-right">
@@ -557,7 +559,7 @@ function MemberList({ room }: { room: HackRoom }) {
           >
             <Avatar name={participant.name} tone={index % 2 ? "violet" : "cyan"} />
             <div className="min-w-0 flex-1">
-              <div className="truncate text-[13px] font-medium text-[#EEE8DE]">{participant.name}</div>
+              <div className="truncate text-[13px] font-semibold text-[#EEE8DE]">{participant.name}</div>
               <div className="truncate text-[11px] text-[#626058]">{participant.email}</div>
             </div>
             <div className="text-[11px] text-[#626058]">{formatDate(participant.joinedAt)}</div>
@@ -583,7 +585,7 @@ function RecipientSelector({
 
   return (
     <Field label="Recipients">
-      <div className="mb-3 flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2">
         <ChipButton
           active={selectedRecipientIds.length === allIds.length}
           label="All participants"
@@ -626,7 +628,7 @@ function WinnerSourceSelector({
 }) {
   return (
     <Field label="Winner Source">
-      <div className="mb-3 flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2">
         {winnerSubmissions.length ? (
           winnerSubmissions.map((submission) => (
             <ChipButton
@@ -669,7 +671,7 @@ function TeamMateEmailComposer({
 
   return (
     <Field label="Team Mate Emails">
-      <div className="mb-3 rounded-[9px] border border-[#1EEAB0] bg-[#061F18] p-2">
+      <div className="rounded-[9px] border border-[#1EEAB0] bg-[#061F18] p-2">
         {submitForm.teamMateEmails.length ? (
           <div className="mb-2 flex flex-wrap gap-1.5">
             {submitForm.teamMateEmails.map((email) => (
@@ -696,7 +698,7 @@ function TeamMateEmailComposer({
         ) : null}
         <div className="grid grid-cols-[1fr_auto] gap-2">
           <Input
-            className="h-9 rounded-[8px] border-[rgba(238,232,222,0.12)] bg-[#0D0F12] text-xs text-[#EEE8DE]"
+            className="h-9 rounded-[8px] border-[rgba(238,232,222,0.12)] bg-[#0D0F12] text-[13px] text-[#EEE8DE]"
             onChange={(event) => {
               const value = event.target.value;
               if (/[,\n;]/.test(value)) {
@@ -745,7 +747,7 @@ function ProofRequirementFields({
       {getTaskProofTypes(selectedTask).map((proofType) => (
         <Field key={proofType} label={`${proofTypeLabel(proofType)} Proof`}>
           <Input
-            className="h-10 rounded-[9px] border-[rgba(238,232,222,0.12)] bg-[#061F18] text-sm text-[#EEE8DE]"
+            className="h-10 rounded-[9px] border-[rgba(238,232,222,0.12)] bg-[#061F18] text-[13px] text-[#EEE8DE]"
             onChange={(event) =>
               setSubmitForm((current) => ({
                 ...current,

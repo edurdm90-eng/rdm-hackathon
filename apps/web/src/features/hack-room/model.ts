@@ -16,6 +16,7 @@ export type TaskKind = "task" | "challenge" | "game" | "special";
 export type AssignmentMode = TaskKind | "notification";
 export type HostTab =
   | "assign"
+  | "created"
   | "members"
   | "verify"
   | "history"
@@ -46,6 +47,7 @@ export type RoomTabSegment =
   | "assignments"
   | "award-xrdm"
   | "awards"
+  | "created-tasks"
   | "games"
   | "history"
   | "leaderboard"
@@ -101,6 +103,7 @@ export const gameTypeOptions: Array<{
 
 export const hostTabs: Array<{ id: HostTab; icon: NativeIconComponent; label: string }> = [
   { id: "assign", icon: createNativeIcon("clipboard-outline"), label: "Assignments" },
+  { id: "created", icon: createNativeIcon("layers-outline"), label: "Created Tasks" },
   { id: "members", icon: createNativeIcon("people-outline"), label: "Members" },
   { id: "verify", icon: createNativeIcon("shield-checkmark-outline"), label: "Verify" },
   { id: "history", icon: createNativeIcon("time-outline"), label: "History" },
@@ -121,6 +124,7 @@ export const participantTabs: Array<{ id: ParticipantTab; icon: NativeIconCompon
 export const hostTabSegments: Record<HostTab, RoomTabSegment> = {
   assign: "assignments",
   award: "award-xrdm",
+  created: "created-tasks",
   games: "games",
   history: "history",
   leaderboard: "leaderboard",
@@ -136,6 +140,8 @@ const hostTabsBySegment: Partial<Record<string, HostTab>> = {
   assignments: "assign",
   awards: "rewards",
   "award-xrdm": "award",
+  created: "created",
+  "created-tasks": "created",
   games: "games",
   history: "history",
   leaderboard: "leaderboard",

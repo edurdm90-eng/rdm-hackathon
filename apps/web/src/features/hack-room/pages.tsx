@@ -58,20 +58,20 @@ export function HackRoomHomePwa({ user }: { user: SessionUser }) {
     <WebAppScreen activeNav="home">
       <section className="mb-3 rounded-[11px] border border-[rgba(238,232,222,0.12)] bg-[#141618] px-[18px] py-4">
         <h1 className="text-[22px] font-extrabold leading-[30px] tracking-normal text-[#EEE8DE]">Home Hub</h1>
-        <p className="mt-2 text-xs leading-[19px] text-[#9C9690]">
+        <p className="mt-2 text-xs leading-[18px] text-[#9C9690]">
           Welcome back, {firstName(user.name)}. Your room activity, pending reviews, and XRDM progress live here.
         </p>
 
         <div className="mt-3 flex overflow-hidden rounded-[9px] border border-[rgba(238,232,222,0.12)]">
           <div className="flex min-h-9 flex-1 items-center justify-center gap-1.5 border-b-2 border-b-[#1EEAB0] bg-[#061F18]">
             <NativeIcon className="size-3.5 text-[#1EEAB0]" name="person-outline" />
-            <span className="font-mono text-[9px] font-extrabold text-[#1EEAB0]">
+            <span className="font-mono text-[10px] font-extrabold text-[#1EEAB0]">
               As Participant
             </span>
           </div>
           <div className="flex min-h-9 flex-1 items-center justify-center gap-1.5 border-b-2 border-b-[#A060FF] bg-[#160A2A]">
             <NativeIcon className="size-3.5 text-[#A060FF]" name="trophy-outline" />
-            <span className="font-mono text-[9px] font-extrabold text-[#A060FF]">
+            <span className="font-mono text-[10px] font-extrabold text-[#A060FF]">
               As Organizer
             </span>
           </div>
@@ -80,7 +80,7 @@ export function HackRoomHomePwa({ user }: { user: SessionUser }) {
         <div className="mt-4 flex items-center gap-3 rounded-[11px] border border-[rgba(238,232,222,0.12)] bg-[#0D0F12] p-3">
           <Avatar name={user.name} tone="cyan" />
           <div className="min-w-0 flex-1">
-            <div className="truncate text-sm font-extrabold text-[#EEE8DE]">{user.name}</div>
+            <div className="truncate text-[13px] font-extrabold text-[#EEE8DE]">{user.name}</div>
             <div className="truncate text-xs text-[#626058]">{user.email}</div>
           </div>
           {dashboard.isLoading ? (

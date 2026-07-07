@@ -220,6 +220,11 @@ function HostSurface({
             setTaskForm={setTaskForm}
             taskForm={taskForm}
           />
+        </ActionScreen>
+      ) : null}
+
+      {activeTab === "created" ? (
+        <ActionScreen title="Created Tasks" >
           <CreatedTasks tasks={tasks} />
         </ActionScreen>
       ) : null}
@@ -230,7 +235,7 @@ function HostSurface({
             {room ? (
               <>
                 <div className="mb-3 flex items-center justify-between rounded-[9px] border border-[#1EEAB0] bg-[#0D0F12] px-3 py-2">
-                  <div className="flex min-w-0 items-center gap-2 font-mono text-sm font-semibold text-[#1EEAB0]">
+                  <div className="flex min-w-0 items-center gap-2 font-mono text-[13px] font-semibold text-[#1EEAB0]">
                     <NativeIcon className="size-4 shrink-0" name="key-outline" />
                     <span className="truncate">{room.inviteCode}</span>
                   </div>
@@ -239,7 +244,7 @@ function HostSurface({
                       <NativeIcon className="size-4" name="copy-outline" />
                     </IconButton>
                     <Button
-                      className="h-8 rounded-[8px] border-[#1EEAB0] bg-[#061F18] text-[11px] text-[#1EEAB0] hover:bg-[#061F18]/80"
+                      className="h-8 rounded-[8px] border-[#1EEAB0] bg-[#061F18] text-xs font-semibold text-[#1EEAB0] hover:bg-[#061F18]/80"
                       onClick={() => onShareInvite(room)}
                       type="button"
                       variant="outline"

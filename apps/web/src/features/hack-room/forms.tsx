@@ -80,7 +80,7 @@ function RoomCommandCenter({
         >
           <Field label="Invite Code">
             <Input
-              className="h-10 rounded-[9px] border-[rgba(238,232,222,0.12)] bg-[#141618] font-mono text-sm uppercase text-[#EEE8DE] placeholder:text-[#626058] focus-visible:border-[#1EEAB0]"
+              className="h-10 rounded-[9px] border-[rgba(238,232,222,0.12)] bg-[#141618] font-mono text-[13px] uppercase text-[#EEE8DE] placeholder:text-[#626058] focus-visible:border-[#1EEAB0]"
               onChange={(event) => onInviteCodeChange(event.target.value)}
               placeholder="HR-ABC123"
               value={inviteCode}
@@ -115,17 +115,17 @@ function RoomCommandCenter({
           >
             <div className="flex items-start justify-between gap-3">
               <div>
-                <div className="font-mono text-[9px] uppercase tracking-[0.16em] text-[#A060FF]">
+                <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#A060FF]">
                   Host
                 </div>
-                <div className="mt-0.5 text-sm font-bold text-[#EEE8DE]">Create Hack Room</div>
+                <div className="mt-0.5 text-[13px] font-extrabold text-[#EEE8DE]">Create Hack Room</div>
               </div>
               <Badge tone="violet">Host Owns Room</Badge>
             </div>
 
             <Field label="Room Name">
               <Input
-                className="h-10 rounded-[9px] border-[rgba(238,232,222,0.12)] bg-[#0D0F12] text-sm text-[#EEE8DE] placeholder:text-[#626058] focus-visible:border-[#A060FF]"
+                className="h-10 rounded-[9px] border-[rgba(238,232,222,0.12)] bg-[#0D0F12] text-[13px] text-[#EEE8DE] placeholder:text-[#626058] focus-visible:border-[#A060FF]"
                 onChange={(event) => onRoomFormChange((current) => ({ ...current, name: event.target.value }))}
                 placeholder="AI Agents Sprint"
                 value={roomForm.name}
@@ -250,7 +250,7 @@ function AssignmentComposer({
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label={isNotification ? "Notification Title" : isGame ? "Game Name" : "Assignment Title"}>
             <Input
-              className="h-10 rounded-[9px] border-[rgba(238,232,222,0.12)] bg-[#0D0F12] text-sm text-[#CCC6BA]"
+              className="h-10 rounded-[9px] border-[rgba(238,232,222,0.12)] bg-[#0D0F12] text-[13px] text-[#CCC6BA]"
               onChange={(event) => setTaskForm((current) => ({ ...current, title: event.target.value }))}
               placeholder={isNotification ? "Demo check-in" : "Build a working prototype"}
               value={taskForm.title}
@@ -259,7 +259,7 @@ function AssignmentComposer({
           {!isNotification ? (
             <Field label="Due Date and Time">
               <Input
-                className="h-10 rounded-[9px] border-[rgba(238,232,222,0.12)] bg-[#0D0F12] text-sm text-[#CCC6BA]"
+                className="h-10 rounded-[9px] border-[rgba(238,232,222,0.12)] bg-[#0D0F12] text-[13px] text-[#CCC6BA]"
                 onChange={(event) => setTaskForm((current) => ({ ...current, dueAt: event.target.value }))}
                 type="datetime-local"
                 value={taskForm.dueAt}
@@ -268,7 +268,7 @@ function AssignmentComposer({
           ) : (
             <Field label="Audience">
               <Input
-                className="h-10 rounded-[9px] border-[rgba(238,232,222,0.12)] bg-[#0D0F12] text-sm text-[#626058]"
+                className="h-10 rounded-[9px] border-[rgba(238,232,222,0.12)] bg-[#0D0F12] text-[13px] text-[#626058]"
                 disabled
                 value={`${room?.participants.length ?? 0} participants`}
               />
@@ -279,7 +279,7 @@ function AssignmentComposer({
         {isSpecial ? (
           <Field label="Participant Email">
             <Input
-              className="h-10 rounded-[9px] border-[#FF8820] bg-[#241000] text-sm text-[#FF8820]"
+              className="h-10 rounded-[9px] border-[#FF8820] bg-[#241000] text-[13px] text-[#FF8820]"
               onChange={(event) =>
                 setTaskForm((current) => ({ ...current, assignedToEmail: event.target.value }))
               }
@@ -297,7 +297,7 @@ function AssignmentComposer({
                 const active = taskForm.gameType === option.value;
                 return (
                   <button
-                    className={`rounded-[9px] border px-3 py-2 text-left text-xs transition ${
+                    className={`rounded-[9px] border px-3 py-2 text-left text-xs font-semibold transition ${
                       active
                         ? "border-[#F0C040] bg-[#241A00] text-[#F0C040]"
                         : "border-[rgba(238,232,222,0.12)] bg-[#0D0F12] text-[#9C9690]"
@@ -371,7 +371,7 @@ function AssignmentComposer({
             </Field>
             <Field label="XRDM Reward">
               <Input
-                className="h-10 rounded-[9px] border-[#F0C040] bg-[#241A00] font-mono text-sm text-[#F0C040]"
+                className="h-10 rounded-[9px] border-[#F0C040] bg-[#241A00] font-mono text-[13px] text-[#F0C040]"
                 min={0}
                 onChange={(event) => setTaskForm((current) => ({ ...current, rewardXrdm: event.target.value }))}
                 type="number"
@@ -464,18 +464,18 @@ function ParticipantSubmitPanel({
         <SubmissionHoldCard submission={selectedSubmission} />
       ) : (
         <form
-          className="rounded-[11px] border border-[#1EEAB0] bg-[#0D0F12] p-3"
+          className="grid gap-3 rounded-[11px] border border-[#1EEAB0] bg-[#0D0F12] p-3"
           onSubmit={(event) => {
             event.preventDefault();
             onSubmitProof();
           }}
         >
-          <div className="mb-3 flex items-center justify-between gap-3">
+          <div className="flex items-center justify-between gap-3">
             <div>
               <div className="font-mono text-[10px] uppercase tracking-[0.12em] text-[#1EEAB0]">
                 Submit Proof
               </div>
-              <div className="mt-1 text-sm font-medium text-[#EEE8DE]">
+              <div className="mt-1 text-[13px] font-semibold text-[#EEE8DE]">
                 {selectedTask?.title ?? "Select an assignment"}
               </div>
             </div>
@@ -484,7 +484,7 @@ function ParticipantSubmitPanel({
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Your Name">
               <Input
-                className="h-10 rounded-[9px] border-[rgba(238,232,222,0.12)] bg-[#061F18] text-sm text-[#EEE8DE]"
+                className="h-10 rounded-[9px] border-[rgba(238,232,222,0.12)] bg-[#061F18] text-[13px] text-[#EEE8DE]"
                 onChange={(event) =>
                   onSubmitFormChange((current) => ({ ...current, submitterName: event.target.value }))
                 }
@@ -494,7 +494,7 @@ function ParticipantSubmitPanel({
             </Field>
             <Field label="Team Name">
               <Input
-                className="h-10 rounded-[9px] border-[rgba(238,232,222,0.12)] bg-[#061F18] text-sm text-[#EEE8DE]"
+                className="h-10 rounded-[9px] border-[rgba(238,232,222,0.12)] bg-[#061F18] text-[13px] text-[#EEE8DE]"
                 onChange={(event) =>
                   onSubmitFormChange((current) => ({ ...current, teamName: event.target.value }))
                 }
@@ -524,7 +524,7 @@ function ParticipantSubmitPanel({
             />
           </Field>
           <Button
-            className="mt-3 h-11 w-full rounded-[10px] bg-[#1EEAB0] text-[#03120C] hover:bg-[#1EEAB0]/85"
+            className="h-11 w-full rounded-[10px] bg-[#1EEAB0] text-[#03120C] hover:bg-[#1EEAB0]/85"
             disabled={!canSubmit}
             type="submit"
           >

@@ -520,7 +520,7 @@ export default function HackRoomPwa({
           type="button"
         >
           <NativeIcon className="size-4 text-[#9C9690]" name="arrow-back-outline" />
-          <span className="text-sm font-medium text-[#EEE8DE]">Hack Rooms</span>
+          <span className="text-[13px] font-semibold text-[#EEE8DE]">Hack Rooms</span>
         </button>
 
         <RoomHero

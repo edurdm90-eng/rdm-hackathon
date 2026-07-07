@@ -52,8 +52,8 @@ function RoomEntryLink({
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
-              <div className="truncate text-sm font-medium text-[#EEE8DE]">{entry.room.name}</div>
-              <p className="mt-1 line-clamp-2 text-xs leading-5 text-[#9C9690]">
+              <div className="truncate text-[13px] font-semibold text-[#EEE8DE]">{entry.room.name}</div>
+              <p className="mt-1 line-clamp-2 text-xs leading-[18px] text-[#9C9690]">
                 {entry.room.description || `Hosted by ${entry.room.hostName}`}
               </p>
             </div>
@@ -104,7 +104,7 @@ function RoomSwitcher({
         <Badge tone={tone}>{activeEntry.role === "host" ? "Host View" : "Participant View"}</Badge>
       </span>
       <select
-        className={`h-10 rounded-[9px] border bg-[#141618] px-2 text-xs font-medium outline-none ${colors}`}
+        className={`h-10 rounded-[9px] border bg-[#141618] px-2 text-[13px] font-medium outline-none ${colors}`}
         onChange={(event) => onRoomChange(event.target.value)}
         value={activeEntry.room._id}
       >
@@ -134,10 +134,10 @@ function RoomHero({
           <div className="mb-1 font-mono text-[10px] uppercase tracking-[0.12em] text-[#626058]">
             Inside Hack Room
           </div>
-          <h1 className="text-lg font-extrabold tracking-normal text-[#EEE8DE]">
+          <h1 className="text-[17px] font-extrabold leading-[21px] tracking-normal text-[#EEE8DE]">
             {room?.name ?? "Create or join a room"}
           </h1>
-          <p className="mt-1 text-xs leading-5 text-[#626058]">
+          <p className="mt-1 text-xs leading-[18px] text-[#626058]">
             {room?.description ||
               "Hosts create invite rooms, participants submit proof, and winners receive XRDM records."}
           </p>

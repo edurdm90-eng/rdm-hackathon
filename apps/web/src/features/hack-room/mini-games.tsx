@@ -141,7 +141,7 @@ function MiniGameArena({ onUseResult }: { onUseResult: (result: MiniGameResult) 
               <Icon className="size-4 text-[#F0C040]" />
             </span>
             <div>
-              <div className="text-sm font-medium text-[#EEE8DE]">{gameInfo.label}</div>
+              <div className="text-[13px] font-semibold text-[#EEE8DE]">{gameInfo.label}</div>
               <div className="text-[10px] text-[#626058]">Practice or generate score proof</div>
             </div>
           </div>
@@ -160,8 +160,8 @@ function MiniGameArena({ onUseResult }: { onUseResult: (result: MiniGameResult) 
         <div className="rounded-[10px] border border-[#1EEAB0] bg-[#061F18] p-3">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <div className="text-sm font-medium text-[#1EEAB0]">{latestResult.title} proof ready</div>
-              <p className="mt-1 text-xs leading-5 text-[#1EEAB0]">{latestResult.notes}</p>
+              <div className="text-[13px] font-semibold text-[#1EEAB0]">{latestResult.title} proof ready</div>
+              <p className="mt-1 text-xs leading-[18px] text-[#1EEAB0]">{latestResult.notes}</p>
             </div>
             <Badge tone="gold">{latestResult.score} pts</Badge>
           </div>
@@ -319,7 +319,7 @@ function QuickMathsGame({ onComplete }: { onComplete: (result: MiniGameResult) =
       </div>
       <div className="grid grid-cols-[1fr_auto] gap-2">
         <Input
-          className="h-10 rounded-[9px] border-[#F0C040] bg-[#0D0F12] text-center font-mono text-sm text-[#F0C040]"
+          className="h-10 rounded-[9px] border-[#F0C040] bg-[#0D0F12] text-center font-mono text-[13px] text-[#F0C040]"
           onChange={(event) => setAnswer(event.target.value)}
           placeholder="Answer"
           type="number"
