@@ -1,6 +1,7 @@
 import type { AppRouter } from "@rdm-hack/api/routers/index";
 import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker, { DateTimePickerAndroid } from "@react-native-community/datetimepicker";
+import * as Clipboard from "expo-clipboard";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import type { inferRouterOutputs } from "@trpc/server";
 import { useNavigation, useRouter } from "expo-router";
@@ -419,11 +420,6 @@ function HomeDashboard({ user }: { user: SessionUser }) {
   const recentSubmissions = dashboard.data?.mySubmissions ?? [];
   const notifications = dashboard.data?.notifications ?? [];
 
-  const handleSignOut = async () => {
-    await authClient.signOut();
-    await queryClient.invalidateQueries();
-  };
-
   const handleNotifications = () => {
     setMessage({
       text: notificationBannerMessage(notifications),
@@ -436,7 +432,6 @@ function HomeDashboard({ user }: { user: SessionUser }) {
       <AppHeader
         notificationCount={notifications.length}
         onNotificationPress={handleNotifications}
-        onProfilePress={handleSignOut}
       />
       <ScrollView
         contentContainerStyle={styles.dashboardContent}
@@ -592,7 +587,6 @@ function ProfileDashboard({ user }: { user: SessionUser }) {
       <AppHeader
         notificationCount={notifications.length}
         onNotificationPress={handleNotifications}
-        onProfilePress={handleSignOut}
       />
       <ScrollView
         contentContainerStyle={styles.dashboardContent}
@@ -705,11 +699,6 @@ function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
     createRoom.isPending ||
     joinRoom.isPending;
 
-  const handleSignOut = async () => {
-    await authClient.signOut();
-    await queryClient.invalidateQueries();
-  };
-
   const handleNotifications = () => {
     setMessage({
       text: notificationBannerMessage(notifications),
@@ -724,6 +713,10 @@ function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
     });
   };
 
+  const handleCopyInviteCode = async (room: HackRoom) => {
+    await copyInviteCodeToClipboard(room, setMessage);
+  };
+
   const handleOpenRoom = (roomId: string) => {
     router.push({
       pathname: "/hack-room/[roomId]",
@@ -736,7 +729,6 @@ function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
       <AppHeader
         notificationCount={notifications.length}
         onNotificationPress={handleNotifications}
-        onProfilePress={handleSignOut}
       />
       <ScrollView
         contentContainerStyle={styles.dashboardContent}
@@ -766,6 +758,7 @@ function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
 
         <RoomShelf
           allRooms={allRooms}
+          onCopyInvite={handleCopyInviteCode}
           onSelectRoom={handleOpenRoom}
           onShareRoom={handleShareCode}
         />
@@ -987,11 +980,6 @@ function HackRoomDetailDashboard({
     issueReward.isPending ||
     sendRoomNotification.isPending;
 
-  const handleSignOut = async () => {
-    await authClient.signOut();
-    await queryClient.invalidateQueries();
-  };
-
   const handleNotifications = () => {
     setMessage({
       text: notificationBannerMessage(roomNotifications),
@@ -1008,6 +996,10 @@ function HackRoomDetailDashboard({
       message: `Join ${room.name} in XRDM Hack Room with invite code ${room.inviteCode}`,
       title: `${room.name} invite`,
     });
+  };
+
+  const handleCopyInviteCode = async (room: HackRoom) => {
+    await copyInviteCodeToClipboard(room, setMessage);
   };
 
   const handleCreateTask = (kind: TaskKind) => {
@@ -1178,7 +1170,6 @@ function HackRoomDetailDashboard({
       <AppHeader
         notificationCount={roomNotifications.length}
         onNotificationPress={handleNotifications}
-        onProfilePress={handleSignOut}
       />
       <ScrollView
         contentContainerStyle={styles.dashboardContent}
@@ -1235,6 +1226,7 @@ function HackRoomDetailDashboard({
             onParticipantTabChange={setActiveParticipantTab}
             onReturnSubmission={handleReturnSubmission}
             onRoomTabChange={setActiveRoomTab}
+            onCopyInvite={handleCopyInviteCode}
             onIssueReward={handleIssueReward}
             onSendRoomNotification={handleSendRoomNotification}
             onSelectTask={setSelectedTaskId}
@@ -1437,10 +1429,12 @@ function RoomCommandCenter({
 
 function RoomShelf({
   allRooms,
+  onCopyInvite,
   onSelectRoom,
   onShareRoom,
 }: {
   allRooms: Array<{ role: Role; room: HackRoom }>;
+  onCopyInvite: (room: HackRoom) => void;
   onSelectRoom: (roomId: string) => void;
   onShareRoom: (room: HackRoom) => void;
 }) {
@@ -1462,6 +1456,7 @@ function RoomShelf({
           {allRooms.map(({ role, room }) => (
             <SelectableRoomCard
               key={room._id}
+              onCopyInvite={() => onCopyInvite(room)}
               onPress={() => onSelectRoom(room._id)}
               onShare={() => onShareRoom(room)}
               role={role}
@@ -1478,12 +1473,14 @@ function RoomShelf({
 }
 
 function SelectableRoomCard({
+  onCopyInvite,
   onPress,
   onShare,
   role,
   room,
   selected,
 }: {
+  onCopyInvite: () => void;
   onPress: () => void;
   onShare: () => void;
   role: Role;
@@ -1517,7 +1514,18 @@ function SelectableRoomCard({
         <Text style={styles.cardMeta}>{room.participants.length} participants</Text>
       </Pressable>
       <View style={styles.roomShareFloatingWrap}>
+        {role === "host" ? (
+          <Pressable
+            accessibilityLabel={`Copy invite code ${room.inviteCode}`}
+            accessibilityRole="button"
+            onPress={onCopyInvite}
+            style={({ pressed }) => [styles.roomShareIcon, pressed && styles.pressed]}
+          >
+            <Ionicons name="copy-outline" size={15} color={theme.muted} />
+          </Pressable>
+        ) : null}
         <Pressable
+          accessibilityLabel={`Share invite code ${room.inviteCode}`}
           accessibilityRole="button"
           onPress={onShare}
           style={({ pressed }) => [styles.roomShareIcon, pressed && styles.pressed]}
@@ -1542,6 +1550,7 @@ function RoomWorkspace({
   issueRewardPending,
   mySubmissions,
   onApproveSubmission,
+  onCopyInvite,
   onCreateTask,
   onIssueReward,
   onParticipantTabChange,
@@ -1591,6 +1600,7 @@ function RoomWorkspace({
   issueRewardPending: boolean;
   mySubmissions: DashboardData["mySubmissions"];
   onApproveSubmission: (submission: HackSubmission) => void;
+  onCopyInvite: (room: HackRoom) => void;
   onCreateTask: (kind: TaskKind) => void;
   onIssueReward: (kind: RewardKind) => void;
   onParticipantTabChange: (tab: ParticipantTab | null) => void;
@@ -1675,6 +1685,7 @@ function RoomWorkspace({
           historySubmissions={historySubmissions}
           issueRewardPending={issueRewardPending}
           onApproveSubmission={onApproveSubmission}
+          onCopyInvite={onCopyInvite}
           onCreateTask={onCreateTask}
           onIssueReward={onIssueReward}
           onReturnSubmission={onReturnSubmission}
@@ -1734,6 +1745,7 @@ function HostRoomWorkspace({
   historySubmissions,
   issueRewardPending,
   onApproveSubmission,
+  onCopyInvite,
   onCreateTask,
   onIssueReward,
   onReturnSubmission,
@@ -1771,6 +1783,7 @@ function HostRoomWorkspace({
   historySubmissions: DashboardData["hostSubmissions"];
   issueRewardPending: boolean;
   onApproveSubmission: (submission: HackSubmission) => void;
+  onCopyInvite: (room: HackRoom) => void;
   onCreateTask: (kind: TaskKind) => void;
   onIssueReward: (kind: RewardKind) => void;
   onReturnSubmission: (submission: HackSubmission) => void;
@@ -1917,14 +1930,18 @@ function HostRoomWorkspace({
             <Text numberOfLines={1} style={styles.inviteCode}>
               {room.inviteCode}
             </Text>
-            <Pressable
-              accessibilityRole="button"
+            <InviteActionButton
+              accessibilityLabel={`Copy invite code ${room.inviteCode}`}
+              icon="copy-outline"
+              label="Copy"
+              onPress={() => onCopyInvite(room)}
+            />
+            <InviteActionButton
+              accessibilityLabel={`Share invite code ${room.inviteCode}`}
+              icon="share-outline"
+              label="Share"
               onPress={() => onShareRoom(room)}
-              style={({ pressed }) => [styles.shareButton, pressed && styles.pressed]}
-            >
-              <Ionicons name="share-outline" size={15} color={theme.host} />
-              <Text style={styles.shareText}>Share</Text>
-            </Pressable>
+            />
           </View>
           <View style={styles.listStack}>
             {room.participants.length ? (
@@ -5099,17 +5116,19 @@ function HostTrack({
 function AppHeader({
   notificationCount = 0,
   onNotificationPress,
-  onProfilePress,
 }: {
   notificationCount?: number;
   onNotificationPress: () => void;
-  onProfilePress: () => void;
 }) {
   const navigation = useNavigation();
+  const router = useRouter();
   const handleOpenMenu = () => {
     (navigation as { dispatch: (action: { type: string }) => void }).dispatch({
       type: "OPEN_DRAWER",
     });
+  };
+  const handleOpenProfile = () => {
+    router.push("/profile");
   };
 
   return (
@@ -5134,14 +5153,38 @@ function AppHeader({
             onPress={handleOpenMenu}
           />
           <HeaderIconButton
-            accessibilityLabel="Sign out"
+            accessibilityLabel="Profile"
             icon="person-circle-outline"
-            onPress={onProfilePress}
+            onPress={handleOpenProfile}
             tone="profile"
           />
         </View>
       </View>
     </SafeAreaView>
+  );
+}
+
+function InviteActionButton({
+  accessibilityLabel,
+  icon,
+  label,
+  onPress,
+}: {
+  accessibilityLabel: string;
+  icon: React.ComponentProps<typeof Ionicons>["name"];
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityLabel={accessibilityLabel}
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => [styles.shareButton, pressed && styles.pressed]}
+    >
+      <Ionicons name={icon} size={15} color={theme.host} />
+      <Text style={styles.shareText}>{label}</Text>
+    </Pressable>
   );
 }
 
@@ -6149,6 +6192,18 @@ function notificationBannerMessage(notifications: Array<HackNotification>) {
 
   const latest = notifications[0];
   return `${latest.title} - ${latest.roomName}: ${latest.message}`;
+}
+
+async function copyInviteCodeToClipboard(
+  room: HackRoom,
+  setMessage: (message: { text: string; tone: Tone }) => void,
+) {
+  try {
+    await Clipboard.setStringAsync(room.inviteCode);
+    setMessage({ text: `Copied invite code ${room.inviteCode}`, tone: "violet" });
+  } catch {
+    setMessage({ text: "Could not copy invite code. Please try again.", tone: "red" });
+  }
 }
 
 function getInitials(name: string) {
@@ -7750,13 +7805,15 @@ const styles = StyleSheet.create({
     width: 32,
   },
   roomShareFloatingWrap: {
+    flexDirection: "row",
+    gap: 6,
     position: "absolute",
     right: 10,
     top: 10,
   },
   roomShareIconSpacer: {
     height: 32,
-    width: 32,
+    width: 70,
   },
   roomShelf: {
     gap: 10,
