@@ -1,13 +1,25 @@
 import { Button } from "@rdm-hack/ui/components/button";
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 
 import { authClient } from "@/lib/auth-client";
 import { NativeIcon } from "@/lib/native-icons";
+import { trpc } from "@/utils/trpc";
 
 export default function Header() {
   const { data: session } = authClient.useSession();
   const user = session?.user;
+  const dashboard = useQuery({
+    ...trpc.hackRoom.dashboard.queryOptions(),
+    enabled: Boolean(user),
+  });
+  const notifications = dashboard.data?.notifications ?? [];
+
+  function showNotifications() {
+    toast(notificationBannerMessage(notifications));
+  }
 
   return (
     <header className="sticky top-0 z-50 bg-[#0A0C0F]">
@@ -21,9 +33,22 @@ export default function Header() {
         </Link>
 
         <div className="flex h-full items-center gap-2">
-          <HeaderButton label="Notifications" to="/dashboard">
+          <Button
+            aria-label="Notifications"
+            className="relative grid size-10 rounded-[10px] border-[rgba(238,232,222,0.12)] bg-[#141618] p-0 text-[#EEE8DE] hover:bg-[#1A1D20]"
+            disabled={!user}
+            onClick={showNotifications}
+            title="Notifications"
+            type="button"
+            variant="outline"
+          >
             <NativeIcon className="size-[18px]" name="notifications-outline" />
-          </HeaderButton>
+            {notifications.length ? (
+              <span className="absolute -right-1 -top-1 grid min-w-4 place-items-center rounded-full border border-[#0A0C0F] bg-[#A060FF] px-1 font-mono text-[10px] font-black leading-4 text-[#EEE8DE]">
+                {notifications.length > 9 ? "9+" : notifications.length}
+              </span>
+            ) : null}
+          </Button>
           <AppMenu />
           {user ? (
             <Link to="/profile">
@@ -191,25 +216,13 @@ function DrawerMenuItem({
   );
 }
 
-function HeaderButton({
-  children,
-  label,
-  to,
-}: {
-  children: React.ReactNode;
-  label: string;
-  to: "/dashboard" | "/hack-room" | "/";
-}) {
-  return (
-    <Link to={to}>
-      <Button
-        aria-label={label}
-        className="grid size-10 rounded-[10px] border-[rgba(238,232,222,0.12)] bg-[#141618] p-0 text-[#EEE8DE] hover:bg-[#1A1D20]"
-        title={label}
-        variant="outline"
-      >
-        {children}
-      </Button>
-    </Link>
-  );
+function notificationBannerMessage(
+  notifications: Array<{ message: string; roomName: string; title: string }>,
+) {
+  if (!notifications.length) {
+    return "No new notifications right now";
+  }
+
+  const latest = notifications[0];
+  return `${latest.title} - ${latest.roomName}: ${latest.message}`;
 }
