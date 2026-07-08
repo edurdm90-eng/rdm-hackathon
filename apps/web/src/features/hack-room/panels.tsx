@@ -9,6 +9,7 @@ import {
   formatDate,
   getEmailTokens,
   getGameTypeInfo,
+  getSubmissionLedgerXrdm,
   getSubmissionProofItems,
   getTaskProofTypes,
   isEmailLike,
@@ -354,7 +355,7 @@ function WalletPanel({
   room?: HackRoom;
 }) {
   const balance =
-    mySubmissions.reduce((total, submission) => total + (submission.awardXrdm ?? (submission.status === "winner" ? submission.rewardXrdm ?? 0 : 0)), 0) +
+    mySubmissions.reduce((total, submission) => total + getSubmissionLedgerXrdm(submission), 0) +
     myRewards.reduce((total, reward) => total + (reward.awardXrdm ?? 0), 0);
   const verifiedCount = mySubmissions.filter((submission) =>
     ["approved", "winner"].includes(submission.status),
@@ -397,7 +398,7 @@ function WalletPanel({
               key={submission._id}
               label={submission.taskTitle}
               meta={`${submissionStatusLabel(submission.status)} - ${formatDate(submission.submittedAt)}`}
-              value={`+${submission.awardXrdm ?? submission.rewardXrdm ?? 0} XRDM`}
+              value={`+${getSubmissionLedgerXrdm(submission)} XRDM`}
             />
           ))}
           {myRewards.map((reward) => (
@@ -594,10 +595,10 @@ function RecipientSelector({
         {room.participants.map((participant) => {
           const active = selectedRecipientIds.includes(participant.userId);
           return (
-            <ChipButton
+            <RecipientButton
               active={active}
               key={participant.userId}
-              label={participant.name}
+              participant={participant}
               onClick={() =>
                 onRewardFormChange((current) => {
                   const currentIds = current.recipientIds.length ? current.recipientIds : allIds;
@@ -614,6 +615,40 @@ function RecipientSelector({
         })}
       </div>
     </Field>
+  );
+}
+
+function RecipientButton({
+  active,
+  onClick,
+  participant,
+}: {
+  active: boolean;
+  onClick: () => void;
+  participant: HackRoom["participants"][number];
+}) {
+  return (
+    <button
+      aria-pressed={active}
+      className={`flex min-h-12 max-w-full items-center gap-2 rounded-[8px] border px-3 py-2 text-left transition ${
+        active
+          ? "border-[#1EEAB0] bg-[#061F18] text-[#1EEAB0]"
+          : "border-[rgba(238,232,222,0.12)] bg-[#0D0F12] text-[#9C9690] hover:border-[#1EEAB0]/60"
+      }`}
+      onClick={onClick}
+      title={`${participant.name} - ${participant.email}`}
+      type="button"
+    >
+      <Avatar name={participant.name} tone={active ? "cyan" : "violet"} />
+      <span className="min-w-0">
+        <span className="block truncate font-mono text-[10px] font-semibold uppercase tracking-[0.08em]">
+          {participant.name}
+        </span>
+        <span className={`block truncate text-[11px] ${active ? "text-[#9CFFF0]" : "text-[#626058]"}`}>
+          {participant.email}
+        </span>
+      </span>
+    </button>
   );
 }
 

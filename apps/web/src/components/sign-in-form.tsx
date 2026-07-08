@@ -75,14 +75,21 @@ export default function SignInForm({ onSwitchToSignUp }: { onSwitchToSignUp: () 
               onSubmit={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
-                form.handleSubmit();
+                const formData = new FormData(event.currentTarget);
+                form.setFieldValue("email", getFormTextValue(formData, "email"), {
+                  dontValidate: true,
+                });
+                form.setFieldValue("password", getFormTextValue(formData, "password"), {
+                  dontValidate: true,
+                });
+                void form.handleSubmit();
               }}
             >
               <form.Field name="email">
                 {(field) => (
                   <AuthField label="Email" name={field.name}>
                     <Input
-                      autoComplete="email"
+                      autoComplete="username"
                       className={authInputClassName}
                       id={field.name}
                       name={field.name}
@@ -117,15 +124,12 @@ export default function SignInForm({ onSwitchToSignUp }: { onSwitchToSignUp: () 
               </form.Field>
 
               <form.Subscribe
-                selector={(state) => ({
-                  canSubmit: state.canSubmit,
-                  isSubmitting: state.isSubmitting,
-                })}
+                selector={(state) => state.isSubmitting}
               >
-                {({ canSubmit, isSubmitting }) => (
+                {(isSubmitting) => (
                   <Button
                     className="mt-1 h-[42px] w-full rounded-[9px] bg-[#1EEAB0] text-[13px] font-bold text-[#03120C] hover:bg-[#1EEAB0]/85"
-                    disabled={!canSubmit || isSubmitting}
+                    disabled={isSubmitting}
                     type="submit"
                   >
                     <LogIn className="size-4" />
@@ -202,4 +206,9 @@ function FieldErrors({ errors }: { errors: Array<{ message?: string } | undefine
       </p>
     ) : null,
   );
+}
+
+function getFormTextValue(formData: FormData, name: string) {
+  const value = formData.get(name);
+  return typeof value === "string" ? value : "";
 }

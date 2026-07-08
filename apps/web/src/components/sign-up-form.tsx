@@ -78,7 +78,17 @@ export default function SignUpForm({ onSwitchToSignIn }: { onSwitchToSignIn: () 
               onSubmit={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
-                form.handleSubmit();
+                const formData = new FormData(event.currentTarget);
+                form.setFieldValue("name", getFormTextValue(formData, "name"), {
+                  dontValidate: true,
+                });
+                form.setFieldValue("email", getFormTextValue(formData, "email"), {
+                  dontValidate: true,
+                });
+                form.setFieldValue("password", getFormTextValue(formData, "password"), {
+                  dontValidate: true,
+                });
+                void form.handleSubmit();
               }}
             >
               <form.Field name="name">
@@ -138,15 +148,12 @@ export default function SignUpForm({ onSwitchToSignIn }: { onSwitchToSignIn: () 
               </form.Field>
 
               <form.Subscribe
-                selector={(state) => ({
-                  canSubmit: state.canSubmit,
-                  isSubmitting: state.isSubmitting,
-                })}
+                selector={(state) => state.isSubmitting}
               >
-                {({ canSubmit, isSubmitting }) => (
+                {(isSubmitting) => (
                   <Button
                     className="mt-1 h-[42px] w-full rounded-[9px] bg-[#1EEAB0] text-[13px] font-bold text-[#03120C] hover:bg-[#1EEAB0]/85"
-                    disabled={!canSubmit || isSubmitting}
+                    disabled={isSubmitting}
                     type="submit"
                   >
                     <UserPlus className="size-4" />
@@ -223,4 +230,9 @@ function FieldErrors({ errors }: { errors: Array<{ message?: string } | undefine
       </p>
     ) : null,
   );
+}
+
+function getFormTextValue(formData: FormData, name: string) {
+  const value = formData.get(name);
+  return typeof value === "string" ? value : "";
 }

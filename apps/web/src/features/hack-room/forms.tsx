@@ -11,9 +11,11 @@ import {
   emptyRoomForm,
   emptyTaskForm,
   gameTypeOptions,
+  getMinimumDueAtInputValue,
   getSubmissionProofItems,
   getTaskProofTypes,
   hasRequiredProofItems,
+  isFutureDueAt,
   isEmailLike,
   makeEmptySubmitForm,
   minAssignmentDescriptionLength,
@@ -191,6 +193,10 @@ function AssignmentComposer({
   const isGame = assignmentMode === "game";
   const effectiveProofTypes = isNotification ? [] : normalizeTaskProofTypes(assignmentMode, proofTypes);
   const descriptionLength = taskForm.description.trim().length;
+  const dueAtError =
+    !isNotification && taskForm.dueAt.trim() && !isFutureDueAt(taskForm.dueAt)
+      ? "Choose a future due date and time."
+      : "";
   const minimumDescriptionLength = isNotification
     ? minNotificationMessageLength
     : minAssignmentDescriptionLength;
@@ -199,6 +205,7 @@ function AssignmentComposer({
     taskForm.title.trim().length >= 3 &&
     descriptionLength >= minimumDescriptionLength &&
     (isNotification || taskForm.dueAt.trim()) &&
+    !dueAtError &&
     (!isSpecial || taskForm.assignedToEmail.trim()) &&
     !createTaskPending &&
     !sendNotificationPending;
@@ -260,10 +267,12 @@ function AssignmentComposer({
             <Field label="Due Date and Time">
               <Input
                 className="h-10 rounded-[9px] border-[rgba(238,232,222,0.12)] bg-[#0D0F12] text-[13px] text-[#CCC6BA]"
+                min={getMinimumDueAtInputValue()}
                 onChange={(event) => setTaskForm((current) => ({ ...current, dueAt: event.target.value }))}
                 type="datetime-local"
                 value={taskForm.dueAt}
               />
+              {dueAtError ? <p className="text-xs leading-5 text-[#FF5A4A]">{dueAtError}</p> : null}
             </Field>
           ) : (
             <Field label="Audience">

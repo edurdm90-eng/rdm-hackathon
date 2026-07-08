@@ -25,6 +25,7 @@ import {
   getParticipantTabFromSegment,
   getRoomRouteParam,
   hasRequiredProofItems,
+  isFutureDueAt,
   hostTabSegments,
   isEmailLike,
   makeEmptyRewardForm,
@@ -342,6 +343,11 @@ export default function HackRoomPwa({
 
     if (!taskForm.dueAt.trim()) {
       showMessage("Choose a due date and time", "red");
+      return;
+    }
+
+    if (!isFutureDueAt(taskForm.dueAt)) {
+      showMessage("Choose a future due date and time", "red");
       return;
     }
 

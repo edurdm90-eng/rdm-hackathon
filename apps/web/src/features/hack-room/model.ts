@@ -74,6 +74,7 @@ export const defaultGameProofTypes: ProofType[] = ["game_score"];
 export const defaultSpecialProofTypes: ProofType[] = ["url"];
 export const minAssignmentDescriptionLength = 10;
 export const minNotificationMessageLength = 3;
+export const dueAtFutureBufferMs = 60_000;
 
 export const gameTypeOptions: Array<{
   description: string;
@@ -182,6 +183,25 @@ export const emptyTaskForm = {
   rewardXrdm: "20",
   title: "",
 };
+
+function padDatePart(value: number) {
+  return value.toString().padStart(2, "0");
+}
+
+export function getMinimumDueAtInputValue(date = new Date()) {
+  const minimum = new Date(date.getTime() + dueAtFutureBufferMs);
+  return `${minimum.getFullYear()}-${padDatePart(minimum.getMonth() + 1)}-${padDatePart(minimum.getDate())}T${padDatePart(minimum.getHours())}:${padDatePart(minimum.getMinutes())}`;
+}
+
+export function parseDueAtInputValue(value: string) {
+  const timestamp = new Date(value).getTime();
+  return Number.isNaN(timestamp) ? null : timestamp;
+}
+
+export function isFutureDueAt(value: string, date = new Date()) {
+  const timestamp = parseDueAtInputValue(value);
+  return timestamp !== null && timestamp >= date.getTime() + dueAtFutureBufferMs;
+}
 
 export function makeEmptyProofItems(): Record<ProofType, string> {
   return {
@@ -443,6 +463,12 @@ export function rewardKindLabel(kind: RewardKind) {
   return "NFT Badge";
 }
 
+export function getSubmissionLedgerXrdm(
+  submission: Pick<HackSubmission, "awardXrdm" | "rewardXrdm">,
+) {
+  return submission.awardXrdm ?? submission.rewardXrdm ?? 0;
+}
+
 export function buildLeaderboard(room: HackRoom | undefined, submissions: HackSubmission[], rewards: HackReward[]) {
   const entries = new Map<string, { email: string; name: string; points: number; wins: number }>();
   room?.participants.forEach((participant) => {
@@ -462,7 +488,7 @@ export function buildLeaderboard(room: HackRoom | undefined, submissions: HackSu
         points: 0,
         wins: 0,
       };
-    existing.points += submission.awardXrdm ?? (submission.status === "winner" ? (submission.rewardXrdm ?? 0) : 0);
+    existing.points += getSubmissionLedgerXrdm(submission);
     existing.wins += submission.status === "winner" ? 1 : 0;
     entries.set(submission.participantId, existing);
   });
