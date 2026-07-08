@@ -10,6 +10,7 @@ import { queryClient, trpc } from "@/utils/trpc";
 import { RoomCommandCenter } from "./forms";
 import {
   buildRoomEntries,
+  countUniqueNetworkParticipants,
   emptyRoomForm,
   firstName,
   getRoomRouteParam,
@@ -246,6 +247,8 @@ export function HackRoomProfilePwa({ user }: { user: SessionUser }) {
   const navigate = useNavigate();
   const dashboard = useQuery(trpc.hackRoom.dashboard.queryOptions());
   const stats = dashboard.data?.stats;
+  const hostedRooms = dashboard.data?.hostedRooms ?? [];
+  const networkCount = countUniqueNetworkParticipants(hostedRooms, user.id);
 
   async function handleSignOut() {
     await authClient.signOut();
@@ -266,7 +269,7 @@ export function HackRoomProfilePwa({ user }: { user: SessionUser }) {
         <div className="mt-4 grid grid-cols-3 gap-2">
           <StatBox label="Rooms" value={(stats?.activeRooms ?? 0) + (stats?.joinedRooms ?? 0)} />
           <StatBox label="Wins" value={stats?.winners ?? 0} tone="gold" />
-          <StatBox label="Network" value={stats?.participants ?? 0} tone="violet" />
+          <StatBox label="Network" value={networkCount} tone="violet" />
         </div>
       </section>
 

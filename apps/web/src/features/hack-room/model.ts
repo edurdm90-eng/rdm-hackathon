@@ -256,6 +256,18 @@ export function buildRoomEntries(hostedRooms: HackRoom[], joinedRooms: HackRoom[
   return rooms;
 }
 
+export function countUniqueNetworkParticipants(rooms: HackRoom[], currentUserId: string) {
+  const participantIds = new Set<string>();
+  rooms.forEach((room) => {
+    room.participants.forEach((participant) => {
+      if (participant.userId !== currentUserId && participant.userId !== room.hostId) {
+        participantIds.add(participant.userId);
+      }
+    });
+  });
+  return participantIds.size;
+}
+
 export function slugifyRoomName(name: string) {
   return name
     .toLowerCase()

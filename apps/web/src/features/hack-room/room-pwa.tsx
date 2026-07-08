@@ -96,6 +96,7 @@ export default function HackRoomPwa({
   const selectedRoomId = selectedRoom?._id ?? "";
   const activeHostTab = roomTab ? getHostTabFromSegment(roomTab) : hostTab;
   const activeParticipantTab = roomTab ? getParticipantTabFromSegment(roomTab) : participantTab;
+  const isStandaloneWallet = role === "participant" && activeParticipantTab === "wallet";
 
   const roomTasks = useMemo(
     () =>
@@ -529,15 +530,17 @@ export default function HackRoomPwa({
           <span className="text-[13px] font-semibold text-[#EEE8DE]">Hack Rooms</span>
         </button>
 
-        <RoomHero
-          role={role}
-          room={selectedRoom}
-          stats={{
-            participants: selectedRoom?.participants.length ?? 0,
-            tasks: roomTasks.length,
-            winners: roomWinners.length,
-          }}
-        />
+        {isStandaloneWallet ? null : (
+          <RoomHero
+            role={role}
+            room={selectedRoom}
+            stats={{
+              participants: selectedRoom?.participants.length ?? 0,
+              tasks: roomTasks.length,
+              winners: roomWinners.length,
+            }}
+          />
+        )}
 
         {isBusy ? (
           <div className="mb-3 flex items-center gap-2 rounded-[10px] border border-[rgba(238,232,222,0.12)] bg-[#141618] px-3 py-2 text-xs text-[#9C9690]">

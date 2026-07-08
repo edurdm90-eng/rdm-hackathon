@@ -402,6 +402,14 @@ function ParticipantSurface({
     selectedTask && isParticipantSubmitTask(selectedTask) ? selectedTask : undefined;
   const submitSelectedSubmission = submitSelectedTask ? selectedSubmission : undefined;
 
+  if (activeTab === "wallet") {
+    return (
+      <section>
+        <WalletPanel myRewards={myRewards} mySubmissions={mySubmissions} ownerName={user.name} room={room} />
+      </section>
+    );
+  }
+
   return (
     <section>
       <Tabs activeTab={activeTab} onSelect={onSelectTab} tabs={participantTabs} />
@@ -449,11 +457,6 @@ function ParticipantSurface({
         </ActionScreen>
       ) : null}
 
-      {activeTab === "wallet" ? (
-        <ActionScreen title="Wallet" >
-          <WalletPanel myRewards={myRewards} mySubmissions={mySubmissions} room={room} />
-        </ActionScreen>
-      ) : null}
     </section>
   );
 }

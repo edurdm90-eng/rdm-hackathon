@@ -348,10 +348,12 @@ function ParticipantHistoryPanel({
 function WalletPanel({
   myRewards,
   mySubmissions,
+  ownerName,
   room,
 }: {
   myRewards: HackReward[];
   mySubmissions: DashboardData["mySubmissions"];
+  ownerName?: string;
   room?: HackRoom;
 }) {
   const balance =
@@ -379,7 +381,7 @@ function WalletPanel({
         </div>
       </div>
 
-      <SectionCard eyebrow="My XRDM Balance" title={room?.name ?? "Wallet"} badge={`${balance} XRDM`}>
+      <SectionCard eyebrow="My XRDM Balance" title={ownerName ?? "Wallet"} badge={`${balance} XRDM`}>
         <div className="mb-3 flex items-baseline gap-2">
           <div className="text-[32px] font-medium text-[#EEE8DE]">{balance}</div>
           <div className="text-[13px] font-medium text-[#626058]">XRDM</div>
