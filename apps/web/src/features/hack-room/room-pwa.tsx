@@ -95,7 +95,7 @@ export default function HackRoomPwa({
   const selectedRoomId = selectedRoom?._id ?? "";
   const activeHostTab = roomTab ? getHostTabFromSegment(roomTab) : hostTab;
   const activeParticipantTab = roomTab ? getParticipantTabFromSegment(roomTab) : participantTab;
-  const isStandaloneWallet = role === "participant" && activeParticipantTab === "wallet";
+  const isStandaloneWallet = activeParticipantTab === "wallet";
 
   const roomTasks = useMemo(
     () =>
@@ -560,6 +560,30 @@ export default function HackRoomPwa({
               Back to Hack Rooms
             </Button>
           </SectionCard>
+        ) : isStandaloneWallet ? (
+          <ParticipantSurface
+            activeTab="wallet"
+            inviteCode={inviteCode}
+            joinRoomPending={joinRoom.isPending}
+            joinedRooms={joinedRooms}
+            myRewards={myRoomRewards}
+            mySubmissions={roomMySubmissions}
+            onInviteCodeChange={setInviteCode}
+            onJoinRoom={() => joinRoom.mutate({ inviteCode })}
+            onSelectTab={selectParticipantTab}
+            onSelectTask={setSelectedTaskId}
+            onSubmitFormChange={setSubmitForm}
+            onSubmitProof={handleSubmitProof}
+            room={selectedRoom}
+            selectedSubmission={selectedSubmission}
+            selectedTask={selectedTask}
+            selectedTaskId={selectedTaskId}
+            showJoinTrack={false}
+            submitForm={submitForm}
+            submitProofPending={submitProof.isPending}
+            tasks={roomTasks}
+            user={user}
+          />
         ) : role === "host" ? (
           <HostSurface
             activeTab={activeHostTab}
