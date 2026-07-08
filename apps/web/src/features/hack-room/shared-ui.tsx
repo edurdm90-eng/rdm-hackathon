@@ -299,7 +299,7 @@ function ProofItemsList({ proofItems }: { proofItems: Array<{ type: ProofType; v
         const isLinkProof = proofItem.type !== "game_score";
         return (
           <a
-            className="flex items-center justify-between gap-3 rounded-[8px] border border-[rgba(238,232,222,0.12)] bg-[#141618] px-2.5 py-2"
+            className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-[8px] border border-[rgba(238,232,222,0.12)] bg-[#141618] px-2.5 py-2"
             href={isLinkProof ? toExternalUrl(proofItem.value) : undefined}
             key={`${proofItem.type}-${index}`}
             rel="noreferrer"
@@ -316,7 +316,7 @@ function ProofItemsList({ proofItems }: { proofItems: Array<{ type: ProofType; v
                 <span className="block truncate text-[10px] text-[#626058]">{proofItem.value}</span>
               </span>
             </span>
-            <span className="text-[11px] font-medium text-[#1EEAB0]">
+            <span className="shrink-0 whitespace-nowrap text-[11px] font-medium text-[#1EEAB0]">
               {isLinkProof ? "Open" : "Result"}
             </span>
           </a>

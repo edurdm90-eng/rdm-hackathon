@@ -4,7 +4,6 @@ import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
-import { authClient } from "@/lib/auth-client";
 import { NativeIcon } from "@/lib/native-icons";
 import { queryClient, trpc } from "@/utils/trpc";
 
@@ -489,12 +488,6 @@ export default function HackRoomPwa({
     showMessage("Invite copied to clipboard", "cyan");
   }
 
-  async function handleSignOut() {
-    await authClient.signOut();
-    await queryClient.invalidateQueries();
-    window.location.assign("/login");
-  }
-
   function selectHostTab(tab: HostTab) {
     if (roomId) {
       navigate({
@@ -589,6 +582,7 @@ export default function HackRoomPwa({
             onCopyInvite={copyInviteCode}
             onCreateRoom={() => createRoom.mutate(roomForm)}
             onCreateTask={handleCreateTask}
+            onExitRoom={() => navigate({ to: "/hack-room" })}
             onFeedbackChange={(submissionId, value) =>
               setFeedbackBySubmission((current) => ({ ...current, [submissionId]: value }))
             }
@@ -601,7 +595,6 @@ export default function HackRoomPwa({
             onSelectTab={selectHostTab}
             onSelectWinner={handleSelectWinner}
             onShareInvite={shareInvite}
-            onSignOut={handleSignOut}
             pendingSubmissions={pendingSubmissions}
             proofTypes={proofTypes}
             rewardForm={rewardForm}

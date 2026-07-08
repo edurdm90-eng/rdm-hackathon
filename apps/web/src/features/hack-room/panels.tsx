@@ -454,13 +454,13 @@ function LeaderboardPanel({
 }
 
 function RoomProfile({
+  onExitRoom,
   onShareInvite,
-  onSignOut,
   room,
   user,
 }: {
+  onExitRoom: () => void;
   onShareInvite: (room: HackRoom) => void;
-  onSignOut: () => void;
   room?: HackRoom;
   user: SessionUser;
 }) {
@@ -482,13 +482,13 @@ function RoomProfile({
               Share Invite
             </Button>
             <Button
-              className="h-10 rounded-[10px] border-[#FF5A4A] bg-[#280A08] text-[#FF5A4A] hover:bg-[#280A08]/80"
-              onClick={onSignOut}
+              className="h-10 rounded-[10px] border-[#F0C040] bg-[#241A00] text-[#F0C040] hover:bg-[#241A00]/80"
+              onClick={onExitRoom}
               type="button"
               variant="outline"
             >
-              <NativeIcon className="size-4" name="log-out-outline" />
-              Sign Out
+              <NativeIcon className="size-4" name="arrow-back-outline" />
+              Exit Room
             </Button>
           </div>
         </>
@@ -497,13 +497,13 @@ function RoomProfile({
           <ProfileField label="Name" value={user.name} />
           <ProfileField label="Email" value={user.email} />
           <Button
-            className="mt-3 h-10 w-full rounded-[10px] border-[#FF5A4A] bg-[#280A08] text-[#FF5A4A]"
-            onClick={onSignOut}
+            className="mt-3 h-10 w-full rounded-[10px] border-[#F0C040] bg-[#241A00] text-[#F0C040]"
+            onClick={onExitRoom}
             type="button"
             variant="outline"
           >
-            <NativeIcon className="size-4" name="log-out-outline" />
-            Sign Out
+            <NativeIcon className="size-4" name="arrow-back-outline" />
+            Back to Rooms
           </Button>
         </>
       )}

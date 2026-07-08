@@ -129,6 +129,7 @@ function HostSurface({
   onCreateRoom,
   onCreateTask,
   onFeedbackChange,
+  onExitRoom,
   onInviteCodeChange,
   onIssueReward,
   onJoinRoom,
@@ -138,7 +139,6 @@ function HostSurface({
   onSelectTab,
   onSelectWinner,
   onShareInvite,
-  onSignOut,
   pendingSubmissions,
   proofTypes,
   rewardForm,
@@ -174,6 +174,7 @@ function HostSurface({
   onCreateRoom: () => void;
   onCreateTask: () => void;
   onFeedbackChange: (submissionId: string, value: string) => void;
+  onExitRoom: () => void;
   onInviteCodeChange: (value: string) => void;
   onIssueReward: (kind: RewardKind) => void;
   onJoinRoom: () => void;
@@ -183,7 +184,6 @@ function HostSurface({
   onSelectTab: (tab: HostTab) => void;
   onSelectWinner: (submission: HackSubmission) => void;
   onShareInvite: (room: HackRoom) => void;
-  onSignOut: () => void;
   pendingSubmissions: HackSubmission[];
   proofTypes: ProofType[];
   rewardForm: ReturnType<typeof makeEmptyRewardForm>;
@@ -341,8 +341,8 @@ function HostSurface({
       {activeTab === "profile" ? (
         <ActionScreen title="Profile" >
           <RoomProfile
+            onExitRoom={onExitRoom}
             onShareInvite={onShareInvite}
-            onSignOut={onSignOut}
             room={room}
             user={user}
           />
