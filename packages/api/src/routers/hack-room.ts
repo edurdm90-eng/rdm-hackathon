@@ -325,28 +325,22 @@ export const hackRoomRouter = router({
         ...notification,
         roomName: roomById.get(notification.roomId)?.name ?? "Hack room",
       })),
-      mySubmissions: mySubmissions
-        .filter((submission) => taskById.has(submission.taskId))
-        .sort(byNewest)
-        .map((submission) => {
-          const task = taskById.get(submission.taskId);
-          const room = roomById.get(submission.roomId);
-          return {
-            ...submission,
-            gameType:
-              (task?.kind ?? "task") === "game" ? (task?.gameType ?? "memory_match") : task?.gameType,
-            proofItems: normalizeProofItems(submission),
-            roomName: room?.name ?? "Hack room",
-            taskKind: task?.kind ?? "task",
-            taskTitle: task?.title ?? "Hack task",
-            rewardXrdm: task?.rewardXrdm ?? submission.awardXrdm ?? 0,
-          };
-        }),
+      mySubmissions: mySubmissions.sort(byNewest).map((submission) => {
+        const task = taskById.get(submission.taskId);
+        const room = roomById.get(submission.roomId);
+        return {
+          ...submission,
+          gameType:
+            (task?.kind ?? "task") === "game" ? (task?.gameType ?? "memory_match") : task?.gameType,
+          proofItems: normalizeProofItems(submission),
+          roomName: room?.name ?? "Hack room",
+          taskKind: task?.kind ?? "task",
+          taskTitle: task?.title ?? "Hack task",
+          rewardXrdm: task?.rewardXrdm ?? submission.awardXrdm ?? 0,
+        };
+      }),
       hostSubmissions: hostSubmissions.map(withSubmissionContext).sort(byNewest),
-      visibleWinners: visibleWinnerSubmissions
-        .filter((submission) => taskById.has(submission.taskId))
-        .map(withSubmissionContext)
-        .sort(byNewest),
+      visibleWinners: visibleWinnerSubmissions.map(withSubmissionContext).sort(byNewest),
       rewards: visibleRewards.sort(byNewest).map((reward) => ({
         ...reward,
         label: rewardLabel(reward.kind),
@@ -537,20 +531,13 @@ export const hackRoomRouter = router({
         });
       }
 
-      const taskKind = task.kind ?? "task";
       const isParticipant = room.participants.some(
         (participant) => participant.userId === ctx.session.user.id,
       );
-      const isSpecialAssignee = taskKind === "special" && isSpecialTaskForUser(task, ctx.session.user);
+      const isSpecialAssignee =
+        (task.kind ?? "task") === "special" && isSpecialTaskForUser(task, ctx.session.user);
 
-      if (taskKind === "special" && !isSpecialAssignee) {
-        throw new TRPCError({
-          code: "FORBIDDEN",
-          message: "Only the assigned participant can submit proof for this special task",
-        });
-      }
-
-      if (taskKind !== "special" && !isParticipant) {
+      if (!isParticipant && !isSpecialAssignee) {
         throw new TRPCError({
           code: "FORBIDDEN",
           message: "Join this hack room before submitting proof",

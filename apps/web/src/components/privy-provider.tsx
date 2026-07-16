@@ -6,6 +6,10 @@ import { ClientWebPrivyProvider } from "./privy-provider.client";
 
 export type PrivyLoginOptions = {
   loginMethods?: string[];
+  prefill?: {
+    type: "email" | "phone";
+    value: string;
+  };
 };
 
 type PrivyAuthContextValue = {

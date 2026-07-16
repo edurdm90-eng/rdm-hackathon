@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
+    "@noble/hashes": "catalog:",
     "@rdm-hack/api": "workspace:*",
     "@rdm-hack/env": "workspace:*",
     "@rdm-hack/ui": "workspace:*",
