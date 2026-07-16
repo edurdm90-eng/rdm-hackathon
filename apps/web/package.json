@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
+    "@noble/hashes": "catalog:",
     "@rdm-hack/api": "workspace:*",
     "@rdm-hack/env": "workspace:*",
     "@rdm-hack/ui": "workspace:*",
@@ -22,12 +23,14 @@
     "@trpc/client": "catalog:",
     "@trpc/server": "catalog:",
     "@trpc/tanstack-react-query": "catalog:",
+    "@privy-io/react-auth": "catalog:",
     "better-auth": "catalog:",
     "dotenv": "catalog:",
     "lucide-react": "^1.8.0",
     "next-themes": "catalog:",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
+    "react-icons": "^5.7.0",
     "sonner": "^2.0.7",
     "zod": "catalog:"
   },

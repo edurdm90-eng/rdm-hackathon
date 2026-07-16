@@ -19,11 +19,14 @@
       "@trpc/client": "^11.16.0",
       "@tanstack/react-form": "^1.28.0",
       "@types/react-dom": "^19.2.3",
-      "@better-auth/expo": "1.6.11"
+      "@better-auth/expo": "1.6.11",
+      "@noble/hashes": "1.8.0",
+      "@privy-io/react-auth": "3.18.0"
     }
   },
   "overrides": {
-    "bson": "7.2.0"
+    "bson": "7.2.0",
+    "ox": "^1.0.0"
   },
   "type": "module",
   "scripts": {

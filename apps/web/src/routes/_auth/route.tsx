@@ -5,7 +5,7 @@ import { authClient } from "@/lib/auth-client";
 export const Route = createFileRoute("/_auth")({
   component: AuthLayout,
   beforeLoad: async () => {
-    const session = await authClient.getSession();
+    const session = await getSessionOrRedirect();
     if (!session.data) {
       throw redirect({
         to: "/login",
@@ -17,4 +17,14 @@ export const Route = createFileRoute("/_auth")({
 
 function AuthLayout() {
   return <Outlet />;
+}
+
+async function getSessionOrRedirect() {
+  try {
+    return await authClient.getSession();
+  } catch {
+    throw redirect({
+      to: "/login",
+    });
+  }
 }

@@ -1,12 +1,10 @@
 import { Button } from "@rdm-hack/ui/components/button";
-import { Input } from "@rdm-hack/ui/components/input";
-import { Label } from "@rdm-hack/ui/components/label";
-import { useForm } from "@tanstack/react-form";
+import { Card, CardContent, CardTitle } from "@rdm-hack/ui/components/card";
 import { useNavigate } from "@tanstack/react-router";
+import { UserPlus } from "lucide-react";
 import { toast } from "sonner";
-import z from "zod";
 
-import { authClient } from "@/lib/auth-client";
+import { usePrivyAuth } from "@/components/privy-provider";
 
 import Loader from "./loader";
 
@@ -14,147 +12,85 @@ export default function SignUpForm({ onSwitchToSignIn }: { onSwitchToSignIn: () 
   const navigate = useNavigate({
     from: "/",
   });
-  const { isPending } = authClient.useSession();
+  const { configurationError, login, ready } = usePrivyAuth();
 
-  const form = useForm({
-    defaultValues: {
-      email: "",
-      password: "",
-      name: "",
-    },
-    onSubmit: async ({ value }) => {
-      await authClient.signUp.email(
-        {
-          email: value.email,
-          password: value.password,
-          name: value.name,
-        },
-        {
-          onSuccess: () => {
-            navigate({
-              to: "/dashboard",
-            });
-            toast.success("Sign up successful");
-          },
-          onError: (error) => {
-            toast.error(error.error.message || error.error.statusText);
-          },
-        },
-      );
-    },
-    validators: {
-      onSubmit: z.object({
-        name: z.string().min(2, "Name must be at least 2 characters"),
-        email: z.email("Invalid email address"),
-        password: z.string().min(8, "Password must be at least 8 characters"),
-      }),
-    },
-  });
+  async function handlePrivyLogin() {
+    if (configurationError) {
+      toast.error(configurationError);
+      return;
+    }
 
-  if (isPending) {
+    await login({ loginMethods: ["email", "google"] });
+    navigate({
+      to: "/dashboard",
+    });
+    toast.success("Privy account ready");
+  }
+
+  if (!ready) {
     return <Loader />;
   }
 
   return (
-    <div className="mx-auto w-full mt-10 max-w-md p-6">
-      <h1 className="mb-6 text-center text-3xl font-bold">Create Account</h1>
+    <main className="flex min-h-full items-center justify-center bg-[#0A0C0F] px-4 py-6 text-[#EEE8DE]">
+      <div className="flex w-full max-w-[420px] flex-col items-center">
+        <img
+          alt="RDM"
+          className="mb-3 h-[92px] w-[240px] object-contain"
+          src="/icons/rdm-logo.png"
+        />
 
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          form.handleSubmit();
-        }}
-        className="space-y-4"
-      >
-        <div>
-          <form.Field name="name">
-            {(field) => (
-              <div className="space-y-2">
-                <Label htmlFor={field.name}>Name</Label>
-                <Input
-                  id={field.name}
-                  name={field.name}
-                  value={field.state.value}
-                  onBlur={field.handleBlur}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                />
-                {field.state.meta.errors.map((error) => (
-                  <p key={error?.message} className="text-red-500">
-                    {error?.message}
-                  </p>
-                ))}
-              </div>
-            )}
-          </form.Field>
-        </div>
+        <Card className="w-full gap-3 rounded-[11px] border border-[rgba(238,232,222,0.12)] bg-[#141618] p-4 py-4 text-[#EEE8DE] ring-0">
+          <CardContent className="grid gap-3 p-0">
+            <AuthSegment active="create" onSwitchToSignIn={onSwitchToSignIn} />
+            <CardTitle className="text-base font-bold tracking-normal text-[#EEE8DE]">
+              Create Privy Account
+            </CardTitle>
+            {configurationError ? (
+              <p className="rounded-[9px] border border-[#904200] bg-[#241000] px-3 py-2 text-xs leading-5 text-[#FF8820]">
+                {configurationError}
+              </p>
+            ) : null}
 
-        <div>
-          <form.Field name="email">
-            {(field) => (
-              <div className="space-y-2">
-                <Label htmlFor={field.name}>Email</Label>
-                <Input
-                  id={field.name}
-                  name={field.name}
-                  type="email"
-                  value={field.state.value}
-                  onBlur={field.handleBlur}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                />
-                {field.state.meta.errors.map((error) => (
-                  <p key={error?.message} className="text-red-500">
-                    {error?.message}
-                  </p>
-                ))}
-              </div>
-            )}
-          </form.Field>
-        </div>
-
-        <div>
-          <form.Field name="password">
-            {(field) => (
-              <div className="space-y-2">
-                <Label htmlFor={field.name}>Password</Label>
-                <Input
-                  id={field.name}
-                  name={field.name}
-                  type="password"
-                  value={field.state.value}
-                  onBlur={field.handleBlur}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                />
-                {field.state.meta.errors.map((error) => (
-                  <p key={error?.message} className="text-red-500">
-                    {error?.message}
-                  </p>
-                ))}
-              </div>
-            )}
-          </form.Field>
-        </div>
-
-        <form.Subscribe
-          selector={(state) => ({ canSubmit: state.canSubmit, isSubmitting: state.isSubmitting })}
-        >
-          {({ canSubmit, isSubmitting }) => (
-            <Button type="submit" className="w-full" disabled={!canSubmit || isSubmitting}>
-              {isSubmitting ? "Submitting..." : "Sign Up"}
+            <Button
+              className="mt-1 h-[42px] w-full rounded-[9px] bg-[#1EEAB0] text-[13px] font-bold text-[#03120C] hover:bg-[#1EEAB0]/85"
+              onClick={() => void handlePrivyLogin()}
+              type="button"
+            >
+              <UserPlus className="size-4" />
+              Continue with Privy
             </Button>
-          )}
-        </form.Subscribe>
-      </form>
-
-      <div className="mt-4 text-center">
-        <Button
-          variant="link"
-          onClick={onSwitchToSignIn}
-          className="text-indigo-600 hover:text-indigo-800"
-        >
-          Already have an account? Sign In
-        </Button>
+          </CardContent>
+        </Card>
       </div>
+    </main>
+  );
+}
+
+function AuthSegment({
+  active,
+  onSwitchToSignIn,
+}: {
+  active: "create";
+  onSwitchToSignIn: () => void;
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-1 rounded-[8px] border border-[rgba(238,232,222,0.12)] bg-[#0D0F12] p-1">
+      <Button
+        className="h-8 rounded-[6px] border-transparent bg-transparent text-[11px] font-bold text-[#CCC6BA] hover:bg-[#061F18]/60 hover:text-[#1EEAB0]"
+        onClick={onSwitchToSignIn}
+        type="button"
+        variant="ghost"
+      >
+        Sign In
+      </Button>
+      <Button
+        className="h-8 rounded-[6px] border-[#4A1A90] bg-[#160A2A] text-[11px] font-bold text-[#A060FF] hover:bg-[#160A2A]/90"
+        type="button"
+        variant="outline"
+      >
+        Create
+      </Button>
     </div>
   );
 }
