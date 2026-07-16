@@ -345,15 +345,31 @@ function AuthGateway() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <Image
-          accessibilityIgnoresInvertColors
-          resizeMode="cover"
-          source={rdmLogo}
-          style={styles.authLogo}
-        />
+        <View style={styles.authBrandBlock}>
+          <View style={styles.authLogoFrame}>
+            <Image
+              accessibilityIgnoresInvertColors
+              resizeMode="contain"
+              source={rdmLogo}
+              style={styles.authLogo}
+            />
+          </View>
+          <View style={styles.authBrandText}>
+            <Text style={styles.authEyebrow}>RDM Hack Room</Text>
+            <Text style={styles.authHeadline}>Welcome back</Text>
+          </View>
+        </View>
 
         <View style={styles.authCard}>
-          <Text style={styles.formTitle}>Sign In With Privy</Text>
+          <View style={styles.authCardHeader}>
+            <View style={styles.authIconBadge}>
+              <Ionicons name="mail-unread-outline" size={20} color={theme.participant} />
+            </View>
+            <View style={styles.authTitleBlock}>
+              <Text style={styles.formTitle}>Email sign in</Text>
+              <Text style={styles.authSubtitle}>Continue with a verified Privy code.</Text>
+            </View>
+          </View>
 
           {!isReady ? (
             <StatusBanner message="Preparing secure sign-in..." tone="cyan" />
@@ -439,6 +455,17 @@ function AuthGateway() {
               />
             </View>
           ) : null}
+
+          <View style={styles.authFooter}>
+            <View style={styles.authPill}>
+              <Ionicons name="shield-checkmark-outline" size={13} color={theme.participant} />
+              <Text style={styles.authPillText}>Privy secured</Text>
+            </View>
+            <View style={[styles.authPill, styles.authPillHost]}>
+              <Ionicons name="people-outline" size={13} color={theme.host} />
+              <Text style={[styles.authPillText, styles.authPillTextHost]}>Member default</Text>
+            </View>
+          </View>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -6286,29 +6313,119 @@ function formatDateTimeValue(value: string) {
 }
 
 const styles = StyleSheet.create({
+  authBrandBlock: {
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 18,
+    width: "100%",
+  },
+  authBrandText: {
+    alignItems: "center",
+    gap: 4,
+  },
   authCard: {
+    backgroundColor: theme.panelStrong,
+    borderColor: theme.borderStrong,
+    borderRadius: 14,
+    borderWidth: 1,
+    gap: 14,
+    maxWidth: 420,
+    padding: 18,
+    width: "100%",
+  },
+  authCardHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 12,
+  },
+  authEyebrow: {
+    color: theme.participant,
+    fontFamily: Platform.select({ default: "monospace" }),
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 1.2,
+    textAlign: "center",
+    textTransform: "uppercase",
+  },
+  authFooter: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    paddingTop: 2,
+  },
+  authHeadline: {
+    color: theme.text,
+    fontSize: 26,
+    fontWeight: "900",
+    letterSpacing: 0,
+    lineHeight: 31,
+    textAlign: "center",
+  },
+  authIconBadge: {
+    alignItems: "center",
+    backgroundColor: theme.participantDark,
+    borderColor: theme.participantBorder,
+    borderRadius: 13,
+    borderWidth: 1,
+    height: 46,
+    justifyContent: "center",
+    width: 46,
+  },
+  authLogoFrame: {
+    alignItems: "center",
     backgroundColor: theme.panel,
     borderColor: theme.border,
-    borderRadius: 11,
+    borderRadius: 16,
     borderWidth: 1,
-    gap: 12,
-    maxWidth: 420,
-    padding: 16,
-    width: "100%",
+    height: 96,
+    justifyContent: "center",
+    width: 144,
   },
   authSecondaryActions: {
     gap: 8,
   },
+  authPill: {
+    alignItems: "center",
+    backgroundColor: theme.participantDark,
+    borderColor: theme.participantBorder,
+    borderRadius: 999,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 5,
+    minHeight: 28,
+    paddingHorizontal: 10,
+  },
+  authPillHost: {
+    backgroundColor: theme.hostDark,
+    borderColor: theme.hostBorder,
+  },
+  authPillText: {
+    color: theme.participant,
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  authPillTextHost: {
+    color: theme.host,
+  },
   authLogo: {
-    height: 92,
-    marginBottom: 12,
-    width: 240,
+    height: 68,
+    width: 118,
   },
   authScrollContent: {
     alignItems: "center",
     flexGrow: 1,
     justifyContent: "center",
-    padding: 16,
+    paddingHorizontal: 18,
+    paddingVertical: 28,
+  },
+  authSubtitle: {
+    color: theme.dim,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  authTitleBlock: {
+    flex: 1,
+    gap: 2,
   },
   avatar: {
     alignItems: "center",
