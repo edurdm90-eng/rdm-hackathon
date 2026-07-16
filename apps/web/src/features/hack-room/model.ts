@@ -35,6 +35,7 @@ export type SessionUser = {
   email: string;
   id: string;
   name: string;
+  walletAddress?: string;
 };
 export type MiniGameResult = {
   gameType: GameType;

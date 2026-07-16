@@ -3,6 +3,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 
+import { usePrivyAuth } from "@/components/privy-provider";
 import { authClient } from "@/lib/auth-client";
 import { NativeIcon, createNativeIcon } from "@/lib/native-icons";
 import { queryClient, trpc } from "@/utils/trpc";
@@ -245,12 +246,14 @@ export function HackRoomRoomsPwa({ user: _user }: { user: SessionUser }) {
 
 export function HackRoomProfilePwa({ user }: { user: SessionUser }) {
   const navigate = useNavigate();
+  const { logout } = usePrivyAuth();
   const dashboard = useQuery(trpc.hackRoom.dashboard.queryOptions());
   const stats = dashboard.data?.stats;
   const hostedRooms = dashboard.data?.hostedRooms ?? [];
   const networkCount = countUniqueNetworkParticipants(hostedRooms, user.id);
 
   async function handleSignOut() {
+    await logout();
     await authClient.signOut();
     await queryClient.invalidateQueries();
     navigate({ to: "/login" });
@@ -278,6 +281,9 @@ export function HackRoomProfilePwa({ user }: { user: SessionUser }) {
       <SectionCard badge="Account" eyebrow="Profile" title="Account Details">
         <ProfileField label="Name" value={user.name} />
         <ProfileField label="Email" value={user.email} />
+        {user.walletAddress ? (
+          <ProfileField label="Wallet" value={user.walletAddress} tone="gold" />
+        ) : null}
         <ProfileField label="User ID" value={user.id} />
         <Button
           className="mt-3 h-10 w-full rounded-[10px] border-[#FF5A4A] bg-[#280A08] text-[#FF5A4A] hover:bg-[#280A08]/80"

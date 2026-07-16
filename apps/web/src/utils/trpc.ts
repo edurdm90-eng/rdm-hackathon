@@ -5,6 +5,8 @@ import { createTRPCClient, httpBatchLink } from "@trpc/client";
 import { createTRPCOptionsProxy } from "@trpc/tanstack-react-query";
 import { toast } from "sonner";
 
+import { getPrivyAccessToken } from "@/lib/privy-session";
+
 export const queryClient = new QueryClient({
   queryCache: new QueryCache({
     onError: (error, query) => {
@@ -25,9 +27,17 @@ export const trpcClient = createTRPCClient<AppRouter>({
     httpBatchLink({
       url: `${env.VITE_SERVER_URL}/trpc`,
       fetch(url, options) {
+        const headers = new Headers(options?.headers);
+        const accessToken = getPrivyAccessToken();
+
+        if (accessToken) {
+          headers.set("Authorization", `Bearer ${accessToken}`);
+        }
+
         return fetch(url, {
           ...options,
           credentials: "include",
+          headers,
         });
       },
     }),

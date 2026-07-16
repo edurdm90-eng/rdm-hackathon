@@ -349,11 +349,13 @@ function WalletPanel({
   myRewards,
   mySubmissions,
   ownerName,
+  ownerWalletAddress,
   room,
 }: {
   myRewards: HackReward[];
   mySubmissions: DashboardData["mySubmissions"];
   ownerName?: string;
+  ownerWalletAddress?: string;
   room?: HackRoom;
 }) {
   const balance =
@@ -379,6 +381,11 @@ function WalletPanel({
           <NativeIcon className="size-3" name="diamond-outline" />
           Issued - Ledger
         </div>
+        {ownerWalletAddress ? (
+          <div className="mt-2 truncate font-mono text-[10px] text-[#626058]">
+            {ownerWalletAddress}
+          </div>
+        ) : null}
       </div>
 
       <SectionCard eyebrow="My XRDM Balance" title={ownerName ?? "Wallet"} badge={`${balance} XRDM`}>
@@ -496,6 +503,9 @@ function RoomProfile({
         <>
           <ProfileField label="Name" value={user.name} />
           <ProfileField label="Email" value={user.email} />
+          {user.walletAddress ? (
+            <ProfileField label="Wallet" value={user.walletAddress} tone="gold" />
+          ) : null}
           <Button
             className="mt-3 h-10 w-full rounded-[10px] border-[#F0C040] bg-[#241A00] text-[#F0C040]"
             onClick={onExitRoom}

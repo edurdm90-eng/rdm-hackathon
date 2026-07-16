@@ -405,7 +405,13 @@ function ParticipantSurface({
   if (activeTab === "wallet") {
     return (
       <section>
-        <WalletPanel myRewards={myRewards} mySubmissions={mySubmissions} ownerName={user.name} room={room} />
+        <WalletPanel
+          myRewards={myRewards}
+          mySubmissions={mySubmissions}
+          ownerName={user.name}
+          ownerWalletAddress={user.walletAddress}
+          room={room}
+        />
       </section>
     );
   }

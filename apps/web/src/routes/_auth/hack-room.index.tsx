@@ -20,6 +20,7 @@ function RouteComponent() {
         email: user.email,
         id: user.id,
         name: user.name || user.email,
+        walletAddress: "walletAddress" in user ? user.walletAddress : undefined,
       }}
     />
   );
