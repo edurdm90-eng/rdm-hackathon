@@ -366,8 +366,7 @@ function AuthGateway() {
               <Ionicons name="mail-unread-outline" size={20} color={theme.participant} />
             </View>
             <View style={styles.authTitleBlock}>
-              <Text style={styles.formTitle}>Email sign in</Text>
-              <Text style={styles.authSubtitle}>Continue with a verified Privy code.</Text>
+              <Text style={styles.formTitle}>Email access</Text>
             </View>
           </View>
 
@@ -391,6 +390,7 @@ function AuthGateway() {
               }}
               onSubmitEditing={handleSendCode}
               placeholder="you@example.com"
+              style={styles.authInput}
               value={email}
             />
           </Field>
@@ -407,6 +407,7 @@ function AuthGateway() {
                 }}
                 onSubmitEditing={handleVerifyCode}
                 placeholder="123456"
+                style={styles.authInput}
                 value={code}
               />
             </Field>
@@ -456,16 +457,6 @@ function AuthGateway() {
             </View>
           ) : null}
 
-          <View style={styles.authFooter}>
-            <View style={styles.authPill}>
-              <Ionicons name="shield-checkmark-outline" size={13} color={theme.participant} />
-              <Text style={styles.authPillText}>Privy secured</Text>
-            </View>
-            <View style={[styles.authPill, styles.authPillHost]}>
-              <Ionicons name="people-outline" size={13} color={theme.host} />
-              <Text style={[styles.authPillText, styles.authPillTextHost]}>Member default</Text>
-            </View>
-          </View>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -6315,28 +6306,37 @@ function formatDateTimeValue(value: string) {
 const styles = StyleSheet.create({
   authBrandBlock: {
     alignItems: "center",
-    gap: 12,
-    marginBottom: 18,
+    gap: 14,
+    marginBottom: 22,
     width: "100%",
   },
   authBrandText: {
     alignItems: "center",
-    gap: 4,
+    gap: 5,
   },
   authCard: {
     backgroundColor: theme.panelStrong,
     borderColor: theme.borderStrong,
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1,
-    gap: 14,
-    maxWidth: 420,
-    padding: 18,
+    elevation: 10,
+    gap: 16,
+    maxWidth: 392,
+    padding: 20,
+    shadowColor: "#000000",
+    shadowOffset: { height: 12, width: 0 },
+    shadowOpacity: 0.28,
+    shadowRadius: 24,
     width: "100%",
   },
   authCardHeader: {
     alignItems: "center",
+    borderBottomColor: theme.border,
+    borderBottomWidth: 1,
     flexDirection: "row",
     gap: 12,
+    marginBottom: 2,
+    paddingBottom: 14,
   },
   authEyebrow: {
     color: theme.participant,
@@ -6347,85 +6347,62 @@ const styles = StyleSheet.create({
     textAlign: "center",
     textTransform: "uppercase",
   },
-  authFooter: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    paddingTop: 2,
-  },
   authHeadline: {
     color: theme.text,
-    fontSize: 26,
+    fontSize: 28,
     fontWeight: "900",
     letterSpacing: 0,
-    lineHeight: 31,
+    lineHeight: 33,
     textAlign: "center",
   },
   authIconBadge: {
     alignItems: "center",
-    backgroundColor: theme.participantDark,
-    borderColor: theme.participantBorder,
-    borderRadius: 13,
+    backgroundColor: theme.backgroundAlt,
+    borderColor: theme.borderStrong,
+    borderRadius: 14,
     borderWidth: 1,
-    height: 46,
+    height: 48,
     justifyContent: "center",
-    width: 46,
+    width: 48,
+  },
+  authInput: {
+    backgroundColor: "#101215",
+    borderColor: theme.borderStrong,
+    borderRadius: 11,
+    minHeight: 48,
+    paddingHorizontal: 14,
   },
   authLogoFrame: {
     alignItems: "center",
-    backgroundColor: theme.panel,
-    borderColor: theme.border,
-    borderRadius: 16,
+    backgroundColor: theme.panelStrong,
+    borderColor: theme.borderStrong,
+    borderRadius: 18,
     borderWidth: 1,
-    height: 96,
+    elevation: 6,
+    height: 88,
     justifyContent: "center",
-    width: 144,
+    shadowColor: "#000000",
+    shadowOffset: { height: 8, width: 0 },
+    shadowOpacity: 0.22,
+    shadowRadius: 18,
+    width: 132,
   },
   authSecondaryActions: {
     gap: 8,
   },
-  authPill: {
-    alignItems: "center",
-    backgroundColor: theme.participantDark,
-    borderColor: theme.participantBorder,
-    borderRadius: 999,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 5,
-    minHeight: 28,
-    paddingHorizontal: 10,
-  },
-  authPillHost: {
-    backgroundColor: theme.hostDark,
-    borderColor: theme.hostBorder,
-  },
-  authPillText: {
-    color: theme.participant,
-    fontSize: 11,
-    fontWeight: "800",
-  },
-  authPillTextHost: {
-    color: theme.host,
-  },
   authLogo: {
-    height: 68,
-    width: 118,
+    height: 58,
+    width: 106,
   },
   authScrollContent: {
     alignItems: "center",
     flexGrow: 1,
     justifyContent: "center",
-    paddingHorizontal: 18,
-    paddingVertical: 28,
-  },
-  authSubtitle: {
-    color: theme.dim,
-    fontSize: 12,
-    lineHeight: 18,
+    paddingHorizontal: 20,
+    paddingVertical: 34,
   },
   authTitleBlock: {
     flex: 1,
-    gap: 2,
   },
   avatar: {
     alignItems: "center",
