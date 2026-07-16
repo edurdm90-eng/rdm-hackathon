@@ -1,6 +1,8 @@
 import { TRPCError } from "@trpc/server";
+import { ObjectId, type Filter } from "mongodb";
 import { z } from "zod";
 
+import { normalizeUserRole, type UserRole } from "../../../auth/src/roles.js";
 import { client } from "../../../db/src/index.js";
 import { protectedProcedure, router } from "../index.js";
 
@@ -117,10 +119,14 @@ type HackNotificationRecord = {
 };
 
 type AuthUserRecord = {
-  _id?: { toString: () => string };
   email: string;
   id?: string;
   name?: string;
+  role?: unknown;
+};
+
+type AuthUserDocument = AuthUserRecord & {
+  _id?: ObjectId | string | { toString: () => string };
 };
 
 const roomCollection = () => client.collection<HackRoomRecord>("hack_rooms");
@@ -184,8 +190,39 @@ async function requireHostedRoom(roomId: string, hostId: string) {
   return room;
 }
 
-function getUserId(user: AuthUserRecord) {
+function getUserId(user: AuthUserDocument) {
   return user.id ?? user._id?.toString() ?? "";
+}
+
+function userIdLookup(userId: string): Filter<AuthUserRecord> {
+  const filters: Filter<AuthUserRecord>[] = [{ id: userId }];
+
+  if (ObjectId.isValid(userId)) {
+    filters.push({ _id: new ObjectId(userId) });
+  }
+
+  return { $or: filters };
+}
+
+async function getUserRole(userId: string): Promise<UserRole> {
+  const user = await userCollection().findOne(userIdLookup(userId), {
+    projection: { role: 1 },
+  });
+
+  return normalizeUserRole(user?.role);
+}
+
+async function requireHostRole(userId: string) {
+  const role = await getUserRole(userId);
+
+  if (role !== "host") {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "Only users with the host role can create hack rooms",
+    });
+  }
+
+  return role;
 }
 
 async function findRegisteredUserByEmail(email: string) {
@@ -230,7 +267,7 @@ function normalizeProofItems(submission: HackSubmissionRecord) {
 }
 
 function rewardLabel(kind: z.infer<typeof rewardKindSchema>) {
-  if (kind === "participant_certificate") return "Participant Certificate";
+  if (kind === "participant_certificate") return "Member Certificate";
   if (kind === "winner_certificate") return "Winner Certificate";
   return "Winner NFT Badge";
 }
@@ -238,7 +275,8 @@ function rewardLabel(kind: z.infer<typeof rewardKindSchema>) {
 export const hackRoomRouter = router({
   dashboard: protectedProcedure.query(async ({ ctx }) => {
     const user = ctx.session.user;
-    const [hostedRooms, joinedRooms] = await Promise.all([
+    const [viewerRole, hostedRooms, joinedRooms] = await Promise.all([
+      getUserRole(user.id),
       roomCollection().find({ hostId: user.id }).toArray(),
       roomCollection().find({ "participants.userId": user.id }).toArray(),
     ]);
@@ -312,6 +350,7 @@ export const hackRoomRouter = router({
     };
 
     return {
+      viewerRole,
       hostedRooms: hostedRooms.sort(byNewest),
       joinedRooms: joinedRooms.sort(byNewest),
       tasks: visibleTasks.sort(byNewest).map((task) => ({
@@ -369,6 +408,8 @@ export const hackRoomRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      await requireHostRole(ctx.session.user.id);
+
       const timestamp = now();
       const room: HackRoomRecord = {
         _id: makeId("room"),

@@ -18,6 +18,8 @@ const runtimeEnv = {
 export const env = createEnv({
   clientPrefix: "EXPO_PUBLIC_",
   client: {
+    EXPO_PUBLIC_PRIVY_APP_ID: z.string().min(1),
+    EXPO_PUBLIC_PRIVY_CLIENT_ID: z.string().min(1),
     EXPO_PUBLIC_SERVER_URL: z.url().transform((url) => url.replace(/\/$/, "")),
   },
   runtimeEnv,

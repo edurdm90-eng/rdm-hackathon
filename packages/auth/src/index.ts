@@ -4,6 +4,7 @@ import { mongodbAdapter } from "better-auth/adapters/mongodb";
 
 import { client } from "../../db/src/index.js";
 import { env } from "../../env/src/server.js";
+import { privyBridge } from "./privy-plugin.js";
 
 export function createAuth() {
   return betterAuth({
@@ -29,7 +30,7 @@ export function createAuth() {
         httpOnly: true,
       },
     },
-    plugins: [expo()],
+    plugins: [expo(), privyBridge()],
   });
 }
 

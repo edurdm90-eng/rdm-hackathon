@@ -1,4 +1,5 @@
 import { expoClient } from "@better-auth/expo/client";
+import { privyClient } from "@rdm-hack/auth/client";
 import { env } from "@rdm-hack/env/native";
 import { createAuthClient } from "better-auth/react";
 import Constants from "expo-constants";
@@ -14,5 +15,6 @@ export const authClient = createAuthClient({
       storagePrefix: appScheme,
       storage: SecureStore,
     }),
+    privyClient(),
   ],
 });
