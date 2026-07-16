@@ -807,10 +807,6 @@ function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
           canCreateRoom={canCreateRoom}
           onCreateRoom={() => {
             if (!canCreateRoom) {
-              setMessage({
-                text: "Your account is a member. Ask an admin to set your database role to host before creating rooms.",
-                tone: "red",
-              });
               return;
             }
 
@@ -1424,14 +1420,6 @@ function RoomCommandCenter({
           </Pressable>
         </View>
 
-        {!canCreateRoom ? (
-          <View style={styles.hostLockedNotice}>
-            <Ionicons name="lock-closed-outline" size={17} color={theme.host} />
-            <Text style={styles.hostLockedText}>
-              You are signed in as a member. A database host role is required to create rooms.
-            </Text>
-          </View>
-        ) : null}
       </Panel>
 
       {canCreateRoom ? (
@@ -6811,22 +6799,6 @@ const styles = StyleSheet.create({
     color: "#060214",
     fontSize: 12,
     fontWeight: "900",
-  },
-  hostLockedNotice: {
-    alignItems: "center",
-    backgroundColor: theme.hostDark,
-    borderColor: theme.hostBorder,
-    borderRadius: 10,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 8,
-    padding: 10,
-  },
-  hostLockedText: {
-    color: theme.faint,
-    flex: 1,
-    fontSize: 12,
-    lineHeight: 17,
   },
   createdTaskCard: {
     backgroundColor: theme.surface,
