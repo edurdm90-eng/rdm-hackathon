@@ -10,7 +10,12 @@ import { getPrivyAccessToken } from "@/lib/privy-session";
 export const queryClient = new QueryClient({
   queryCache: new QueryCache({
     onError: (error, query) => {
-      toast.error(error.message, {
+      const message =
+        error.message === "Failed to fetch"
+          ? "API server is not reachable. Check the deployed server URL and server env."
+          : error.message;
+
+      toast.error(message, {
         action: {
           label: "retry",
           onClick: () => {

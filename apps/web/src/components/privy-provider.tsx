@@ -15,9 +15,12 @@ export type PrivyLoginOptions = {
 type PrivyAuthContextValue = {
   authenticated: boolean;
   configurationError: string | null;
+  emailLoginStatus: string;
+  loginWithEmailCode: (code: string) => Promise<void>;
   login: (options?: PrivyLoginOptions) => Promise<void>;
   logout: () => Promise<void>;
   ready: boolean;
+  sendEmailCode: (email: string) => Promise<void>;
 };
 
 type PrivyWalletContextValue = {
@@ -29,9 +32,12 @@ type PrivyWalletContextValue = {
 const defaultPrivyAuthValue: PrivyAuthContextValue = {
   authenticated: false,
   configurationError: null,
+  emailLoginStatus: "initial",
+  loginWithEmailCode: async () => {},
   login: async () => {},
   logout: async () => {},
   ready: false,
+  sendEmailCode: async () => {},
 };
 
 const defaultPrivyWalletValue: PrivyWalletContextValue = {

@@ -2,6 +2,7 @@ import {
   getEmbeddedConnectedWallet,
   PrivyProvider,
   useCreateWallet,
+  useLoginWithEmail,
   usePrivy,
   useWallets,
 } from "@privy-io/react-auth";
@@ -41,6 +42,20 @@ function getUserName(user: NonNullable<ReturnType<typeof usePrivy>["user"]>) {
 
 function PrivySessionBridge({ children }: { children: ReactNode }) {
   const { authenticated, getAccessToken, login, logout, ready, user } = usePrivy();
+  const {
+    loginWithCode,
+    sendCode,
+    state: emailLoginState,
+  } = useLoginWithEmail({
+    onError: (error) => {
+      const unknownError: unknown = error;
+      const message =
+        typeof unknownError === "object" && unknownError !== null && "message" in unknownError
+          ? String(unknownError.message)
+          : "Unable to complete email login.";
+      toast.error(message);
+    },
+  });
   const { createWallet } = useCreateWallet();
   const { ready: walletsReady, wallets } = useWallets();
   const [isCreatingWallet, setIsCreatingWallet] = useState(false);
@@ -126,6 +141,10 @@ function PrivySessionBridge({ children }: { children: ReactNode }) {
     () => ({
       authenticated,
       configurationError: null,
+      emailLoginStatus: emailLoginState.status,
+      loginWithEmailCode: async (code: string) => {
+        await loginWithCode({ code });
+      },
       login: async (options?: PrivyLoginOptions) => {
         await login(options as Parameters<typeof login>[0]);
       },
@@ -135,8 +154,11 @@ function PrivySessionBridge({ children }: { children: ReactNode }) {
         await queryClient.invalidateQueries();
       },
       ready,
+      sendEmailCode: async (email: string) => {
+        await sendCode({ email });
+      },
     }),
-    [authenticated, login, logout, ready],
+    [authenticated, emailLoginState.status, login, loginWithCode, logout, ready, sendCode],
   );
 
   const walletValue = useMemo(

@@ -37,6 +37,14 @@ const ChallengeIcon = createNativeIcon("flash-outline");
 const GamesIcon = createNativeIcon("game-controller-outline");
 const WalletIcon = createNativeIcon("diamond-outline");
 
+function shortWalletAddress(address?: string) {
+  if (!address) {
+    return "";
+  }
+
+  return address.length > 12 ? `${address.slice(0, 6)}...${address.slice(-4)}` : address;
+}
+
 export function HackRoomHomePwa({ user }: { user: SessionUser }) {
   const navigate = useNavigate();
   const dashboard = useQuery(trpc.hackRoom.dashboard.queryOptions());
@@ -282,9 +290,8 @@ export function HackRoomProfilePwa({ user }: { user: SessionUser }) {
         <ProfileField label="Name" value={user.name} />
         <ProfileField label="Email" value={user.email} />
         {user.walletAddress ? (
-          <ProfileField label="Wallet" value={user.walletAddress} tone="gold" />
+          <ProfileField label="Wallet" value={shortWalletAddress(user.walletAddress)} tone="gold" />
         ) : null}
-        <ProfileField label="User ID" value={user.id} />
         <Button
           className="mt-3 h-10 w-full rounded-[10px] border-[#FF5A4A] bg-[#280A08] text-[#FF5A4A] hover:bg-[#280A08]/80"
           onClick={handleSignOut}
