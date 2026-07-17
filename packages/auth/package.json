@@ -12,6 +12,7 @@
   "scripts": {},
   "dependencies": {
     "@better-auth/expo": "catalog:",
+    "@privy-io/node": "0.26.0",
     "@rdm-hack/db": "workspace:*",
     "@rdm-hack/env": "workspace:*",
     "better-auth": "catalog:",

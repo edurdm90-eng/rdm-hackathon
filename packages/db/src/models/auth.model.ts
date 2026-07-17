@@ -10,6 +10,7 @@ const userSchema = new Schema(
     email: { type: String, required: true, unique: true },
     emailVerified: { type: Boolean, required: true, default: false },
     image: { type: String },
+    role: { type: String, enum: ["member", "host"], default: "member" },
     createdAt: { type: Date, required: true, default: Date.now },
     updatedAt: { type: Date, required: true, default: Date.now },
   },

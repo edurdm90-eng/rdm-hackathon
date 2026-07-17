@@ -1,6 +1,8 @@
 import type { AppRouter } from "@rdm-hack/api/routers/index";
 import { Ionicons } from "@expo/vector-icons";
+import { useLoginWithEmail, usePrivy } from "@privy-io/expo";
 import DateTimePicker, { DateTimePickerAndroid } from "@react-native-community/datetimepicker";
+import * as Clipboard from "expo-clipboard";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import type { inferRouterOutputs } from "@trpc/server";
 import { useNavigation, useRouter } from "expo-router";
@@ -25,6 +27,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import z from "zod";
 
 import { authClient } from "@/lib/auth-client";
+import { useNativePrivyBridge } from "@/components/privy-provider";
 import { HACK_THEME as theme } from "@/lib/constants";
 import { queryClient, trpc } from "@/utils/trpc";
 
@@ -38,7 +41,7 @@ type HackRoom = DashboardData["hostedRooms"][number];
 type HackSubmission = DashboardData["hostSubmissions"][number];
 type HackReward = DashboardData["rewards"][number];
 type HackNotification = DashboardData["notifications"][number];
-type Role = "participant" | "host";
+type Role = "member" | "host";
 type TaskKind = "task" | "challenge" | "game" | "special";
 type AssignmentMode = TaskKind | "notification";
 type RoomTab =
@@ -54,7 +57,6 @@ type RoomTab =
   | "winners";
 type ParticipantTab = "games" | "history" | "submit" | "wallet";
 type SubmissionStatus = DashboardData["mySubmissions"][number]["status"];
-type AuthMode = "sign-in" | "sign-up";
 type ProofType = "github" | "drive" | "file" | "url" | "video" | "deck" | "game_score";
 type RewardKind = HackReward["kind"];
 type GameType = "memory_match" | "breath_timer" | "quick_maths";
@@ -120,13 +122,12 @@ const gameTypeOptions: Array<{
   },
 ];
 
-const signInSchema = z.object({
+const privyEmailSchema = z.object({
   email: z.string().trim().min(1, "Email is required").email("Enter a valid email address"),
-  password: z.string().min(8, "Password must be at least 8 characters"),
 });
 
-const signUpSchema = signInSchema.extend({
-  name: z.string().trim().min(2, "Name must be at least 2 characters"),
+const privyCodeSchema = privyEmailSchema.extend({
+  code: z.string().trim().min(4, "Enter the code from your email").max(12, "Code is too long"),
 });
 
 const emptyRoomForm = {
@@ -248,76 +249,91 @@ function AuthenticatedRoute({
 }
 
 function AuthGateway() {
-  const [authMode, setAuthMode] = useState<AuthMode>("sign-in");
-  const [name, setName] = useState("");
+  const { isReady, logout, user } = usePrivy();
+  const { sendCode, loginWithCode } = useLoginWithEmail();
+  const { clearLastError, isSyncing, lastError, retrySync } = useNativePrivyBridge();
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const isSignUp = authMode === "sign-up";
+  const [code, setCode] = useState("");
+  const [hasSentCode, setHasSentCode] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [isSendingCode, setIsSendingCode] = useState(false);
+  const [isVerifyingCode, setIsVerifyingCode] = useState(false);
 
   const resetError = () => {
-    if (error) {
-      setError(null);
+    if (formError) {
+      setFormError(null);
+    }
+    if (lastError) {
+      clearLastError();
     }
   };
 
-  const handleSubmit = async () => {
-    const parsed = isSignUp
-      ? signUpSchema.safeParse({ email, name, password })
-      : signInSchema.safeParse({ email, password });
+  const handleSendCode = async () => {
+    const parsed = privyEmailSchema.safeParse({ email });
 
     if (!parsed.success) {
-      setError(parsed.error.issues[0]?.message ?? "Check the form and try again");
+      setFormError(parsed.error.issues[0]?.message ?? "Enter a valid email address");
       return;
     }
 
-    setIsSubmitting(true);
-    setError(null);
+    setIsSendingCode(true);
+    setFormError(null);
+    clearLastError();
 
     try {
-      if (isSignUp) {
-        await authClient.signUp.email(
-          {
-            email: email.trim(),
-            name: name.trim(),
-            password,
-          },
-          {
-            onError(result) {
-              setError(result.error?.message || "Failed to create account");
-            },
-            onSuccess() {
-              setName("");
-              setEmail("");
-              setPassword("");
-              queryClient.refetchQueries();
-            },
-          },
-        );
-      } else {
-        await authClient.signIn.email(
-          {
-            email: email.trim(),
-            password,
-          },
-          {
-            onError(result) {
-              setError(result.error?.message || "Failed to sign in");
-            },
-            onSuccess() {
-              setEmail("");
-              setPassword("");
-              queryClient.refetchQueries();
-            },
-          },
-        );
-      }
+      await sendCode({ email: parsed.data.email });
+      setHasSentCode(true);
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Unable to send an email code.");
     } finally {
-      setIsSubmitting(false);
+      setIsSendingCode(false);
     }
   };
+
+  const handleVerifyCode = async () => {
+    const parsed = privyCodeSchema.safeParse({ code, email });
+
+    if (!parsed.success) {
+      setFormError(parsed.error.issues[0]?.message ?? "Enter the code from your email");
+      return;
+    }
+
+    setIsVerifyingCode(true);
+    setFormError(null);
+    clearLastError();
+
+    try {
+      await loginWithCode({
+        code: parsed.data.code,
+        email: parsed.data.email,
+      });
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Unable to verify the email code.");
+    } finally {
+      setIsVerifyingCode(false);
+    }
+  };
+
+  const handleUseDifferentEmail = async () => {
+    setCode("");
+    setHasSentCode(false);
+    setFormError(null);
+    clearLastError();
+
+    const results = await Promise.allSettled([authClient.signOut(), logout()]);
+    const failedReset = results.find((result) => result.status === "rejected");
+
+    if (failedReset) {
+      setFormError(
+        failedReset.reason instanceof Error
+          ? failedReset.reason.message
+          : "Unable to reset sign-in.",
+      );
+    }
+  };
+
+  const isBusy = isSendingCode || isVerifyingCode || isSyncing;
+  const isPrivyAuthenticated = Boolean(user);
 
   return (
     <KeyboardAvoidingView
@@ -329,80 +345,118 @@ function AuthGateway() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <Image
-          accessibilityIgnoresInvertColors
-          resizeMode="cover"
-          source={rdmLogo}
-          style={styles.authLogo}
-        />
+        <View style={styles.authBrandBlock}>
+          <View style={styles.authLogoFrame}>
+            <Image
+              accessibilityIgnoresInvertColors
+              resizeMode="contain"
+              source={rdmLogo}
+              style={styles.authLogo}
+            />
+          </View>
+          <View style={styles.authBrandText}>
+            <Text style={styles.authEyebrow}>RDM Hack Room</Text>
+            <Text style={styles.authHeadline}>Welcome back</Text>
+          </View>
+        </View>
 
         <View style={styles.authCard}>
-          <SegmentedToggle
-            leftLabel="Sign In"
-            leftSelected={authMode === "sign-in"}
-            onLeftPress={() => {
-              setAuthMode("sign-in");
-              setError(null);
-            }}
-            onRightPress={() => {
-              setAuthMode("sign-up");
-              setError(null);
-            }}
-            rightLabel="Create"
-          />
+          <View style={styles.authCardHeader}>
+            <View style={styles.authIconBadge}>
+              <Ionicons name="mail-unread-outline" size={20} color={theme.participant} />
+            </View>
+            <View style={styles.authTitleBlock}>
+              <Text style={styles.formTitle}>Email access</Text>
+            </View>
+          </View>
 
-          <Text style={styles.formTitle}>{isSignUp ? "Create Account" : "Sign In"}</Text>
-
-          {error ? <ErrorBanner message={error} /> : null}
-
-          {isSignUp ? (
-            <Field label="Name">
-              <HackTextInput
-                autoCapitalize="words"
-                onChangeText={(value) => {
-                  setName(value);
-                  resetError();
-                }}
-                placeholder="Yash Diwan"
-                value={name}
-              />
-            </Field>
+          {!isReady ? (
+            <StatusBanner message="Preparing secure sign-in..." tone="cyan" />
           ) : null}
+          {isPrivyAuthenticated && isSyncing ? (
+            <StatusBanner message="Creating your Hack Room session..." tone="violet" />
+          ) : null}
+          {formError ? <ErrorBanner message={formError} /> : null}
+          {lastError ? <ErrorBanner message={lastError} /> : null}
 
           <Field label="Email">
             <HackTextInput
               autoCapitalize="none"
+              editable={!hasSentCode && !isPrivyAuthenticated && !isBusy}
               keyboardType="email-address"
               onChangeText={(value) => {
                 setEmail(value);
                 resetError();
               }}
+              onSubmitEditing={handleSendCode}
               placeholder="you@example.com"
+              style={styles.authInput}
               value={email}
             />
           </Field>
 
-          <Field label="Password">
-            <HackTextInput
-              onChangeText={(value) => {
-                setPassword(value);
-                resetError();
-              }}
-              onSubmitEditing={handleSubmit}
-              placeholder="8+ characters"
-              secureTextEntry
-              value={password}
-            />
-          </Field>
+          {hasSentCode ? (
+            <Field label="Email code">
+              <HackTextInput
+                autoCapitalize="none"
+                editable={!isPrivyAuthenticated && !isBusy}
+                keyboardType="number-pad"
+                onChangeText={(value) => {
+                  setCode(value);
+                  resetError();
+                }}
+                onSubmitEditing={handleVerifyCode}
+                placeholder="123456"
+                style={styles.authInput}
+                value={code}
+              />
+            </Field>
+          ) : null}
 
-          <HackButton
-            disabled={isSubmitting}
-            icon={isSignUp ? "person-add-outline" : "log-in-outline"}
-            label={isSignUp ? "Create Account" : "Sign In"}
-            loading={isSubmitting}
-            onPress={handleSubmit}
-            tone="cyan"
-          />
+          {hasSentCode ? (
+            <HackButton
+              disabled={!isReady || !code.trim() || isBusy || isPrivyAuthenticated}
+              icon="checkmark-circle-outline"
+              label={isSyncing ? "Syncing Session" : "Verify Code"}
+              loading={isVerifyingCode || isSyncing}
+              onPress={handleVerifyCode}
+              tone="cyan"
+            />
+          ) : (
+            <HackButton
+              disabled={!isReady || !email.trim() || isBusy}
+              icon="mail-outline"
+              label="Send Email Code"
+              loading={isSendingCode}
+              onPress={handleSendCode}
+              tone="cyan"
+            />
+          )}
+
+          {hasSentCode || isPrivyAuthenticated ? (
+            <View style={styles.authSecondaryActions}>
+              {lastError ? (
+                <HackButton
+                  disabled={isSyncing}
+                  icon="refresh-outline"
+                  label="Retry Session"
+                  loading={isSyncing}
+                  onPress={() => {
+                    void retrySync();
+                  }}
+                  tone="violet"
+                />
+              ) : null}
+              <HackButton
+                disabled={isBusy}
+                icon="swap-horizontal-outline"
+                label="Use Different Email"
+                onPress={handleUseDifferentEmail}
+                tone="red"
+              />
+            </View>
+          ) : null}
+
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -419,11 +473,6 @@ function HomeDashboard({ user }: { user: SessionUser }) {
   const recentSubmissions = dashboard.data?.mySubmissions ?? [];
   const notifications = dashboard.data?.notifications ?? [];
 
-  const handleSignOut = async () => {
-    await authClient.signOut();
-    await queryClient.invalidateQueries();
-  };
-
   const handleNotifications = () => {
     setMessage({
       text: notificationBannerMessage(notifications),
@@ -436,7 +485,6 @@ function HomeDashboard({ user }: { user: SessionUser }) {
       <AppHeader
         notificationCount={notifications.length}
         onNotificationPress={handleNotifications}
-        onProfilePress={handleSignOut}
       />
       <ScrollView
         contentContainerStyle={styles.dashboardContent}
@@ -454,7 +502,7 @@ function HomeDashboard({ user }: { user: SessionUser }) {
             <View style={[styles.homeRoleTab, styles.homeRoleTabParticipant]}>
               <Ionicons name="person-outline" size={14} color={theme.participant} />
               <Text style={[styles.homeRoleTabText, styles.homeRoleTabTextParticipant]}>
-                As Participant
+                As Member
               </Text>
             </View>
             <View style={[styles.homeRoleTab, styles.homeRoleTabHost]}>
@@ -538,7 +586,7 @@ function HomeDashboard({ user }: { user: SessionUser }) {
                   <RoomCard key={room._id} role="host" room={room} />
                 ))}
                 {joinedRooms.slice(0, 2).map((room) => (
-                  <RoomCard key={room._id} role="participant" room={room} />
+                  <RoomCard key={room._id} role="member" room={room} />
                 ))}
               </>
             ) : (
@@ -571,12 +619,13 @@ function HomeDashboard({ user }: { user: SessionUser }) {
 
 function ProfileDashboard({ user }: { user: SessionUser }) {
   const dashboard = useQuery(trpc.hackRoom.dashboard.queryOptions());
+  const { logout } = usePrivy();
   const [message, setMessage] = useState<{ text: string; tone: Tone } | null>(null);
   const stats = dashboard.data?.stats;
   const notifications = dashboard.data?.notifications ?? [];
 
   const handleSignOut = async () => {
-    await authClient.signOut();
+    await Promise.allSettled([authClient.signOut(), logout()]);
     await queryClient.invalidateQueries();
   };
 
@@ -592,7 +641,6 @@ function ProfileDashboard({ user }: { user: SessionUser }) {
       <AppHeader
         notificationCount={notifications.length}
         onNotificationPress={handleNotifications}
-        onProfilePress={handleSignOut}
       />
       <ScrollView
         contentContainerStyle={styles.dashboardContent}
@@ -657,6 +705,8 @@ function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
   const hostedRooms = dashboard.data?.hostedRooms ?? [];
   const joinedRooms = dashboard.data?.joinedRooms ?? [];
   const notifications = dashboard.data?.notifications ?? [];
+  const viewerRole = dashboard.data?.viewerRole ?? "member";
+  const canCreateRoom = viewerRole === "host";
   const allRooms = useMemo(() => {
     const seen = new Set<string>();
     const rooms: Array<{ role: Role; room: HackRoom }> = [];
@@ -667,7 +717,7 @@ function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
     });
     joinedRooms.forEach((room) => {
       if (!seen.has(room._id)) {
-        rooms.push({ role: "participant", room });
+        rooms.push({ role: "member", room });
       }
     });
 
@@ -705,11 +755,6 @@ function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
     createRoom.isPending ||
     joinRoom.isPending;
 
-  const handleSignOut = async () => {
-    await authClient.signOut();
-    await queryClient.invalidateQueries();
-  };
-
   const handleNotifications = () => {
     setMessage({
       text: notificationBannerMessage(notifications),
@@ -724,6 +769,10 @@ function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
     });
   };
 
+  const handleCopyInviteCode = async (room: HackRoom) => {
+    await copyInviteCodeToClipboard(room, setMessage);
+  };
+
   const handleOpenRoom = (roomId: string) => {
     router.push({
       pathname: "/hack-room/[roomId]",
@@ -736,7 +785,6 @@ function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
       <AppHeader
         notificationCount={notifications.length}
         onNotificationPress={handleNotifications}
-        onProfilePress={handleSignOut}
       />
       <ScrollView
         contentContainerStyle={styles.dashboardContent}
@@ -756,7 +804,14 @@ function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
           createRoomModalOpen={createRoomModalOpen}
           inviteCode={inviteCode}
           joinRoomPending={joinRoom.isPending}
-          onCreateRoom={() => createRoom.mutate(roomForm)}
+          canCreateRoom={canCreateRoom}
+          onCreateRoom={() => {
+            if (!canCreateRoom) {
+              return;
+            }
+
+            createRoom.mutate(roomForm);
+          }}
           onInviteCodeChange={setInviteCode}
           onJoinRoom={() => joinRoom.mutate({ inviteCode })}
           onRoomFormChange={setRoomForm}
@@ -766,6 +821,7 @@ function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
 
         <RoomShelf
           allRooms={allRooms}
+          onCopyInvite={handleCopyInviteCode}
           onSelectRoom={handleOpenRoom}
           onShareRoom={handleShareCode}
         />
@@ -832,7 +888,7 @@ function HackRoomDetailDashboard({
     });
     joinedRooms.forEach((room) => {
       if (!seen.has(room._id)) {
-        rooms.push({ role: "participant", room });
+        rooms.push({ role: "member", room });
       }
     });
 
@@ -840,7 +896,7 @@ function HackRoomDetailDashboard({
   }, [hostedRooms, joinedRooms]);
   const selectedRoomEntry = allRooms.find((entry) => entry.room._id === roomId);
   const selectedRoom = selectedRoomEntry?.room;
-  const selectedRoomRole = selectedRoomEntry?.role ?? "participant";
+  const selectedRoomRole = selectedRoomEntry?.role ?? "member";
   const roomTasks = useMemo(
     () => tasks.filter((task) => task.roomId === roomId),
     [roomId, tasks],
@@ -920,7 +976,7 @@ function HackRoomDetailDashboard({
       onSuccess: async () => {
         setTaskForm(emptyTaskForm);
         setAssignmentMode("task");
-        setMessage({ text: "Notification nudged to all room participants", tone: "violet" });
+        setMessage({ text: "Notification nudged to all room members", tone: "violet" });
         await invalidateDashboard();
       },
     }),
@@ -987,11 +1043,6 @@ function HackRoomDetailDashboard({
     issueReward.isPending ||
     sendRoomNotification.isPending;
 
-  const handleSignOut = async () => {
-    await authClient.signOut();
-    await queryClient.invalidateQueries();
-  };
-
   const handleNotifications = () => {
     setMessage({
       text: notificationBannerMessage(roomNotifications),
@@ -1008,6 +1059,10 @@ function HackRoomDetailDashboard({
       message: `Join ${room.name} in XRDM Hack Room with invite code ${room.inviteCode}`,
       title: `${room.name} invite`,
     });
+  };
+
+  const handleCopyInviteCode = async (room: HackRoom) => {
+    await copyInviteCodeToClipboard(room, setMessage);
   };
 
   const handleCreateTask = (kind: TaskKind) => {
@@ -1178,7 +1233,6 @@ function HackRoomDetailDashboard({
       <AppHeader
         notificationCount={roomNotifications.length}
         onNotificationPress={handleNotifications}
-        onProfilePress={handleSignOut}
       />
       <ScrollView
         contentContainerStyle={styles.dashboardContent}
@@ -1235,6 +1289,7 @@ function HackRoomDetailDashboard({
             onParticipantTabChange={setActiveParticipantTab}
             onReturnSubmission={handleReturnSubmission}
             onRoomTabChange={setActiveRoomTab}
+            onCopyInvite={handleCopyInviteCode}
             onIssueReward={handleIssueReward}
             onSendRoomNotification={handleSendRoomNotification}
             onSelectTask={setSelectedTaskId}
@@ -1289,6 +1344,7 @@ function HackRoomDetailDashboard({
 }
 
 function RoomCommandCenter({
+  canCreateRoom,
   createRoomPending,
   createRoomModalOpen,
   inviteCode,
@@ -1300,6 +1356,7 @@ function RoomCommandCenter({
   onSetCreateRoomModalOpen,
   roomForm,
 }: {
+  canCreateRoom: boolean;
   createRoomPending: boolean;
   createRoomModalOpen: boolean;
   inviteCode: string;
@@ -1315,15 +1372,17 @@ function RoomCommandCenter({
     <>
       <Panel
         action={
-          <Pressable
-            accessibilityLabel="Create hack room"
-            accessibilityRole="button"
-            onPress={() => onSetCreateRoomModalOpen(true)}
-            style={({ pressed }) => [styles.createRoomTrigger, pressed && styles.pressed]}
-          >
-            <Ionicons name="add-outline" size={18} color="#060214" />
-            <Text style={styles.createRoomTriggerText}>Create</Text>
-          </Pressable>
+          canCreateRoom ? (
+            <Pressable
+              accessibilityLabel="Create hack room"
+              accessibilityRole="button"
+              onPress={() => onSetCreateRoomModalOpen(true)}
+              style={({ pressed }) => [styles.createRoomTrigger, pressed && styles.pressed]}
+            >
+              <Ionicons name="add-outline" size={18} color="#060214" />
+              <Text style={styles.createRoomTriggerText}>Create</Text>
+            </Pressable>
+          ) : null
         }
         eyebrow="Lobby"
         icon="key-outline"
@@ -1360,20 +1419,22 @@ function RoomCommandCenter({
             )}
           </Pressable>
         </View>
+
       </Panel>
 
-      <Modal
-        animationType="fade"
-        onRequestClose={() => onSetCreateRoomModalOpen(false)}
-        transparent
-        visible={createRoomModalOpen}
-      >
-        <View style={styles.modalOverlay}>
-          <KeyboardAvoidingView
-            behavior={Platform.OS === "ios" ? "padding" : undefined}
-            style={styles.modalKeyboardView}
-          >
-            <View style={styles.modalCard}>
+      {canCreateRoom ? (
+        <Modal
+          animationType="fade"
+          onRequestClose={() => onSetCreateRoomModalOpen(false)}
+          transparent
+          visible={createRoomModalOpen}
+        >
+          <View style={styles.modalOverlay}>
+            <KeyboardAvoidingView
+              behavior={Platform.OS === "ios" ? "padding" : undefined}
+              style={styles.modalKeyboardView}
+            >
+              <View style={styles.modalCard}>
               <View style={styles.modalHeader}>
                 <View style={styles.modalTitleBlock}>
                   <Text style={styles.sectionEyebrow}>Host</Text>
@@ -1406,7 +1467,7 @@ function RoomCommandCenter({
                   onChangeText={(value) =>
                     onRoomFormChange((current) => ({ ...current, description: value }))
                   }
-                  placeholder="Participants build and submit working demos by deadline."
+                  placeholder="Members build and submit working demos by deadline."
                   style={styles.textArea}
                   value={roomForm.description}
                 />
@@ -1427,20 +1488,23 @@ function RoomCommandCenter({
                   tone="violet"
                 />
               </View>
-            </View>
-          </KeyboardAvoidingView>
-        </View>
-      </Modal>
+              </View>
+            </KeyboardAvoidingView>
+          </View>
+        </Modal>
+      ) : null}
     </>
   );
 }
 
 function RoomShelf({
   allRooms,
+  onCopyInvite,
   onSelectRoom,
   onShareRoom,
 }: {
   allRooms: Array<{ role: Role; room: HackRoom }>;
+  onCopyInvite: (room: HackRoom) => void;
   onSelectRoom: (roomId: string) => void;
   onShareRoom: (room: HackRoom) => void;
 }) {
@@ -1462,6 +1526,7 @@ function RoomShelf({
           {allRooms.map(({ role, room }) => (
             <SelectableRoomCard
               key={room._id}
+              onCopyInvite={() => onCopyInvite(room)}
               onPress={() => onSelectRoom(room._id)}
               onShare={() => onShareRoom(room)}
               role={role}
@@ -1478,12 +1543,14 @@ function RoomShelf({
 }
 
 function SelectableRoomCard({
+  onCopyInvite,
   onPress,
   onShare,
   role,
   room,
   selected,
 }: {
+  onCopyInvite: () => void;
   onPress: () => void;
   onShare: () => void;
   role: Role;
@@ -1514,10 +1581,21 @@ function SelectableRoomCard({
             {room.inviteCode}
           </Text>
         </View>
-        <Text style={styles.cardMeta}>{room.participants.length} participants</Text>
+        <Text style={styles.cardMeta}>{room.participants.length} members</Text>
       </Pressable>
       <View style={styles.roomShareFloatingWrap}>
+        {role === "host" ? (
+          <Pressable
+            accessibilityLabel={`Copy invite code ${room.inviteCode}`}
+            accessibilityRole="button"
+            onPress={onCopyInvite}
+            style={({ pressed }) => [styles.roomShareIcon, pressed && styles.pressed]}
+          >
+            <Ionicons name="copy-outline" size={15} color={theme.muted} />
+          </Pressable>
+        ) : null}
         <Pressable
+          accessibilityLabel={`Share invite code ${room.inviteCode}`}
           accessibilityRole="button"
           onPress={onShare}
           style={({ pressed }) => [styles.roomShareIcon, pressed && styles.pressed]}
@@ -1542,6 +1620,7 @@ function RoomWorkspace({
   issueRewardPending,
   mySubmissions,
   onApproveSubmission,
+  onCopyInvite,
   onCreateTask,
   onIssueReward,
   onParticipantTabChange,
@@ -1591,6 +1670,7 @@ function RoomWorkspace({
   issueRewardPending: boolean;
   mySubmissions: DashboardData["mySubmissions"];
   onApproveSubmission: (submission: HackSubmission) => void;
+  onCopyInvite: (room: HackRoom) => void;
   onCreateTask: (kind: TaskKind) => void;
   onIssueReward: (kind: RewardKind) => void;
   onParticipantTabChange: (tab: ParticipantTab | null) => void;
@@ -1650,7 +1730,7 @@ function RoomWorkspace({
           </View>
 
           <View style={styles.roomStatsGrid}>
-            <MiniStat icon="people-outline" label="Participants" value={room.participants.length} />
+            <MiniStat icon="people-outline" label="Members" value={room.participants.length} />
             <MiniStat icon="clipboard-outline" label="Tasks" value={roomTasks.length} />
             <MiniStat icon="trophy-outline" label="Winners" value={roomWinners.length} />
           </View>
@@ -1658,7 +1738,7 @@ function RoomWorkspace({
           {roomRole === "host" ? (
             <TrackLabel label="Organizer track" tone="violet" />
           ) : (
-            <TrackLabel label="Participant track" tone="cyan" />
+            <TrackLabel label="Member track" tone="cyan" />
           )}
         </>
       ) : null}
@@ -1675,6 +1755,7 @@ function RoomWorkspace({
           historySubmissions={historySubmissions}
           issueRewardPending={issueRewardPending}
           onApproveSubmission={onApproveSubmission}
+          onCopyInvite={onCopyInvite}
           onCreateTask={onCreateTask}
           onIssueReward={onIssueReward}
           onReturnSubmission={onReturnSubmission}
@@ -1734,6 +1815,7 @@ function HostRoomWorkspace({
   historySubmissions,
   issueRewardPending,
   onApproveSubmission,
+  onCopyInvite,
   onCreateTask,
   onIssueReward,
   onReturnSubmission,
@@ -1771,6 +1853,7 @@ function HostRoomWorkspace({
   historySubmissions: DashboardData["hostSubmissions"];
   issueRewardPending: boolean;
   onApproveSubmission: (submission: HackSubmission) => void;
+  onCopyInvite: (room: HackRoom) => void;
   onCreateTask: (kind: TaskKind) => void;
   onIssueReward: (kind: RewardKind) => void;
   onReturnSubmission: (submission: HackSubmission) => void;
@@ -1909,7 +1992,7 @@ function HostRoomWorkspace({
           action={<CounterLabel label={`${room.participants.length} joined`} />}
           eyebrow="Host Menu"
           icon="people-outline"
-          title="Participants"
+          title="Members"
           tone="violet"
         >
           <View style={styles.inviteStrip}>
@@ -1917,14 +2000,18 @@ function HostRoomWorkspace({
             <Text numberOfLines={1} style={styles.inviteCode}>
               {room.inviteCode}
             </Text>
-            <Pressable
-              accessibilityRole="button"
+            <InviteActionButton
+              accessibilityLabel={`Copy invite code ${room.inviteCode}`}
+              icon="copy-outline"
+              label="Copy"
+              onPress={() => onCopyInvite(room)}
+            />
+            <InviteActionButton
+              accessibilityLabel={`Share invite code ${room.inviteCode}`}
+              icon="share-outline"
+              label="Share"
               onPress={() => onShareRoom(room)}
-              style={({ pressed }) => [styles.shareButton, pressed && styles.pressed]}
-            >
-              <Ionicons name="share-outline" size={15} color={theme.host} />
-              <Text style={styles.shareText}>Share</Text>
-            </Pressable>
+            />
           </View>
           <View style={styles.listStack}>
             {room.participants.length ? (
@@ -1934,7 +2021,7 @@ function HostRoomWorkspace({
             ) : (
               <EmptyState
                 icon="people-outline"
-                text="Share the invite code. Joined participants will appear here."
+                text="Share the invite code. Joined members will appear here."
               />
             )}
           </View>
@@ -2020,7 +2107,7 @@ function HostRoomWorkspace({
             ) : (
               <EmptyState
                 icon="ribbon-outline"
-                text="Participant proof waiting for host review will appear here."
+                text="Member proof waiting for host review will appear here."
               />
             )}
           </View>
@@ -2523,9 +2610,9 @@ function ParticipantRoomWorkspace({
           </Text>
         </Pressable>
         <View style={styles.actionTitleBlock}>
-          <Text style={styles.sectionEyebrow}>Participant Action</Text>
+          <Text style={styles.sectionEyebrow}>Member Action</Text>
           <Text numberOfLines={2} style={styles.actionScreenTitle}>
-            {activeAction?.label ?? "Participant Action"}
+            {activeAction?.label ?? "Member Action"}
           </Text>
         </View>
       </View>
@@ -2604,7 +2691,7 @@ function ParticipantSubmitPanel({
   return (
     <Panel
       action={<CounterLabel label={`${regularTasks.length} tasks`} />}
-      eyebrow="Participant"
+      eyebrow="Member"
       icon="send-outline"
       title="Submit Task"
       tone="cyan"
@@ -2672,7 +2759,7 @@ function ParticipantHistoryPanel({
   return (
     <Panel
       action={<CounterLabel label={`${mySubmissions.length} records`} />}
-      eyebrow="Participant"
+      eyebrow="Member"
       icon="time-outline"
       title="History"
       tone="cyan"
@@ -2746,7 +2833,7 @@ function ParticipantGamesPanel({
     <View style={styles.trackStack}>
       <Panel
         action={<CounterLabel label={`${gameTypeOptions.length} games`} />}
-        eyebrow="Participant"
+        eyebrow="Member"
         icon="game-controller-outline"
         title="Games"
         tone="cyan"
@@ -3503,7 +3590,7 @@ function HostCertificatesPanel({
         action={<CounterLabel label={`${room.participants.length} members`} />}
         eyebrow="Issue"
         icon="ribbon-outline"
-        title="Participant Certificates"
+        title="Member Certificates"
         tone="gold"
       >
         <Field label="Certificate title">
@@ -3511,7 +3598,7 @@ function HostCertificatesPanel({
             onChangeText={(value) =>
               setRewardForm((current) => ({ ...current, title: value }))
             }
-            placeholder="Participant Certificate"
+            placeholder="Member Certificate"
             value={rewardForm.title}
           />
         </Field>
@@ -3544,7 +3631,7 @@ function HostCertificatesPanel({
         <HackButton
           disabled={!room.participants.length || issueRewardPending}
           icon="ribbon-outline"
-          label="Issue Participant Certificates"
+          label="Issue Member Certificates"
           loading={issueRewardPending}
           onPress={() => onIssueReward("participant_certificate")}
           tone="gold"
@@ -3616,7 +3703,7 @@ function HostCertificatesPanel({
           ) : (
             <EmptyState
               icon="document-text-outline"
-              text="Issued participant and winner certificates will appear here."
+              text="Issued member and winner certificates will appear here."
             />
           )}
         </View>
@@ -3814,7 +3901,7 @@ function ParticipantWalletPanel({
           ) : (
             <EmptyState
               icon="document-text-outline"
-              text="Participant and winner certificates will appear here after the host issues them."
+              text="Member and winner certificates will appear here after the host issues them."
             />
           )}
         </View>
@@ -3907,7 +3994,7 @@ function RewardRecipientSelector({
                 styles.rewardSelectorTextActive,
             ]}
           >
-            All participants
+            All members
           </Text>
         </Pressable>
         {room.participants.map((participant) => {
@@ -4124,10 +4211,10 @@ function AssignmentComposer({
   };
 
   const badgeLabel = isSpecialTask
-    ? "One participant"
+    ? "One member"
     : isNotification
       ? "Room nudge"
-      : "All participants";
+      : "All members";
   const badgeTone: Tone = isSpecialTask ? "orange" : isNotification ? "violet" : "cyan";
   const fieldLabel = isNotification
     ? "Notification title"
@@ -4151,11 +4238,11 @@ function AssignmentComposer({
   const descriptionPlaceholder = isNotification
     ? "Nudge everyone with the next step, reminder, or deadline."
     : isGame
-      ? "Tell participants what score, attempt, or result the host will verify."
+      ? "Tell members what score, attempt, or result the host will verify."
       : isSpotChallenge
         ? "Describe the fun challenge, who can join, and how winners will be picked."
         : isSpecialTask
-          ? "Give this participant a focused follow-up task and explain the expected proof."
+          ? "Give this member a focused follow-up task and explain the expected proof."
           : "Submit a functional demo. GitHub and Drive proof are mandatory.";
 
   return (
@@ -4202,14 +4289,14 @@ function AssignmentComposer({
       ) : null}
 
       {isSpecialTask ? (
-        <Field label="Registered participant email">
+        <Field label="Registered member email">
           <HackTextInput
             autoCapitalize="none"
             keyboardType="email-address"
             onChangeText={(value) =>
               setTaskForm((current) => ({ ...current, assignedToEmail: value }))
             }
-            placeholder="participant@company.com"
+            placeholder="member@company.com"
             value={taskForm.assignedToEmail}
           />
         </Field>
@@ -4643,7 +4730,7 @@ function ParticipantTrack({
 }) {
   return (
     <View style={styles.trackStack}>
-      <Panel eyebrow="Participant Track" icon="key-outline" title="Join a Hack Room" tone="cyan">
+      <Panel eyebrow="Member Track" icon="key-outline" title="Join a Hack Room" tone="cyan">
         <Field label="Invite code">
           <HackTextInput
             autoCapitalize="characters"
@@ -4663,7 +4750,7 @@ function ParticipantTrack({
 
         <View style={styles.listStack}>
           {joinedRooms.length ? (
-            joinedRooms.map((room) => <RoomCard key={room._id} role="participant" room={room} />)
+            joinedRooms.map((room) => <RoomCard key={room._id} role="member" room={room} />)
           ) : (
             <EmptyState
               icon="enter-outline"
@@ -4837,7 +4924,7 @@ function HostTrack({
             onChangeText={(value) =>
               setRoomForm((current) => ({ ...current, description: value }))
             }
-            placeholder="Participants build and submit working demos by deadline."
+            placeholder="Members build and submit working demos by deadline."
             style={styles.textArea}
             value={roomForm.description}
           />
@@ -4882,7 +4969,7 @@ function HostTrack({
         action={<CounterLabel label={`${hostedRooms.length} rooms`} />}
         eyebrow="Assignment"
         icon="clipboard-outline"
-        title="Set Task for Participants"
+        title="Set Task for Members"
         tone="violet"
       >
         {hostedRooms.length ? (
@@ -5072,7 +5159,7 @@ function HostTrack({
           ) : (
             <EmptyState
               icon="ribbon-outline"
-              text="Submissions from participants will appear here for review."
+              text="Submissions from members will appear here for review."
             />
           )}
         </View>
@@ -5099,17 +5186,19 @@ function HostTrack({
 function AppHeader({
   notificationCount = 0,
   onNotificationPress,
-  onProfilePress,
 }: {
   notificationCount?: number;
   onNotificationPress: () => void;
-  onProfilePress: () => void;
 }) {
   const navigation = useNavigation();
+  const router = useRouter();
   const handleOpenMenu = () => {
     (navigation as { dispatch: (action: { type: string }) => void }).dispatch({
       type: "OPEN_DRAWER",
     });
+  };
+  const handleOpenProfile = () => {
+    router.push("/profile");
   };
 
   return (
@@ -5134,14 +5223,38 @@ function AppHeader({
             onPress={handleOpenMenu}
           />
           <HeaderIconButton
-            accessibilityLabel="Sign out"
+            accessibilityLabel="Profile"
             icon="person-circle-outline"
-            onPress={onProfilePress}
+            onPress={handleOpenProfile}
             tone="profile"
           />
         </View>
       </View>
     </SafeAreaView>
+  );
+}
+
+function InviteActionButton({
+  accessibilityLabel,
+  icon,
+  label,
+  onPress,
+}: {
+  accessibilityLabel: string;
+  icon: React.ComponentProps<typeof Ionicons>["name"];
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityLabel={accessibilityLabel}
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => [styles.shareButton, pressed && styles.pressed]}
+    >
+      <Ionicons name={icon} size={15} color={theme.host} />
+      <Text style={styles.shareText}>{label}</Text>
+    </Pressable>
   );
 }
 
@@ -5507,43 +5620,6 @@ function HackButton({
   );
 }
 
-function SegmentedToggle({
-  leftLabel,
-  leftSelected,
-  onLeftPress,
-  onRightPress,
-  rightLabel,
-}: {
-  leftLabel: string;
-  leftSelected: boolean;
-  onLeftPress: () => void;
-  onRightPress: () => void;
-  rightLabel: string;
-}) {
-  return (
-    <View style={styles.segmented}>
-      <Pressable
-        accessibilityRole="button"
-        onPress={onLeftPress}
-        style={[styles.segment, leftSelected && styles.segmentActiveCyan]}
-      >
-        <Text style={[styles.segmentText, leftSelected && styles.segmentTextActiveCyan]}>
-          {leftLabel}
-        </Text>
-      </Pressable>
-      <Pressable
-        accessibilityRole="button"
-        onPress={onRightPress}
-        style={[styles.segment, !leftSelected && styles.segmentActiveViolet]}
-      >
-        <Text style={[styles.segmentText, !leftSelected && styles.segmentTextActiveViolet]}>
-          {rightLabel}
-        </Text>
-      </Pressable>
-    </View>
-  );
-}
-
 function RoleButton({
   active,
   description,
@@ -5646,7 +5722,7 @@ function RoomCard({ role, room }: { role: Role; room: HackRoom | DashboardData["
           {room.description || `Hosted by ${room.hostName}`}
         </Text>
         <Text style={styles.cardMeta}>
-          {room.participants.length} participants · {room.inviteCode}
+          {room.participants.length} members · {room.inviteCode}
         </Text>
       </View>
     </View>
@@ -6082,13 +6158,13 @@ function proofTypeIcon(proofType: ProofType): React.ComponentProps<typeof Ionico
 }
 
 function defaultRewardTitle(kind: RewardKind) {
-  if (kind === "participant_certificate") return "Participant Certificate";
+  if (kind === "participant_certificate") return "Member Certificate";
   if (kind === "winner_certificate") return "Winner Certificate";
   return "Winner NFT Badge";
 }
 
 function rewardKindLabel(kind: RewardKind) {
-  if (kind === "participant_certificate") return "Participant";
+  if (kind === "participant_certificate") return "Member";
   if (kind === "winner_certificate") return "Winner Cert";
   return "NFT Badge";
 }
@@ -6151,6 +6227,18 @@ function notificationBannerMessage(notifications: Array<HackNotification>) {
   return `${latest.title} - ${latest.roomName}: ${latest.message}`;
 }
 
+async function copyInviteCodeToClipboard(
+  room: HackRoom,
+  setMessage: (message: { text: string; tone: Tone }) => void,
+) {
+  try {
+    await Clipboard.setStringAsync(room.inviteCode);
+    setMessage({ text: `Copied invite code ${room.inviteCode}`, tone: "violet" });
+  } catch {
+    setMessage({ text: "Could not copy invite code. Please try again.", tone: "red" });
+  }
+}
+
 function getInitials(name: string) {
   const initials = name
     .split(" ")
@@ -6204,26 +6292,105 @@ function formatDateTimeValue(value: string) {
 }
 
 const styles = StyleSheet.create({
-  authCard: {
-    backgroundColor: theme.panel,
-    borderColor: theme.border,
-    borderRadius: 11,
-    borderWidth: 1,
-    gap: 12,
-    maxWidth: 420,
-    padding: 16,
+  authBrandBlock: {
+    alignItems: "center",
+    gap: 14,
+    marginBottom: 22,
     width: "100%",
   },
+  authBrandText: {
+    alignItems: "center",
+    gap: 5,
+  },
+  authCard: {
+    backgroundColor: theme.panelStrong,
+    borderColor: theme.borderStrong,
+    borderRadius: 16,
+    borderWidth: 1,
+    elevation: 10,
+    gap: 16,
+    maxWidth: 392,
+    padding: 20,
+    shadowColor: "#000000",
+    shadowOffset: { height: 12, width: 0 },
+    shadowOpacity: 0.28,
+    shadowRadius: 24,
+    width: "100%",
+  },
+  authCardHeader: {
+    alignItems: "center",
+    borderBottomColor: theme.border,
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 2,
+    paddingBottom: 14,
+  },
+  authEyebrow: {
+    color: theme.participant,
+    fontFamily: Platform.select({ default: "monospace" }),
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 1.2,
+    textAlign: "center",
+    textTransform: "uppercase",
+  },
+  authHeadline: {
+    color: theme.text,
+    fontSize: 28,
+    fontWeight: "900",
+    letterSpacing: 0,
+    lineHeight: 33,
+    textAlign: "center",
+  },
+  authIconBadge: {
+    alignItems: "center",
+    backgroundColor: theme.backgroundAlt,
+    borderColor: theme.borderStrong,
+    borderRadius: 14,
+    borderWidth: 1,
+    height: 48,
+    justifyContent: "center",
+    width: 48,
+  },
+  authInput: {
+    backgroundColor: "#101215",
+    borderColor: theme.borderStrong,
+    borderRadius: 11,
+    minHeight: 48,
+    paddingHorizontal: 14,
+  },
+  authLogoFrame: {
+    alignItems: "center",
+    backgroundColor: theme.panelStrong,
+    borderColor: theme.borderStrong,
+    borderRadius: 18,
+    borderWidth: 1,
+    elevation: 6,
+    height: 88,
+    justifyContent: "center",
+    shadowColor: "#000000",
+    shadowOffset: { height: 8, width: 0 },
+    shadowOpacity: 0.22,
+    shadowRadius: 18,
+    width: 132,
+  },
+  authSecondaryActions: {
+    gap: 8,
+  },
   authLogo: {
-    height: 92,
-    marginBottom: 12,
-    width: 240,
+    height: 58,
+    width: 106,
   },
   authScrollContent: {
     alignItems: "center",
     flexGrow: 1,
     justifyContent: "center",
-    padding: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 34,
+  },
+  authTitleBlock: {
+    flex: 1,
   },
   avatar: {
     alignItems: "center",
@@ -7750,13 +7917,15 @@ const styles = StyleSheet.create({
     width: 32,
   },
   roomShareFloatingWrap: {
+    flexDirection: "row",
+    gap: 6,
     position: "absolute",
     right: 10,
     top: 10,
   },
   roomShareIconSpacer: {
     height: 32,
-    width: 32,
+    width: 70,
   },
   roomShelf: {
     gap: 10,
@@ -7922,43 +8091,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
     marginTop: 2,
-  },
-  segment: {
-    alignItems: "center",
-    borderRadius: 6,
-    flex: 1,
-    minHeight: 32,
-    justifyContent: "center",
-  },
-  segmentActiveCyan: {
-    backgroundColor: theme.participantDark,
-    borderColor: theme.participantBorder,
-    borderWidth: 1,
-  },
-  segmentActiveViolet: {
-    backgroundColor: theme.hostDark,
-    borderColor: theme.hostBorder,
-    borderWidth: 1,
-  },
-  segmentText: {
-    color: theme.muted,
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  segmentTextActiveCyan: {
-    color: theme.participant,
-  },
-  segmentTextActiveViolet: {
-    color: theme.host,
-  },
-  segmented: {
-    backgroundColor: theme.backgroundAlt,
-    borderColor: theme.border,
-    borderRadius: 8,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 4,
-    padding: 4,
   },
   selectorChip: {
     backgroundColor: theme.surface,

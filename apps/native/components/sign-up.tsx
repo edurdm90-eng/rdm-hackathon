@@ -70,7 +70,7 @@ function SignUp() {
           password: value.password,
         },
         {
-          onError(error) {
+          onError(error: { error?: { message?: string } }) {
             setError(error.error?.message || "Failed to sign up");
           },
           onSuccess() {
