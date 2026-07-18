@@ -2693,7 +2693,6 @@ function ParticipantRoomWorkspace({
         <ParticipantWalletPanel
           mySubmissions={mySubmissions}
           rewards={rewards}
-          roomWinners={roomWinners}
         />
       ) : null}
     </View>
@@ -3865,17 +3864,15 @@ function HostNftBadgesPanel({
 function ParticipantWalletPanel({
   mySubmissions,
   rewards,
-  roomWinners,
 }: {
   mySubmissions: DashboardData["mySubmissions"];
   rewards: Array<HackReward>;
-  roomWinners: DashboardData["visibleWinners"];
 }) {
   const certificateRewards = rewards.filter((reward) => reward.kind !== "winner_nft_badge");
   const nftRewards = rewards.filter((reward) => reward.kind === "winner_nft_badge");
   const xrdmTotal =
     rewards.reduce((total, reward) => total + (reward.awardXrdm ?? 0), 0) +
-    roomWinners.reduce(
+    mySubmissions.reduce(
       (total, submission) => total + (submission.awardXrdm ?? submission.rewardXrdm ?? 0),
       0,
     );
