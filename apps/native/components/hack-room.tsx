@@ -145,6 +145,11 @@ const emptyTaskForm = {
 };
 
 const minimumTaskDueOffsetMs = 60_000;
+let cachedNativeSessionUser: SessionUser | null = null;
+
+function setCachedNativeSessionUser(user: SessionUser | null) {
+  cachedNativeSessionUser = user;
+}
 
 function makeEmptyRewardForm() {
   return {
@@ -156,6 +161,28 @@ function makeEmptyRewardForm() {
     sourceSubmissionId: "",
     title: "",
   };
+}
+
+function countNativeNetworkParticipants(rooms: Array<HackRoom>, currentUser: SessionUser) {
+  const networkParticipantIds = new Set<string>();
+  const currentEmail = currentUser.email.trim().toLowerCase();
+
+  rooms.forEach((room) => {
+    room.participants.forEach((participant) => {
+      const participantEmail = participant.email.trim().toLowerCase();
+      if (
+        participant.userId === currentUser.id ||
+        participant.userId === room.hostId ||
+        participantEmail === currentEmail
+      ) {
+        return;
+      }
+
+      networkParticipantIds.add(participant.userId);
+    });
+  });
+
+  return networkParticipantIds.size;
 }
 
 function makeEmptyProofItems(): Record<ProofType, string> {
@@ -191,8 +218,12 @@ export function NativeHomeScreen() {
 
 export function AuthenticatedTabs({ children }: { children: React.ReactNode }) {
   const { data: session, isPending } = authClient.useSession();
+  if (session?.user) {
+    setCachedNativeSessionUser(session.user);
+  }
+  const sessionUser = session?.user ?? cachedNativeSessionUser;
 
-  if (isPending) {
+  if (isPending && !sessionUser) {
     return (
       <View style={styles.loadingScreen}>
         <ActivityIndicator color={theme.participant} />
@@ -201,7 +232,7 @@ export function AuthenticatedTabs({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!session?.user) {
+  if (!sessionUser) {
     return <AuthGateway />;
   }
 
@@ -246,8 +277,12 @@ function AuthenticatedRoute({
   children: (user: SessionUser) => React.ReactNode;
 }) {
   const { data: session, isPending } = authClient.useSession();
+  if (session?.user) {
+    setCachedNativeSessionUser(session.user);
+  }
+  const sessionUser = session?.user ?? cachedNativeSessionUser;
 
-  if (isPending) {
+  if (isPending && !sessionUser) {
     return (
       <View style={styles.loadingScreen}>
         <ActivityIndicator color={theme.participant} />
@@ -256,11 +291,11 @@ function AuthenticatedRoute({
     );
   }
 
-  if (!session?.user) {
+  if (!sessionUser) {
     return <AuthGateway />;
   }
 
-  return children(session.user);
+  return children(sessionUser);
 }
 
 function AuthGateway() {
@@ -334,6 +369,7 @@ function AuthGateway() {
     setHasSentCode(false);
     setFormError(null);
     clearLastError();
+    setCachedNativeSessionUser(null);
 
     const results = await Promise.allSettled([authClient.signOut(), logout()]);
     const failedReset = results.find((result) => result.status === "rejected");
@@ -650,9 +686,12 @@ function ProfileDashboard({ user }: { user: SessionUser }) {
   const { logout } = usePrivy();
   const [message, setMessage] = useState<{ text: string; tone: Tone } | null>(null);
   const stats = dashboard.data?.stats;
+  const hostedRooms = dashboard.data?.hostedRooms ?? [];
   const notifications = dashboard.data?.notifications ?? [];
+  const networkCount = countNativeNetworkParticipants(hostedRooms, user);
 
   const handleSignOut = async () => {
+    setCachedNativeSessionUser(null);
     await Promise.allSettled([authClient.signOut(), logout()]);
     await queryClient.invalidateQueries();
   };
@@ -701,7 +740,7 @@ function ProfileDashboard({ user }: { user: SessionUser }) {
               icon="people-outline"
               label="Network"
               tone="violet"
-              value={stats?.participants ?? 0}
+              value={networkCount}
             />
           </View>
         </View>
