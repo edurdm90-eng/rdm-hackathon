@@ -214,10 +214,22 @@ export function HackRoomScreen() {
   return <AuthenticatedRoute>{(user) => <HackRoomDashboard user={user} />}</AuthenticatedRoute>;
 }
 
-export function HackRoomDetailScreen({ roomId }: { roomId: string }) {
+export function HackRoomDetailScreen({
+  initialParticipantTab = null,
+  roomId,
+}: {
+  initialParticipantTab?: ParticipantTab | null;
+  roomId: string;
+}) {
   return (
     <AuthenticatedRoute>
-      {(user) => <HackRoomDetailDashboard roomId={roomId} user={user} />}
+      {(user) => (
+        <HackRoomDetailDashboard
+          initialParticipantTab={initialParticipantTab}
+          roomId={roomId}
+          user={user}
+        />
+      )}
     </AuthenticatedRoute>
   );
 }
@@ -473,11 +485,24 @@ function HomeDashboard({ user }: { user: SessionUser }) {
   const joinedRooms = dashboard.data?.joinedRooms ?? [];
   const recentSubmissions = dashboard.data?.mySubmissions ?? [];
   const notifications = dashboard.data?.notifications ?? [];
+  const walletRoom = joinedRooms[0];
 
   const handleNotifications = () => {
     setMessage({
       text: notificationBannerMessage(notifications),
       tone: notifications.length ? "violet" : "cyan",
+    });
+  };
+
+  const openWallet = () => {
+    if (!walletRoom) {
+      router.push("/hack-room");
+      return;
+    }
+
+    router.push({
+      pathname: "/hack-room/[roomId]",
+      params: { roomId: walletRoom._id, tab: "wallet" },
     });
   };
 
@@ -570,7 +595,7 @@ function HomeDashboard({ user }: { user: SessionUser }) {
               icon="diamond-outline"
               label="Wallet"
               meta="XRDM, certs, NFTs"
-              onPress={() => router.push("/profile")}
+              onPress={openWallet}
               tone="gold"
             />
           </View>
@@ -850,16 +875,19 @@ function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
 }
 
 function HackRoomDetailDashboard({
+  initialParticipantTab,
   roomId,
   user,
 }: {
+  initialParticipantTab: ParticipantTab | null;
   roomId: string;
   user: SessionUser;
 }) {
   const router = useRouter();
   const dashboard = useQuery(trpc.hackRoom.dashboard.queryOptions());
   const [activeRoomTab, setActiveRoomTab] = useState<RoomTab | null>(null);
-  const [activeParticipantTab, setActiveParticipantTab] = useState<ParticipantTab | null>(null);
+  const [activeParticipantTab, setActiveParticipantTab] =
+    useState<ParticipantTab | null>(initialParticipantTab);
   const [taskForm, setTaskForm] = useState(emptyTaskForm);
   const [taskKind, setTaskKind] = useState<TaskKind>("task");
   const [assignmentMode, setAssignmentMode] = useState<AssignmentMode>("task");
@@ -898,6 +926,7 @@ function HackRoomDetailDashboard({
   const selectedRoomEntry = allRooms.find((entry) => entry.room._id === roomId);
   const selectedRoom = selectedRoomEntry?.room;
   const selectedRoomRole = selectedRoomEntry?.role ?? "member";
+  const effectiveRoomRole = activeParticipantTab === "wallet" ? "member" : selectedRoomRole;
   const roomTasks = useMemo(
     () => tasks.filter((task) => task.roomId === roomId),
     [roomId, tasks],
@@ -1043,6 +1072,13 @@ function HackRoomDetailDashboard({
     returnSubmission.isPending ||
     issueReward.isPending ||
     sendRoomNotification.isPending;
+
+  useEffect(() => {
+    if (initialParticipantTab) {
+      setActiveRoomTab(null);
+      setActiveParticipantTab(initialParticipantTab);
+    }
+  }, [initialParticipantTab]);
 
   const handleNotifications = () => {
     setMessage({
@@ -1338,9 +1374,9 @@ function HackRoomDetailDashboard({
             proofTypes={proofTypes}
             returnSubmissionPending={returnSubmission.isPending}
             rewardForm={rewardForm}
-            rewards={selectedRoomRole === "host" ? roomRewards : myRoomRewards}
+            rewards={effectiveRoomRole === "host" ? roomRewards : myRoomRewards}
             room={selectedRoom}
-            roomRole={selectedRoomRole}
+            roomRole={effectiveRoomRole}
             roomTasks={roomTasks}
             roomWinners={roomWinners}
             selectedTask={selectedTask}
