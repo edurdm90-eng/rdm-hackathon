@@ -149,7 +149,8 @@ function makeEmptyRewardForm() {
     awardXrdm: "0",
     description: "",
     ledgerNote: "",
-    recipientIds: [] as Array<string>,
+    recipientEmailDraft: "",
+    recipientEmails: [] as Array<string>,
     sourceSubmissionId: "",
     title: "",
   };
@@ -1211,17 +1212,54 @@ function HackRoomDetailDashboard({
       return;
     }
 
+    const rawRecipientEmails = [
+      ...rewardForm.recipientEmails,
+      ...getEmailTokens(rewardForm.recipientEmailDraft),
+    ];
+    const invalidRecipientEmails = getInvalidEmails(rawRecipientEmails);
+    const recipientEmails = normalizeEmails(rawRecipientEmails);
+    const participantsByEmail = new Map(
+      selectedRoom.participants.map((participant) => [
+        participant.email.trim().toLowerCase(),
+        participant,
+      ]),
+    );
+    const missingRecipientEmail = recipientEmails.find(
+      (email) => !participantsByEmail.has(email),
+    );
+
+    if (invalidRecipientEmails.length) {
+      setMessage({ text: `Check recipient email: ${invalidRecipientEmails[0]}`, tone: "red" });
+      return;
+    }
+
+    if (!recipientEmails.length) {
+      setMessage({ text: "Add at least one recipient email", tone: "red" });
+      return;
+    }
+
+    if (missingRecipientEmail) {
+      setMessage({
+        text: `${missingRecipientEmail} has not joined this room yet`,
+        tone: "red",
+      });
+      return;
+    }
+
     const sourceSubmissionId =
       kind === "participant_certificate"
         ? undefined
         : rewardForm.sourceSubmissionId || winnerSubmissions[0]?._id;
+    const recipientIds = recipientEmails.map(
+      (email) => participantsByEmail.get(email)?.userId ?? "",
+    ).filter(Boolean);
 
     issueReward.mutate({
       awardXrdm: Number(rewardForm.awardXrdm || 0),
       description: rewardForm.description,
       kind,
       ledgerNote: rewardForm.ledgerNote,
-      recipientIds: kind === "participant_certificate" ? rewardForm.recipientIds : [],
+      recipientIds,
       roomId: selectedRoom._id,
       sourceSubmissionId,
       title: rewardForm.title || defaultRewardTitle(kind),
@@ -3580,10 +3618,6 @@ function HostCertificatesPanel({
   winnerSubmissions: DashboardData["hostSubmissions"];
 }) {
   const certificateRewards = rewards.filter((reward) => reward.kind !== "winner_nft_badge");
-  const selectedRecipientIds = rewardForm.recipientIds.length
-    ? rewardForm.recipientIds
-    : room.participants.map((participant) => participant.userId);
-
   return (
     <View style={styles.trackStack}>
       <Panel
@@ -3623,9 +3657,9 @@ function HostCertificatesPanel({
             value={rewardForm.awardXrdm}
           />
         </Field>
-        <RewardRecipientSelector
+        <RewardRecipientEmailComposer
           room={room}
-          selectedRecipientIds={selectedRecipientIds}
+          rewardForm={rewardForm}
           setRewardForm={setRewardForm}
         />
         <HackButton
@@ -3649,6 +3683,11 @@ function HostCertificatesPanel({
           rewardForm={rewardForm}
           setRewardForm={setRewardForm}
           winnerSubmissions={winnerSubmissions}
+        />
+        <RewardRecipientEmailComposer
+          room={room}
+          rewardForm={rewardForm}
+          setRewardForm={setRewardForm}
         />
         <Field label="Winner certificate title">
           <HackTextInput
@@ -3744,6 +3783,11 @@ function HostNftBadgesPanel({
           rewardForm={rewardForm}
           setRewardForm={setRewardForm}
           winnerSubmissions={winnerSubmissions}
+        />
+        <RewardRecipientEmailComposer
+          room={room}
+          rewardForm={rewardForm}
+          setRewardForm={setRewardForm}
         />
         <Field label="NFT badge name">
           <HackTextInput
@@ -3952,70 +3996,115 @@ function ParticipantWalletPanel({
   );
 }
 
-function RewardRecipientSelector({
+function RewardRecipientEmailComposer({
   room,
-  selectedRecipientIds,
+  rewardForm,
   setRewardForm,
 }: {
   room: HackRoom;
-  selectedRecipientIds: Array<string>;
+  rewardForm: ReturnType<typeof makeEmptyRewardForm>;
   setRewardForm: React.Dispatch<React.SetStateAction<ReturnType<typeof makeEmptyRewardForm>>>;
 }) {
-  const allRecipientIds = room.participants.map((participant) => participant.userId);
+  const participantEmails = new Set(
+    room.participants.map((participant) => participant.email.trim().toLowerCase()),
+  );
 
-  const toggleRecipient = (userId: string) => {
+  const addDraftEmails = () => {
     setRewardForm((current) => {
-      const currentIds = current.recipientIds.length ? current.recipientIds : allRecipientIds;
-      const nextIds = currentIds.includes(userId)
-        ? currentIds.filter((id) => id !== userId)
-        : [...currentIds, userId];
-      return { ...current, recipientIds: nextIds };
+      const tokens = getEmailTokens(current.recipientEmailDraft);
+      if (!tokens.length) {
+        return current;
+      }
+      const validEmails = tokens.filter(isEmailLike);
+      const invalidEmails = tokens.filter((email) => !isEmailLike(email));
+
+      return {
+        ...current,
+        recipientEmailDraft: invalidEmails.join(", "),
+        recipientEmails: normalizeEmails([...current.recipientEmails, ...validEmails]),
+      };
     });
   };
 
+  const handleDraftChange = (value: string) => {
+    if (/[,\n;]/.test(value)) {
+      setRewardForm((current) => {
+        const tokens = getEmailTokens(value);
+        const validEmails = tokens.filter(isEmailLike);
+        const invalidEmails = tokens.filter((email) => !isEmailLike(email));
+
+        return {
+          ...current,
+          recipientEmailDraft: invalidEmails.join(", "),
+          recipientEmails: normalizeEmails([...current.recipientEmails, ...validEmails]),
+        };
+      });
+      return;
+    }
+
+    setRewardForm((current) => ({ ...current, recipientEmailDraft: value }));
+  };
+
+  const removeEmail = (email: string) => {
+    setRewardForm((current) => ({
+      ...current,
+      recipientEmails: current.recipientEmails.filter((item) => item !== email),
+    }));
+  };
+
   return (
-    <Field label="Recipients">
-      <View style={styles.rewardSelectorGrid}>
-        <Pressable
-          accessibilityRole="button"
-          onPress={() =>
-            setRewardForm((current) => ({ ...current, recipientIds: allRecipientIds }))
-          }
-          style={({ pressed }) => [
-            styles.rewardSelectorChip,
-            selectedRecipientIds.length === allRecipientIds.length && styles.rewardSelectorChipActive,
-            pressed && styles.pressed,
-          ]}
-        >
-          <Text
-            style={[
-              styles.rewardSelectorText,
-              selectedRecipientIds.length === allRecipientIds.length &&
-                styles.rewardSelectorTextActive,
-            ]}
+    <Field label="Recipient emails">
+      <View style={styles.emailComposer}>
+        {rewardForm.recipientEmails.length ? (
+          <View style={styles.emailChipWrap}>
+            {rewardForm.recipientEmails.map((email) => {
+              const knownParticipant = participantEmails.has(email);
+              return (
+                <View
+                  key={email}
+                  style={[styles.emailChip, !knownParticipant && styles.emailChipWarning]}
+                >
+                  <Text
+                    numberOfLines={1}
+                    style={[styles.emailChipText, !knownParticipant && styles.emailChipTextWarning]}
+                  >
+                    {email}
+                  </Text>
+                  <Pressable
+                    accessibilityLabel={`Remove ${email}`}
+                    accessibilityRole="button"
+                    onPress={() => removeEmail(email)}
+                    style={({ pressed }) => [styles.emailChipRemove, pressed && styles.pressed]}
+                  >
+                    <Ionicons
+                      name="close-outline"
+                      size={13}
+                      color={knownParticipant ? theme.participant : theme.warning}
+                    />
+                  </Pressable>
+                </View>
+              );
+            })}
+          </View>
+        ) : null}
+        <View style={styles.emailComposerInputRow}>
+          <HackTextInput
+            autoCapitalize="none"
+            keyboardType="email-address"
+            onChangeText={handleDraftChange}
+            onSubmitEditing={addDraftEmails}
+            placeholder="recipient@domain.com"
+            style={styles.emailComposerInput}
+            value={rewardForm.recipientEmailDraft}
+          />
+          <Pressable
+            accessibilityRole="button"
+            onPress={addDraftEmails}
+            style={({ pressed }) => [styles.emailAddButton, pressed && styles.pressed]}
           >
-            All members
-          </Text>
-        </Pressable>
-        {room.participants.map((participant) => {
-          const active = selectedRecipientIds.includes(participant.userId);
-          return (
-            <Pressable
-              accessibilityRole="button"
-              key={participant.userId}
-              onPress={() => toggleRecipient(participant.userId)}
-              style={({ pressed }) => [
-                styles.rewardSelectorChip,
-                active && styles.rewardSelectorChipActive,
-                pressed && styles.pressed,
-              ]}
-            >
-              <Text style={[styles.rewardSelectorText, active && styles.rewardSelectorTextActive]}>
-                {participant.name}
-              </Text>
-            </Pressable>
-          );
-        })}
+            <Ionicons name="add-outline" size={18} color="#03120c" />
+          </Pressable>
+        </View>
       </View>
     </Field>
   );
@@ -6698,6 +6787,13 @@ const styles = StyleSheet.create({
     paddingRight: 4,
     paddingVertical: 4,
   },
+  emailChipTextWarning: {
+    color: theme.warning,
+  },
+  emailChipWarning: {
+    backgroundColor: theme.warningDark,
+    borderColor: theme.warningBorder,
+  },
   emailChipRemove: {
     alignItems: "center",
     backgroundColor: theme.backgroundAlt,
@@ -7866,8 +7962,10 @@ const styles = StyleSheet.create({
     borderColor: theme.border,
     borderRadius: 7,
     borderWidth: 1,
+    maxWidth: "100%",
+    minWidth: 172,
     paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingVertical: 8,
   },
   rewardSelectorChipActive: {
     backgroundColor: theme.awardDark,

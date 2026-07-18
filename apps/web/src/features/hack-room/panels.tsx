@@ -92,11 +92,11 @@ function RewardsPanel({
               />
             ))}
           </div>
-          {rewardForm.kind === "participant_certificate" && room ? (
-            <RecipientSelector
+          {room ? (
+            <RecipientEmailComposer
               onRewardFormChange={onRewardFormChange}
+              rewardForm={rewardForm}
               room={room}
-              selectedRecipientIds={rewardForm.recipientIds.length ? rewardForm.recipientIds : room.participants.map((p) => p.userId)}
             />
           ) : null}
           {rewardForm.kind !== "participant_certificate" ? (
@@ -585,82 +585,107 @@ function MemberList({ room }: { room: HackRoom }) {
   );
 }
 
-function RecipientSelector({
+function RecipientEmailComposer({
   onRewardFormChange,
+  rewardForm,
   room,
-  selectedRecipientIds,
 }: {
   onRewardFormChange: React.Dispatch<React.SetStateAction<ReturnType<typeof makeEmptyRewardForm>>>;
+  rewardForm: ReturnType<typeof makeEmptyRewardForm>;
   room: HackRoom;
-  selectedRecipientIds: string[];
 }) {
-  const allIds = room.participants.map((participant) => participant.userId);
+  const participantEmails = new Set(
+    room.participants.map((participant) => participant.email.trim().toLowerCase()),
+  );
+
+  function addDraftEmails() {
+    onRewardFormChange((current) => {
+      const tokens = getEmailTokens(current.recipientEmailDraft);
+      if (!tokens.length) return current;
+      const validEmails = tokens.filter(isEmailLike);
+      const invalidEmails = tokens.filter((email) => !isEmailLike(email));
+      return {
+        ...current,
+        recipientEmailDraft: invalidEmails.join(", "),
+        recipientEmails: normalizeEmails([...current.recipientEmails, ...validEmails]),
+      };
+    });
+  }
+
+  function removeEmail(email: string) {
+    onRewardFormChange((current) => ({
+      ...current,
+      recipientEmails: current.recipientEmails.filter((item) => item !== email),
+    }));
+  }
+
+  function handleDraftValue(value: string) {
+    if (/[,\n;]/.test(value)) {
+      onRewardFormChange((current) => {
+        const tokens = getEmailTokens(value);
+        const validEmails = tokens.filter(isEmailLike);
+        const invalidEmails = tokens.filter((email) => !isEmailLike(email));
+
+        return {
+          ...current,
+          recipientEmailDraft: invalidEmails.join(", "),
+          recipientEmails: normalizeEmails([...current.recipientEmails, ...validEmails]),
+        };
+      });
+      return;
+    }
+
+    onRewardFormChange((current) => ({ ...current, recipientEmailDraft: value }));
+  }
 
   return (
-    <Field label="Recipients">
-      <div className="flex flex-wrap gap-2">
-        <ChipButton
-          active={selectedRecipientIds.length === allIds.length}
-          label="All participants"
-          onClick={() => onRewardFormChange((current) => ({ ...current, recipientIds: allIds }))}
-        />
-        {room.participants.map((participant) => {
-          const active = selectedRecipientIds.includes(participant.userId);
-          return (
-            <RecipientButton
-              active={active}
-              key={participant.userId}
-              participant={participant}
-              onClick={() =>
-                onRewardFormChange((current) => {
-                  const currentIds = current.recipientIds.length ? current.recipientIds : allIds;
-                  return {
-                    ...current,
-                    recipientIds: active
-                      ? currentIds.filter((id) => id !== participant.userId)
-                      : [...currentIds, participant.userId],
-                  };
-                })
+    <Field label="Recipient Emails">
+      <div className="rounded-[9px] border border-[#1EEAB0] bg-[#061F18] p-2">
+        {rewardForm.recipientEmails.length ? (
+          <div className="mb-2 flex flex-wrap gap-1.5">
+            {rewardForm.recipientEmails.map((email) => {
+              const knownParticipant = participantEmails.has(email);
+              return (
+                <span
+                  className={`inline-flex max-w-full items-center gap-1 rounded-full border bg-[#0D0F12] px-2 py-1 font-mono text-[10px] ${
+                    knownParticipant
+                      ? "border-[#1EEAB0] text-[#1EEAB0]"
+                      : "border-[#FF8820] text-[#FF8820]"
+                  }`}
+                  key={email}
+                >
+                  <span className="truncate">{email}</span>
+                  <button
+                    aria-label={`Remove ${email}`}
+                    onClick={() => removeEmail(email)}
+                    type="button"
+                  >
+                    <NativeIcon className="size-3" name="close-outline" />
+                  </button>
+                </span>
+              );
+            })}
+          </div>
+        ) : null}
+        <div className="grid grid-cols-[1fr_auto] gap-2">
+          <Input
+            className="h-9 rounded-[8px] border-[rgba(238,232,222,0.12)] bg-[#0D0F12] text-[13px] text-[#EEE8DE]"
+            onChange={(event) => handleDraftValue(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                addDraftEmails();
               }
-            />
-          );
-        })}
+            }}
+            placeholder="recipient@domain.com"
+            value={rewardForm.recipientEmailDraft}
+          />
+          <Button className="h-9 rounded-[8px] bg-[#1EEAB0] text-[#03120C]" onClick={addDraftEmails} type="button">
+            <NativeIcon className="size-4" name="add-outline" />
+          </Button>
+        </div>
       </div>
     </Field>
-  );
-}
-
-function RecipientButton({
-  active,
-  onClick,
-  participant,
-}: {
-  active: boolean;
-  onClick: () => void;
-  participant: HackRoom["participants"][number];
-}) {
-  return (
-    <button
-      aria-pressed={active}
-      className={`flex min-h-12 max-w-full items-center gap-2 rounded-[8px] border px-3 py-2 text-left transition ${
-        active
-          ? "border-[#1EEAB0] bg-[#061F18] text-[#1EEAB0]"
-          : "border-[rgba(238,232,222,0.12)] bg-[#0D0F12] text-[#9C9690] hover:border-[#1EEAB0]/60"
-      }`}
-      onClick={onClick}
-      title={`${participant.name} - ${participant.email}`}
-      type="button"
-    >
-      <Avatar name={participant.name} tone={active ? "cyan" : "violet"} />
-      <span className="min-w-0">
-        <span className="block truncate font-mono text-[10px] font-semibold uppercase tracking-[0.08em]">
-          {participant.name}
-        </span>
-        <span className={`block truncate text-[11px] ${active ? "text-[#9CFFF0]" : "text-[#626058]"}`}>
-          {participant.email}
-        </span>
-      </span>
-    </button>
   );
 }
 
@@ -820,7 +845,6 @@ export {
   MemberList,
   ParticipantHistoryPanel,
   ProofRequirementFields,
-  RecipientSelector,
   RewardsPanel,
   ReviewQueue,
   RoomProfile,

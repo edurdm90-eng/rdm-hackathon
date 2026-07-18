@@ -234,7 +234,8 @@ export function makeEmptyRewardForm() {
     description: "",
     kind: "participant_certificate" as RewardKind,
     ledgerNote: "",
-    recipientIds: [] as string[],
+    recipientEmailDraft: "",
+    recipientEmails: [] as string[],
     sourceSubmissionId: "",
     title: "",
   };

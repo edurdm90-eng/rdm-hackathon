@@ -841,14 +841,7 @@ export const hackRoomRouter = router({
       let sourceTask: HackTaskRecord | null = null;
       let recipients: RewardRecipientRecord[] = [];
 
-      if (input.kind === "participant_certificate") {
-        const recipientIds = input.recipientIds.length
-          ? new Set(input.recipientIds)
-          : new Set(room.participants.map((participant) => participant.userId));
-        recipients = room.participants
-          .filter((participant) => recipientIds.has(participant.userId))
-          .map(({ email, name, userId }) => ({ email, name, userId }));
-      } else {
+      if (input.kind !== "participant_certificate") {
         if (!input.sourceSubmissionId) {
           throw new TRPCError({
             code: "BAD_REQUEST",
@@ -873,13 +866,26 @@ export const hackRoomRouter = router({
           _id: sourceSubmission.taskId,
           roomId: room._id,
         });
-
-        recipients = room.participants.map(({ email, name, userId }) => ({
-          email,
-          name,
-          userId,
-        }));
       }
+
+      const roomParticipantIds = new Set(room.participants.map((participant) => participant.userId));
+      const unknownRecipientIds = input.recipientIds.filter(
+        (recipientId) => !roomParticipantIds.has(recipientId),
+      );
+
+      if (unknownRecipientIds.length) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "One or more selected recipients have not joined this room",
+        });
+      }
+
+      const recipientIds = input.recipientIds.length
+        ? new Set(input.recipientIds)
+        : roomParticipantIds;
+      recipients = room.participants
+        .filter((participant) => recipientIds.has(participant.userId))
+        .map(({ email, name, userId }) => ({ email, name, userId }));
 
       if (!recipients.length) {
         throw new TRPCError({
