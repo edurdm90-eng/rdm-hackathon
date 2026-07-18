@@ -20,6 +20,7 @@ import {
   setPrivyAccessToken,
   writeStoredPrivySession,
 } from "@/lib/privy-session";
+import { authClient } from "@/lib/auth-client";
 import { queryClient } from "@/utils/trpc";
 
 function getUserEmail(user: NonNullable<ReturnType<typeof usePrivy>["user"]>) {
@@ -41,7 +42,7 @@ function getUserName(user: NonNullable<ReturnType<typeof usePrivy>["user"]>) {
 }
 
 function PrivySessionBridge({ children }: { children: ReactNode }) {
-  const { authenticated, getAccessToken, login, logout, ready, user } = usePrivy();
+  const { authenticated, getAccessToken, login, logout: privyLogout, ready, user } = usePrivy();
   const {
     loginWithCode,
     sendCode,
@@ -58,6 +59,7 @@ function PrivySessionBridge({ children }: { children: ReactNode }) {
   });
   const { createWallet } = useCreateWallet();
   const { ready: walletsReady, wallets } = useWallets();
+  const [hasSyncedSession, setHasSyncedSession] = useState(false);
   const [isCreatingWallet, setIsCreatingWallet] = useState(false);
   const [walletError, setWalletError] = useState<string | null>(null);
   const embeddedWallet = getEmbeddedConnectedWallet(wallets);
@@ -69,6 +71,7 @@ function PrivySessionBridge({ children }: { children: ReactNode }) {
     }
 
     if (!authenticated || !user) {
+      setHasSyncedSession(false);
       clearStoredPrivySession();
       void queryClient.invalidateQueries();
       return;
@@ -78,6 +81,7 @@ function PrivySessionBridge({ children }: { children: ReactNode }) {
     let active = true;
 
     async function syncPrivySession() {
+      setHasSyncedSession(false);
       const token = await getAccessToken();
 
       if (!active) {
@@ -85,6 +89,23 @@ function PrivySessionBridge({ children }: { children: ReactNode }) {
       }
 
       setPrivyAccessToken(token ?? null);
+
+      if (!token) {
+        throw new Error("Privy did not return an access token for this login.");
+      }
+
+      const exchangeResult = await authClient.privy.exchange({
+        accessToken: token,
+      });
+
+      if (exchangeResult.error) {
+        throw new Error(
+          exchangeResult.error.message ??
+            exchangeResult.error.statusText ??
+            "Unable to create a Better Auth session from Privy.",
+        );
+      }
+
       writeStoredPrivySession({
         session: {
           id: `privy_session_${currentUser.id}`,
@@ -97,11 +118,13 @@ function PrivySessionBridge({ children }: { children: ReactNode }) {
           walletAddress: walletAddress ?? undefined,
         },
       });
+      setHasSyncedSession(true);
       await queryClient.invalidateQueries();
     }
 
     void syncPrivySession().catch((error) => {
       const message = error instanceof Error ? error.message : "Unable to sync Privy session.";
+      setHasSyncedSession(false);
       toast.error(message);
     });
 
@@ -139,7 +162,7 @@ function PrivySessionBridge({ children }: { children: ReactNode }) {
 
   const authValue = useMemo(
     () => ({
-      authenticated,
+      authenticated: authenticated && hasSyncedSession,
       configurationError: null,
       emailLoginStatus: emailLoginState.status,
       loginWithEmailCode: async (code: string) => {
@@ -149,16 +172,27 @@ function PrivySessionBridge({ children }: { children: ReactNode }) {
         await login(options as Parameters<typeof login>[0]);
       },
       logout: async () => {
+        setHasSyncedSession(false);
         clearStoredPrivySession();
-        await logout();
-        await queryClient.invalidateQueries();
+        await queryClient.cancelQueries();
+        queryClient.clear();
+        await Promise.allSettled([privyLogout(), authClient.signOut()]);
       },
       ready,
       sendEmailCode: async (email: string) => {
         await sendCode({ email });
       },
     }),
-    [authenticated, emailLoginState.status, login, loginWithCode, logout, ready, sendCode],
+    [
+      authenticated,
+      emailLoginState.status,
+      hasSyncedSession,
+      login,
+      loginWithCode,
+      privyLogout,
+      ready,
+      sendCode,
+    ],
   );
 
   const walletValue = useMemo(

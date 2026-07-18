@@ -47,14 +47,8 @@ export default function UserMenu() {
             variant="destructive"
             onClick={async () => {
               await logout();
-              await authClient.signOut({
-                fetchOptions: {
-                  onSuccess: () => {
-                    navigate({
-                      to: "/login",
-                    });
-                  },
-                },
+              navigate({
+                to: "/login",
               });
             }}
           >

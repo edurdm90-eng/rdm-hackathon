@@ -14,6 +14,7 @@
     "@hookform/resolvers": "^5.2.2",
     "@noble/hashes": "catalog:",
     "@rdm-hack/api": "workspace:*",
+    "@rdm-hack/auth": "workspace:*",
     "@rdm-hack/env": "workspace:*",
     "@rdm-hack/ui": "workspace:*",
     "@tailwindcss/vite": "^4.2.2",

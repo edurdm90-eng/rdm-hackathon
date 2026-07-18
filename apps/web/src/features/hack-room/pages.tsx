@@ -4,7 +4,6 @@ import { useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 
 import { usePrivyAuth } from "@/components/privy-provider";
-import { authClient } from "@/lib/auth-client";
 import { NativeIcon, createNativeIcon } from "@/lib/native-icons";
 import { queryClient, trpc } from "@/utils/trpc";
 
@@ -262,8 +261,6 @@ export function HackRoomProfilePwa({ user }: { user: SessionUser }) {
 
   async function handleSignOut() {
     await logout();
-    await authClient.signOut();
-    await queryClient.invalidateQueries();
     navigate({ to: "/login" });
   }
 

@@ -1,4 +1,5 @@
 import { env } from "@rdm-hack/env/web";
+import { privyClient } from "@rdm-hack/auth/client";
 import { createAuthClient } from "better-auth/react";
 import { useEffect, useState } from "react";
 
@@ -11,6 +12,7 @@ import {
 
 const betterAuthClient = createAuthClient({
   baseURL: env.VITE_SERVER_URL,
+  plugins: [privyClient()],
 });
 
 type SessionResponse = {
@@ -27,8 +29,7 @@ async function getSession(): Promise<SessionResponse> {
   return betterAuthClient.getSession();
 }
 
-export const authClient = {
-  ...betterAuthClient,
+export const authClient = Object.assign(betterAuthClient, {
   getAccessToken: async () => getPrivyAccessToken(),
   getSession,
   signOut: async (options?: Parameters<typeof betterAuthClient.signOut>[0]) => {
@@ -58,4 +59,4 @@ export const authClient = {
       isPending: betterAuthSession.isPending,
     };
   },
-};
+});

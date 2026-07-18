@@ -45,7 +45,11 @@ let privyClientPromise: Promise<PrivyClient> | null = null;
 let privyNodeModulePromise: Promise<typeof import("@privy-io/node")> | null = null;
 
 function normalizePemKey(value: string) {
-  return value.trim().replace(/^"(.*)"$/, "$1").replace(/\\n/g, "\n");
+  return value
+    .trim()
+    .replace(/^["']/, "")
+    .replace(/["']$/, "")
+    .replace(/\\n/g, "\n");
 }
 
 function loadPrivyNode() {

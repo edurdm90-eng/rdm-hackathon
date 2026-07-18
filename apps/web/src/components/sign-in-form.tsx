@@ -50,12 +50,20 @@ export default function SignInForm() {
       return;
     }
 
+    setEmail(trimmedEmail);
+    setCode("");
     await sendEmailCode(trimmedEmail);
     toast.success("OTP sent to your email.");
   }
 
   async function handleVerifyCode() {
+    const trimmedEmail = email.trim().toLowerCase();
     const trimmedCode = code.trim();
+
+    if (!trimmedEmail || !trimmedEmail.includes("@")) {
+      toast.error("Please enter a valid email address.");
+      return;
+    }
 
     if (!trimmedCode || trimmedCode.length < 6) {
       toast.error("Please enter the 6-digit OTP.");

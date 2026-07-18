@@ -20,7 +20,10 @@ function RouteComponent() {
         email: user.email,
         id: user.id,
         name: user.name || user.email,
-        walletAddress: "walletAddress" in user ? user.walletAddress : undefined,
+        walletAddress:
+          "walletAddress" in user && typeof user.walletAddress === "string"
+            ? user.walletAddress
+            : undefined,
       }}
     />
   );

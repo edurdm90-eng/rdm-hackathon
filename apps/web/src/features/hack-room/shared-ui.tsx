@@ -153,7 +153,7 @@ function SectionCard({
   tone?: Tone;
 }) {
   return (
-    <Card className={`mb-3 gap-0 rounded-[11px] border py-0 text-[#EEE8DE] ring-0 ${tonePanelSurface(tone)}`}>
+    <Card className={`mb-3 gap-0 overflow-visible rounded-[11px] border py-0 text-[#EEE8DE] ring-0 ${tonePanelSurface(tone)}`}>
       <CardHeader className="flex flex-row items-start justify-between gap-3 px-4 pb-3 pt-3.5">
         <div>
           <div className={`font-mono text-[10px] uppercase tracking-[0.12em] ${toneText(tone, true)}`}>
@@ -218,8 +218,8 @@ function SubmissionCard({
   submission: DashboardData["mySubmissions"][number] | HackSubmission;
 }) {
   return (
-    <article className="rounded-[10px] border border-[rgba(238,232,222,0.12)] bg-[#0D0F12] p-3">
-      <div className="flex items-start justify-between gap-3">
+    <article className="w-full max-w-full overflow-hidden rounded-[10px] border border-[rgba(238,232,222,0.12)] bg-[#0D0F12] p-3">
+      <div className="flex min-w-0 items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="truncate text-[13px] font-semibold text-[#EEE8DE]">{submission.taskTitle}</div>
           <div className="mt-1 truncate font-mono text-[10px] text-[#626058]">{submission.roomName}</div>
@@ -290,7 +290,7 @@ function ProofItemsList({ proofItems }: { proofItems: Array<{ type: ProofType; v
   }
 
   return (
-    <div className="mt-3 grid gap-1.5">
+    <div className="mt-3 grid max-w-full gap-1.5 overflow-hidden">
       <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-[#626058]">
         Submitted Proof
       </div>
@@ -299,17 +299,17 @@ function ProofItemsList({ proofItems }: { proofItems: Array<{ type: ProofType; v
         const isLinkProof = proofItem.type !== "game_score";
         return (
           <a
-            className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-[8px] border border-[rgba(238,232,222,0.12)] bg-[#141618] px-2.5 py-2"
+            className="grid min-w-0 max-w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 overflow-hidden rounded-[8px] border border-[rgba(238,232,222,0.12)] bg-[#141618] px-2.5 py-2"
             href={isLinkProof ? toExternalUrl(proofItem.value) : undefined}
             key={`${proofItem.type}-${index}`}
             rel="noreferrer"
             target="_blank"
           >
-            <span className="flex min-w-0 items-center gap-2">
+            <span className="flex min-w-0 items-center gap-2 overflow-hidden">
               <span className="grid size-7 shrink-0 place-items-center rounded-[7px] bg-[#0D0F12]">
                 <Icon className="size-4 text-[#9C9690]" />
               </span>
-              <span className="min-w-0">
+              <span className="min-w-0 flex-1 overflow-hidden">
                 <span className="block text-xs font-semibold text-[#CCC6BA]">
                   {proofTypeLabel(proofItem.type)} {index + 1}
                 </span>

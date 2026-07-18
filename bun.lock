@@ -1,5 +1,6 @@
 {
   "lockfileVersion": 1,
+  "configVersion": 0,
   "workspaces": {
     "": {
       "name": "rdm-hack",
@@ -106,6 +107,7 @@
         "@noble/hashes": "catalog:",
         "@privy-io/react-auth": "catalog:",
         "@rdm-hack/api": "workspace:*",
+        "@rdm-hack/auth": "workspace:*",
         "@rdm-hack/env": "workspace:*",
         "@rdm-hack/ui": "workspace:*",
         "@tailwindcss/vite": "^4.2.2",
