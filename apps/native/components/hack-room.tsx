@@ -144,6 +144,8 @@ const emptyTaskForm = {
   title: "",
 };
 
+const minimumTaskDueOffsetMs = 60_000;
+
 function makeEmptyRewardForm() {
   return {
     awardXrdm: "0",
@@ -898,6 +900,7 @@ function HackRoomDetailDashboard({
   const [message, setMessage] = useState<{ text: string; tone: Tone } | null>(null);
   const [feedbackBySubmission, setFeedbackBySubmission] = useState<Record<string, string>>({});
   const [awardBySubmission, setAwardBySubmission] = useState<Record<string, string>>({});
+  const [createdTaskCardId, setCreatedTaskCardId] = useState("");
 
   const hostedRooms = dashboard.data?.hostedRooms ?? [];
   const joinedRooms = dashboard.data?.joinedRooms ?? [];
@@ -989,12 +992,15 @@ function HackRoomDetailDashboard({
   const createTask = useMutation(
     trpc.hackRoom.createTask.mutationOptions({
       onError: (error) => setMessage({ text: error.message, tone: "red" }),
-      onSuccess: async () => {
+      onSuccess: async (task) => {
         setTaskForm(emptyTaskForm);
         setAssignmentMode("task");
         setTaskKind("task");
         setProofTypes(defaultRegularProofTypes);
-        setMessage({ text: "Room assignment published", tone: "violet" });
+        setSelectedTaskId(task._id);
+        setCreatedTaskCardId(task._id);
+        setActiveRoomTab("created");
+        setMessage({ text: `${kindLabel(task.kind ?? "task")} card created`, tone: "violet" });
         await invalidateDashboard();
       },
     }),
@@ -1109,6 +1115,16 @@ function HackRoomDetailDashboard({
     }
     if (selectedRoomRole !== "host") {
       setMessage({ text: "Only the host can publish inside this room", tone: "red" });
+      return;
+    }
+    if (!taskForm.dueAt.trim()) {
+      setMessage({ text: "Select a due date and time before publishing", tone: "red" });
+      return;
+    }
+
+    const dueDateError = getTaskDueDateError(taskForm.dueAt);
+    if (dueDateError) {
+      setMessage({ text: dueDateError, tone: "red" });
       return;
     }
 
@@ -1354,11 +1370,13 @@ function HackRoomDetailDashboard({
             approvedSubmissions={approvedHostSubmissions}
             approveSubmissionPending={approveSubmission.isPending}
             awardBySubmission={awardBySubmission}
+            createdTaskCardId={createdTaskCardId}
             createTaskPending={createTask.isPending}
             feedbackBySubmission={feedbackBySubmission}
             historySubmissions={historySubmissions}
             mySubmissions={roomMySubmissions}
             onApproveSubmission={handleApproveSubmission}
+            onClearCreatedTaskCard={() => setCreatedTaskCardId("")}
             onCreateTask={handleCreateTask}
             onParticipantTabChange={setActiveParticipantTab}
             onReturnSubmission={handleReturnSubmission}
@@ -1688,12 +1706,14 @@ function RoomWorkspace({
   approvedSubmissions,
   approveSubmissionPending,
   awardBySubmission,
+  createdTaskCardId,
   createTaskPending,
   feedbackBySubmission,
   historySubmissions,
   issueRewardPending,
   mySubmissions,
   onApproveSubmission,
+  onClearCreatedTaskCard,
   onCopyInvite,
   onCreateTask,
   onIssueReward,
@@ -1738,12 +1758,14 @@ function RoomWorkspace({
   approvedSubmissions: DashboardData["hostSubmissions"];
   approveSubmissionPending: boolean;
   awardBySubmission: Record<string, string>;
+  createdTaskCardId: string;
   createTaskPending: boolean;
   feedbackBySubmission: Record<string, string>;
   historySubmissions: DashboardData["hostSubmissions"];
   issueRewardPending: boolean;
   mySubmissions: DashboardData["mySubmissions"];
   onApproveSubmission: (submission: HackSubmission) => void;
+  onClearCreatedTaskCard: () => void;
   onCopyInvite: (room: HackRoom) => void;
   onCreateTask: (kind: TaskKind) => void;
   onIssueReward: (kind: RewardKind) => void;
@@ -1824,11 +1846,13 @@ function RoomWorkspace({
           approvedSubmissions={approvedSubmissions}
           approveSubmissionPending={approveSubmissionPending}
           awardBySubmission={awardBySubmission}
+          createdTaskCardId={createdTaskCardId}
           createTaskPending={createTaskPending}
           feedbackBySubmission={feedbackBySubmission}
           historySubmissions={historySubmissions}
           issueRewardPending={issueRewardPending}
           onApproveSubmission={onApproveSubmission}
+          onClearCreatedTaskCard={onClearCreatedTaskCard}
           onCopyInvite={onCopyInvite}
           onCreateTask={onCreateTask}
           onIssueReward={onIssueReward}
@@ -1845,6 +1869,7 @@ function RoomWorkspace({
           room={room}
           roomTasks={roomTasks}
           selectWinnerPending={selectWinnerPending}
+          selectedTaskId={selectedTaskId}
           sendRoomNotificationPending={sendRoomNotificationPending}
           setAwardBySubmission={setAwardBySubmission}
           setAssignmentMode={setAssignmentMode}
@@ -1884,11 +1909,13 @@ function HostRoomWorkspace({
   approvedSubmissions,
   approveSubmissionPending,
   awardBySubmission,
+  createdTaskCardId,
   createTaskPending,
   feedbackBySubmission,
   historySubmissions,
   issueRewardPending,
   onApproveSubmission,
+  onClearCreatedTaskCard,
   onCopyInvite,
   onCreateTask,
   onIssueReward,
@@ -1905,6 +1932,7 @@ function HostRoomWorkspace({
   room,
   roomTasks,
   selectWinnerPending,
+  selectedTaskId,
   sendRoomNotificationPending,
   setAwardBySubmission,
   setAssignmentMode,
@@ -1922,11 +1950,13 @@ function HostRoomWorkspace({
   approvedSubmissions: DashboardData["hostSubmissions"];
   approveSubmissionPending: boolean;
   awardBySubmission: Record<string, string>;
+  createdTaskCardId: string;
   createTaskPending: boolean;
   feedbackBySubmission: Record<string, string>;
   historySubmissions: DashboardData["hostSubmissions"];
   issueRewardPending: boolean;
   onApproveSubmission: (submission: HackSubmission) => void;
+  onClearCreatedTaskCard: () => void;
   onCopyInvite: (room: HackRoom) => void;
   onCreateTask: (kind: TaskKind) => void;
   onIssueReward: (kind: RewardKind) => void;
@@ -1943,6 +1973,7 @@ function HostRoomWorkspace({
   room: HackRoom;
   roomTasks: DashboardData["tasks"];
   selectWinnerPending: boolean;
+  selectedTaskId: string;
   sendRoomNotificationPending: boolean;
   setAwardBySubmission: React.Dispatch<React.SetStateAction<Record<string, string>>>;
   setAssignmentMode: React.Dispatch<React.SetStateAction<AssignmentMode>>;
@@ -2139,10 +2170,12 @@ function HostRoomWorkspace({
         <HostCreatedTasksPanel
           historySubmissions={historySubmissions}
           onOpenTaskHistory={(taskId) => {
+            onClearCreatedTaskCard();
             setHistoryTaskId(taskId);
             onRoomTabChange("history");
           }}
           roomTasks={roomTasks}
+          selectedTaskId={createdTaskCardId || selectedTaskId}
         />
       ) : null}
 
@@ -2357,10 +2390,12 @@ function HostCreatedTasksPanel({
   historySubmissions,
   onOpenTaskHistory,
   roomTasks,
+  selectedTaskId,
 }: {
   historySubmissions: DashboardData["hostSubmissions"];
   onOpenTaskHistory: (taskId: string) => void;
   roomTasks: DashboardData["tasks"];
+  selectedTaskId: string;
 }) {
   const taskKinds: Array<{
     icon: React.ComponentProps<typeof Ionicons>["name"];
@@ -2416,6 +2451,7 @@ function HostCreatedTasksPanel({
               historyCount={historyCountByTask.get(task._id) ?? 0}
               key={task._id}
               onPress={() => onOpenTaskHistory(task._id)}
+              selected={task._id === selectedTaskId}
               task={task}
             />
           ))
@@ -4301,6 +4337,7 @@ function AssignmentComposer({
   const selectableProofTypeOptions = isGame
     ? proofTypeOptions.filter((option) => option.value === "game_score")
     : proofTypeOptions.filter((option) => option.value !== "game_score");
+  const dueDateError = isNotification ? null : getTaskDueDateError(taskForm.dueAt);
   const canSubmitNotification =
     isNotification && taskForm.title.trim() && taskForm.description.trim() && !sendNotificationPending;
   const canSubmitTask =
@@ -4308,6 +4345,7 @@ function AssignmentComposer({
     taskForm.title.trim() &&
     taskForm.description.trim() &&
     taskForm.dueAt.trim() &&
+    !dueDateError &&
     (!isSpecialTask || taskForm.assignedToEmail.trim()) &&
     !createTaskPending;
 
@@ -4443,11 +4481,15 @@ function AssignmentComposer({
       </Field>
 
       {!isNotification ? (
-        <DateTimeField
-          label={dateLabel}
-          onChange={(value) => setTaskForm((current) => ({ ...current, dueAt: value }))}
-          value={taskForm.dueAt}
-        />
+        <View style={styles.fieldWithHelper}>
+          <DateTimeField
+            label={dateLabel}
+            minimumDate={getMinimumTaskDueDate()}
+            onChange={(value) => setTaskForm((current) => ({ ...current, dueAt: value }))}
+            value={taskForm.dueAt}
+          />
+          {dueDateError ? <Text style={styles.fieldErrorText}>{dueDateError}</Text> : null}
+        </View>
       ) : null}
 
       {isGame ? (
@@ -5489,10 +5531,12 @@ function HackTextInput({
 
 function DateTimeField({
   label,
+  minimumDate,
   onChange,
   value,
 }: {
   label: string;
+  minimumDate?: Date;
   onChange: (value: string) => void;
   value: string;
 }) {
@@ -5525,6 +5569,7 @@ function DateTimeField({
 
   const openAndroidPicker = (mode: "date" | "time") => {
     DateTimePickerAndroid.open({
+      minimumDate,
       mode,
       onDismiss: handlePickerDismiss,
       onNeutralButtonPress: handlePickerDismiss,
@@ -5594,6 +5639,7 @@ function DateTimeField({
           <DateTimePicker
             display={Platform.OS === "ios" ? "spinner" : "default"}
             mode={pickerMode}
+            minimumDate={minimumDate}
             onDismiss={handlePickerDismiss}
             onNeutralButtonPress={handlePickerDismiss}
             onValueChange={handlePickerValueChange}
@@ -6383,6 +6429,28 @@ function formatDate(value: string) {
   });
 }
 
+function getMinimumTaskDueDate(date = new Date()) {
+  return new Date(date.getTime() + minimumTaskDueOffsetMs);
+}
+
+function getTaskDueDateError(value: string, date = new Date()) {
+  const trimmedValue = value.trim();
+  if (!trimmedValue) {
+    return null;
+  }
+
+  const timestamp = new Date(trimmedValue).getTime();
+  if (Number.isNaN(timestamp)) {
+    return "Choose a valid due date and time";
+  }
+
+  if (timestamp <= getMinimumTaskDueDate(date).getTime()) {
+    return "Due date and time must be in the future";
+  }
+
+  return null;
+}
+
 function parseDateTimeValue(value: string) {
   const parsedDate = value ? new Date(value) : new Date();
   if (Number.isNaN(parsedDate.getTime())) {
@@ -6886,12 +6954,22 @@ const styles = StyleSheet.create({
   field: {
     gap: 6,
   },
+  fieldErrorText: {
+    color: theme.danger,
+    fontFamily: Platform.select({ default: "monospace" }),
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "uppercase",
+  },
   fieldLabel: {
     color: theme.faint,
     fontFamily: Platform.select({ default: "monospace" }),
     fontSize: 9,
     letterSpacing: 1.1,
     textTransform: "uppercase",
+  },
+  fieldWithHelper: {
+    gap: 6,
   },
   formTitle: {
     color: theme.text,

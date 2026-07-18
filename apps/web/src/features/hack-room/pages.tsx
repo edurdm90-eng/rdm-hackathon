@@ -47,7 +47,7 @@ export function HackRoomHomePwa({ user }: { user: SessionUser }) {
   const recentSubmissions = dashboard.data?.mySubmissions ?? [];
   const allRooms = useMemo(() => buildRoomEntries(hostedRooms, joinedRooms), [hostedRooms, joinedRooms]);
   const firstRoom = allRooms[0]?.room;
-  const walletRoom = joinedRooms[0];
+  const walletRoom = joinedRooms[0] ?? firstRoom;
 
   function openRoomOrShelf(room = firstRoom, tab: RoomTabSegment = "overview") {
     if (room) {
@@ -55,10 +55,6 @@ export function HackRoomHomePwa({ user }: { user: SessionUser }) {
       return;
     }
     navigate({ to: "/hack-room" });
-  }
-
-  function openWallet() {
-    openRoomOrShelf(walletRoom, "wallet");
   }
 
   return (
@@ -131,7 +127,7 @@ export function HackRoomHomePwa({ user }: { user: SessionUser }) {
             icon: WalletIcon,
             label: "Wallet",
             meta: "XRDM, certs, NFTs",
-            onClick: openWallet,
+            onClick: () => openRoomOrShelf(walletRoom, "wallet"),
             tone: "gold",
           },
         ]}

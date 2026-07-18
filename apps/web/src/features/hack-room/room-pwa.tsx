@@ -458,47 +458,12 @@ export default function HackRoomPwa({
       return;
     }
 
-    const rawRecipientEmails = [
-      ...rewardForm.recipientEmails,
-      ...getEmailTokens(rewardForm.recipientEmailDraft),
-    ];
-    const invalidRecipientEmails = rawRecipientEmails.filter((email) => !isEmailLike(email));
-    const recipientEmails = normalizeEmails(rawRecipientEmails);
-    const participantsByEmail = new Map(
-      selectedRoom.participants.map((participant) => [
-        participant.email.trim().toLowerCase(),
-        participant,
-      ]),
-    );
-    const missingRecipientEmail = recipientEmails.find(
-      (email) => !participantsByEmail.has(email),
-    );
-
-    if (invalidRecipientEmails.length) {
-      showMessage(`Check recipient email: ${invalidRecipientEmails[0]}`, "red");
-      return;
-    }
-
-    if (!recipientEmails.length) {
-      showMessage("Add at least one recipient email", "red");
-      return;
-    }
-
-    if (missingRecipientEmail) {
-      showMessage(`${missingRecipientEmail} has not joined this room yet`, "red");
-      return;
-    }
-
-    const recipientIds = recipientEmails
-      .map((email) => participantsByEmail.get(email)?.userId ?? "")
-      .filter(Boolean);
-
     issueReward.mutate({
       awardXrdm: Number(rewardForm.awardXrdm || 0),
       description: rewardForm.description,
       kind,
       ledgerNote: rewardForm.ledgerNote,
-      recipientIds,
+      recipientIds: kind === "participant_certificate" ? rewardForm.recipientIds : [],
       roomId: selectedRoom._id,
       sourceSubmissionId:
         kind === "participant_certificate"
