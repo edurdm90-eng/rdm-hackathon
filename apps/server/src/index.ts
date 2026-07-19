@@ -2,7 +2,6 @@ import { trpcServer } from "@hono/trpc-server";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
-import { URL } from "node:url";
 
 import { createContext } from "../../../packages/api/src/context.js";
 import { appRouter } from "../../../packages/api/src/routers/index.js";
@@ -23,6 +22,10 @@ function resolveCorsOrigin(origin: string) {
   }
 
   return null;
+}
+
+function absoluteServerUrl(path: string) {
+  return `${env.BETTER_AUTH_URL.replace(/\/$/, "")}${path}`;
 }
 
 app.use(logger());
@@ -86,7 +89,7 @@ app.get("/metadata/hack-rewards/:rewardId.json", async (c) => {
     description:
       reward.description ||
       `Winner NFT badge issued for ${reward.teamName ?? "an RDM Hack Room"}.`,
-    external_url: new URL(`/metadata/hack-rewards/${rewardId}.json`, env.BETTER_AUTH_URL).toString(),
+    external_url: absoluteServerUrl(`/metadata/hack-rewards/${rewardId}.json`),
     name: reward.title ?? "Winner NFT Badge",
   });
 });

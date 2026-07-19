@@ -375,7 +375,7 @@ function rewardLabel(kind: z.infer<typeof rewardKindSchema>) {
 }
 
 function buildRewardMetadataUrl(rewardId: string) {
-  return new URL(`/metadata/hack-rewards/${rewardId}.json`, env.BETTER_AUTH_URL).toString();
+  return `${env.BETTER_AUTH_URL.replace(/\/$/, "")}/metadata/hack-rewards/${rewardId}.json`;
 }
 
 function normalizeStoredAddress(value?: string | null) {
