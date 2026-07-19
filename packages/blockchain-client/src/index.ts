@@ -20,7 +20,10 @@ export const polygonAmoyChain = {
   },
   rpcUrls: {
     default: {
-      http: ["https://rpc-amoy.polygon.technology"],
+      http: [
+        "https://polygon-amoy-bor-rpc.publicnode.com",
+        "https://rpc-amoy.polygon.technology",
+      ],
     },
   },
   testnet: true,
