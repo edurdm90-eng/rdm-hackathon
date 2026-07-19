@@ -19,6 +19,7 @@
     "@privy-io/expo-native-extensions": "0.0.12",
     "@rdm-hack/api": "workspace:*",
     "@rdm-hack/auth": "workspace:*",
+    "@rdm-hack/blockchain-client": "workspace:*",
     "@rdm-hack/env": "workspace:*",
     "@react-native-community/datetimepicker": "9.1.0",
     "@tanstack/react-form": "catalog:",

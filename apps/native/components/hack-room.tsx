@@ -1,6 +1,8 @@
 import type { AppRouter } from "@rdm-hack/api/routers/index";
 import { Ionicons } from "@expo/vector-icons";
 import { useLoginWithEmail, usePrivy } from "@privy-io/expo";
+import { useSmartWallets } from "@privy-io/expo/smart-wallets";
+import { polygonAmoyDeployment } from "@rdm-hack/blockchain-client";
 import DateTimePicker, { DateTimePickerAndroid } from "@react-native-community/datetimepicker";
 import * as Clipboard from "expo-clipboard";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -28,7 +30,20 @@ import z from "zod";
 
 import { authClient } from "@/lib/auth-client";
 import { useNativePrivyBridge } from "@/components/privy-provider";
+import {
+  makeAwardNftCall,
+  makeAwardXrdmCall,
+  makeCreateHackathonCall,
+  makeNoteWinnersCall,
+  makeRegisterParticipantsCall,
+  resolveTransactionHash,
+  type ContractCall,
+} from "@/lib/blockchain";
 import { HACK_THEME as theme } from "@/lib/constants";
+import {
+  forgetPendingChainEvent,
+  rememberPendingChainEvent,
+} from "@/lib/pending-chain-events";
 import { queryClient, trpc } from "@/utils/trpc";
 
 const rdmLogo = require("@/assets/logo/rdm-logo.png");
@@ -76,6 +91,10 @@ type MiniGameSession = {
   task?: HackTask;
   type: GameType;
 };
+type RegistrationPlan = Array<{
+  address: string;
+  userId: string;
+}>;
 type Tone = "cyan" | "violet" | "gold" | "orange" | "red" | "lime" | "sky";
 type SessionUser = {
   email: string;
@@ -135,6 +154,11 @@ const emptyRoomForm = {
   name: "",
 };
 
+type PendingRoomCreate = {
+  pendingId: string;
+  txHash: string;
+};
+
 const emptyTaskForm = {
   assignedToEmail: "",
   description: "",
@@ -144,15 +168,181 @@ const emptyTaskForm = {
   title: "",
 };
 
+const minimumTaskDueOffsetMs = 60_000;
+const walletSyncRetryDelaysMs = [0, 800, 1_600, 3_200, 6_400, 10_000] as const;
+let cachedNativeSessionUser: SessionUser | null = null;
+const syncedWalletKeys = new Set<string>();
+
+function walletProfileValue(value: string | null | undefined, fallback = "Not synced yet") {
+  return value && value.trim().length > 0 ? value : fallback;
+}
+
+function waitForWalletSyncRetry(delayMs: number) {
+  return new Promise<void>((resolve) => {
+    setTimeout(resolve, delayMs);
+  });
+}
+
+function setCachedNativeSessionUser(user: SessionUser | null) {
+  cachedNativeSessionUser = user;
+}
+
+function useSponsoredWalletSync(user: SessionUser | null) {
+  const { walletAddress } = useNativePrivyBridge();
+  const { client: readySmartWalletClient, getClientForChain } = useSmartWallets();
+  const syncWallets = useMutation(trpc.hackRoom.syncWallets.mutationOptions());
+
+  useEffect(() => {
+    if (!user || !walletAddress || syncWallets.isPending) {
+      return;
+    }
+
+    let cancelled = false;
+    const sessionUser = user;
+    const embeddedWalletAddress = walletAddress;
+
+    async function syncWalletsForUser() {
+      const embeddedSyncKey = `${sessionUser.id}:${embeddedWalletAddress}:embedded`;
+
+      if (!syncedWalletKeys.has(embeddedSyncKey)) {
+        syncedWalletKeys.add(embeddedSyncKey);
+        await syncWallets.mutateAsync({
+          embeddedWalletAddress,
+        });
+        await queryClient.invalidateQueries({ queryKey: trpc.hackRoom.dashboard.queryKey() });
+      }
+
+      for (const delayMs of walletSyncRetryDelaysMs) {
+        if (cancelled) {
+          return;
+        }
+
+        if (delayMs > 0) {
+          await waitForWalletSyncRetry(delayMs);
+        }
+
+        let smartWalletAddress = "";
+
+        try {
+          const smartWalletClient =
+            readySmartWalletClient ??
+            (await getClientForChain({
+              chainId: polygonAmoyDeployment.chainId,
+            }));
+          smartWalletAddress = (smartWalletClient.account?.address ?? "").toString();
+        } catch {
+          continue;
+        }
+
+        if (!smartWalletAddress) {
+          continue;
+        }
+
+        const smartSyncKey = `${sessionUser.id}:${embeddedWalletAddress}:${smartWalletAddress}`;
+        if (syncedWalletKeys.has(smartSyncKey) || cancelled) {
+          return;
+        }
+
+        syncedWalletKeys.add(smartSyncKey);
+        await syncWallets.mutateAsync({
+          embeddedWalletAddress,
+          smartWalletAddress,
+        });
+        await queryClient.invalidateQueries({ queryKey: trpc.hackRoom.dashboard.queryKey() });
+        return;
+      }
+    }
+
+    void syncWalletsForUser().catch(() => {
+      syncedWalletKeys.delete(`${sessionUser.id}:${embeddedWalletAddress}:embedded`);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [getClientForChain, readySmartWalletClient, syncWallets, user, walletAddress]);
+}
+
+function useSponsoredHackathonTransactions() {
+  const { getClientForChain } = useSmartWallets();
+
+  const sendContractCalls = async (input: {
+    calls: Array<ContractCall>;
+    pendingId: string;
+    pendingKind: string;
+  }) => {
+    if (!input.calls.length) {
+      return null;
+    }
+
+    const smartWalletClient = await getClientForChain({
+      chainId: polygonAmoyDeployment.chainId,
+    });
+    const smartWalletAddress = (smartWalletClient.account?.address ?? "").toString();
+
+    if (!smartWalletAddress) {
+      throw new Error("Privy smart wallet is not ready yet.");
+    }
+
+    await rememberPendingChainEvent({
+      id: input.pendingId,
+      kind: input.pendingKind,
+    });
+
+    const operationHash = await smartWalletClient.sendTransaction({
+      calls: input.calls,
+    } as never);
+    const txHash = await resolveTransactionHash({
+      client: smartWalletClient,
+      hash: operationHash,
+    });
+
+    await rememberPendingChainEvent({
+      id: input.pendingId,
+      kind: input.pendingKind,
+      txHash,
+    });
+
+    return txHash;
+  };
+
+  return {
+    sendContractCalls,
+  };
+}
+
 function makeEmptyRewardForm() {
   return {
     awardXrdm: "0",
     description: "",
     ledgerNote: "",
-    recipientIds: [] as Array<string>,
+    recipientEmailDraft: "",
+    recipientEmails: [] as Array<string>,
     sourceSubmissionId: "",
     title: "",
   };
+}
+
+function countNativeNetworkParticipants(rooms: Array<HackRoom>, currentUser: SessionUser) {
+  const networkParticipantIds = new Set<string>();
+  const currentEmail = currentUser.email.trim().toLowerCase();
+
+  rooms.forEach((room) => {
+    room.participants.forEach((participant) => {
+      const participantEmail = participant.email.trim().toLowerCase();
+      if (
+        participant.userId === currentUser.id ||
+        participant.userId === room.hostId ||
+        participantEmail === currentEmail
+      ) {
+        return;
+      }
+
+      networkParticipantIds.add(participant.userId);
+    });
+  });
+
+  return networkParticipantIds.size;
 }
 
 function makeEmptyProofItems(): Record<ProofType, string> {
@@ -188,8 +378,13 @@ export function NativeHomeScreen() {
 
 export function AuthenticatedTabs({ children }: { children: React.ReactNode }) {
   const { data: session, isPending } = authClient.useSession();
+  if (session?.user) {
+    setCachedNativeSessionUser(session.user);
+  }
+  const sessionUser = session?.user ?? cachedNativeSessionUser;
+  useSponsoredWalletSync(sessionUser);
 
-  if (isPending) {
+  if (isPending && !sessionUser) {
     return (
       <View style={styles.loadingScreen}>
         <ActivityIndicator color={theme.participant} />
@@ -198,7 +393,7 @@ export function AuthenticatedTabs({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!session?.user) {
+  if (!sessionUser) {
     return <AuthGateway />;
   }
 
@@ -213,10 +408,22 @@ export function HackRoomScreen() {
   return <AuthenticatedRoute>{(user) => <HackRoomDashboard user={user} />}</AuthenticatedRoute>;
 }
 
-export function HackRoomDetailScreen({ roomId }: { roomId: string }) {
+export function HackRoomDetailScreen({
+  initialParticipantTab = null,
+  roomId,
+}: {
+  initialParticipantTab?: ParticipantTab | null;
+  roomId: string;
+}) {
   return (
     <AuthenticatedRoute>
-      {(user) => <HackRoomDetailDashboard roomId={roomId} user={user} />}
+      {(user) => (
+        <HackRoomDetailDashboard
+          initialParticipantTab={initialParticipantTab}
+          roomId={roomId}
+          user={user}
+        />
+      )}
     </AuthenticatedRoute>
   );
 }
@@ -231,8 +438,13 @@ function AuthenticatedRoute({
   children: (user: SessionUser) => React.ReactNode;
 }) {
   const { data: session, isPending } = authClient.useSession();
+  if (session?.user) {
+    setCachedNativeSessionUser(session.user);
+  }
+  const sessionUser = session?.user ?? cachedNativeSessionUser;
+  useSponsoredWalletSync(sessionUser);
 
-  if (isPending) {
+  if (isPending && !sessionUser) {
     return (
       <View style={styles.loadingScreen}>
         <ActivityIndicator color={theme.participant} />
@@ -241,11 +453,11 @@ function AuthenticatedRoute({
     );
   }
 
-  if (!session?.user) {
+  if (!sessionUser) {
     return <AuthGateway />;
   }
 
-  return children(session.user);
+  return children(sessionUser);
 }
 
 function AuthGateway() {
@@ -319,6 +531,7 @@ function AuthGateway() {
     setHasSentCode(false);
     setFormError(null);
     clearLastError();
+    setCachedNativeSessionUser(null);
 
     const results = await Promise.allSettled([authClient.signOut(), logout()]);
     const failedReset = results.find((result) => result.status === "rejected");
@@ -472,11 +685,24 @@ function HomeDashboard({ user }: { user: SessionUser }) {
   const joinedRooms = dashboard.data?.joinedRooms ?? [];
   const recentSubmissions = dashboard.data?.mySubmissions ?? [];
   const notifications = dashboard.data?.notifications ?? [];
+  const walletRoom = joinedRooms[0];
 
   const handleNotifications = () => {
     setMessage({
       text: notificationBannerMessage(notifications),
       tone: notifications.length ? "violet" : "cyan",
+    });
+  };
+
+  const openWallet = () => {
+    if (!walletRoom) {
+      router.push("/hack-room");
+      return;
+    }
+
+    router.push({
+      pathname: "/hack-room/[roomId]",
+      params: { roomId: walletRoom._id, tab: "wallet" },
     });
   };
 
@@ -569,7 +795,7 @@ function HomeDashboard({ user }: { user: SessionUser }) {
               icon="diamond-outline"
               label="Wallet"
               meta="XRDM, certs, NFTs"
-              onPress={() => router.push("/profile")}
+              onPress={openWallet}
               tone="gold"
             />
           </View>
@@ -620,11 +846,19 @@ function HomeDashboard({ user }: { user: SessionUser }) {
 function ProfileDashboard({ user }: { user: SessionUser }) {
   const dashboard = useQuery(trpc.hackRoom.dashboard.queryOptions());
   const { logout } = usePrivy();
+  const { isCreatingWallet, retryCreateWallet, walletAddress, walletError } = useNativePrivyBridge();
   const [message, setMessage] = useState<{ text: string; tone: Tone } | null>(null);
   const stats = dashboard.data?.stats;
+  const wallets = dashboard.data?.wallets;
+  const hostedRooms = dashboard.data?.hostedRooms ?? [];
   const notifications = dashboard.data?.notifications ?? [];
+  const networkCount = countNativeNetworkParticipants(hostedRooms, user);
+  const role = dashboard.data?.viewerRole ?? "member";
+  const embeddedWalletAddress = wallets?.embeddedWalletAddress ?? walletAddress;
+  const walletFallback = isCreatingWallet ? "Creating wallet..." : "Not synced yet";
 
   const handleSignOut = async () => {
+    setCachedNativeSessionUser(null);
     await Promise.allSettled([authClient.signOut(), logout()]);
     await queryClient.invalidateQueries();
   };
@@ -673,20 +907,42 @@ function ProfileDashboard({ user }: { user: SessionUser }) {
               icon="people-outline"
               label="Network"
               tone="violet"
-              value={stats?.participants ?? 0}
+              value={networkCount}
             />
           </View>
         </View>
 
         {dashboard.error ? <ErrorBanner message={dashboard.error.message} /> : null}
         {message ? <StatusBanner message={message.text} tone={message.tone} /> : null}
+        {walletError ? <ErrorBanner message={walletError} /> : null}
 
         <Panel eyebrow="Account" icon="person-circle-outline" title="Profile" tone="cyan">
           <View style={styles.profileDetails}>
             <ProfileRow label="Name" value={user.name} />
             <ProfileRow label="Email" value={user.email} />
             <ProfileRow label="User ID" value={user.id} />
+            <ProfileRow label="Role" value={role} />
+            <ProfileRow
+              label="Embedded wallet"
+              value={walletProfileValue(embeddedWalletAddress, walletFallback)}
+            />
+            <ProfileRow
+              label="Smart wallet"
+              value={walletProfileValue(wallets?.smartWalletAddress, walletFallback)}
+            />
+            <ProfileRow
+              label="On-chain address"
+              value={walletProfileValue(wallets?.onchainAddress, walletFallback)}
+            />
           </View>
+          {walletError ? (
+            <HackButton
+              icon="refresh-outline"
+              label="Retry Wallet"
+              onPress={() => void retryCreateWallet()}
+              tone="gold"
+            />
+          ) : null}
           <HackButton icon="log-out-outline" label="Sign Out" onPress={handleSignOut} tone="red" />
         </Panel>
       </ScrollView>
@@ -697,9 +953,12 @@ function ProfileDashboard({ user }: { user: SessionUser }) {
 function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
   const router = useRouter();
   const dashboard = useQuery(trpc.hackRoom.dashboard.queryOptions());
+  const { sendContractCalls } = useSponsoredHackathonTransactions();
   const [roomForm, setRoomForm] = useState(emptyRoomForm);
   const [inviteCode, setInviteCode] = useState("");
   const [createRoomModalOpen, setCreateRoomModalOpen] = useState(false);
+  const [isCreatingRoomOnchain, setIsCreatingRoomOnchain] = useState(false);
+  const [pendingRoomCreate, setPendingRoomCreate] = useState<PendingRoomCreate | null>(null);
   const [message, setMessage] = useState<{ text: string; tone: Tone } | null>(null);
 
   const hostedRooms = dashboard.data?.hostedRooms ?? [];
@@ -728,17 +987,7 @@ function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
     await queryClient.invalidateQueries({ queryKey: trpc.hackRoom.dashboard.queryKey() });
   };
 
-  const createRoom = useMutation(
-    trpc.hackRoom.createRoom.mutationOptions({
-      onError: (error) => setMessage({ text: error.message, tone: "red" }),
-      onSuccess: async (room) => {
-        setRoomForm(emptyRoomForm);
-        setCreateRoomModalOpen(false);
-        setMessage({ text: `Created ${room.name} with invite ${room.inviteCode}`, tone: "violet" });
-        await invalidateDashboard();
-      },
-    }),
-  );
+  const createRoom = useMutation(trpc.hackRoom.createRoom.mutationOptions());
 
   const joinRoom = useMutation(
     trpc.hackRoom.joinRoom.mutationOptions({
@@ -753,6 +1002,7 @@ function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
 
   const isBusy =
     createRoom.isPending ||
+    isCreatingRoomOnchain ||
     joinRoom.isPending;
 
   const handleNotifications = () => {
@@ -780,6 +1030,60 @@ function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
     });
   };
 
+  const handleCreateRoom = async () => {
+    if (!canCreateRoom) {
+      return;
+    }
+
+    let pendingId = pendingRoomCreate?.pendingId ?? `room:create:${Date.now()}`;
+    let txHash = pendingRoomCreate?.txHash;
+
+    try {
+      setIsCreatingRoomOnchain(true);
+
+      if (txHash) {
+        setMessage({ text: "Finishing room sync from confirmed on-chain transaction...", tone: "gold" });
+      } else {
+        setMessage({ text: "Confirming room on-chain with sponsored gas...", tone: "gold" });
+        txHash =
+          (await sendContractCalls({
+            calls: [makeCreateHackathonCall()],
+            pendingId,
+            pendingKind: "room_created",
+          })) ?? undefined;
+      }
+
+      if (!txHash) {
+        throw new Error("Room blockchain transaction did not return a transaction hash.");
+      }
+
+      setPendingRoomCreate({ pendingId, txHash });
+      setMessage({ text: "Creating room after chain confirmation...", tone: "violet" });
+      const room = await createRoom.mutateAsync({
+        ...roomForm,
+        txHash,
+      });
+
+      await forgetPendingChainEvent(pendingId);
+      setPendingRoomCreate(null);
+      setRoomForm(emptyRoomForm);
+      setCreateRoomModalOpen(false);
+      setMessage({ text: `Created ${room.name} on-chain with invite ${room.inviteCode}`, tone: "gold" });
+      await invalidateDashboard();
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unable to create the room on-chain.";
+      const retryMessage =
+        "Tap Create Room again to finish sync without sending another transaction.";
+      setMessage({
+        text: txHash ? `${errorMessage} ${retryMessage}` : errorMessage,
+        tone: "red",
+      });
+      await invalidateDashboard();
+    } finally {
+      setIsCreatingRoomOnchain(false);
+    }
+  };
+
   return (
     <View style={styles.screen}>
       <AppHeader
@@ -800,18 +1104,12 @@ function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
 
 
         <RoomCommandCenter
-          createRoomPending={createRoom.isPending}
+          createRoomPending={createRoom.isPending || isCreatingRoomOnchain}
           createRoomModalOpen={createRoomModalOpen}
           inviteCode={inviteCode}
           joinRoomPending={joinRoom.isPending}
           canCreateRoom={canCreateRoom}
-          onCreateRoom={() => {
-            if (!canCreateRoom) {
-              return;
-            }
-
-            createRoom.mutate(roomForm);
-          }}
+          onCreateRoom={handleCreateRoom}
           onInviteCodeChange={setInviteCode}
           onJoinRoom={() => joinRoom.mutate({ inviteCode })}
           onRoomFormChange={setRoomForm}
@@ -849,16 +1147,20 @@ function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
 }
 
 function HackRoomDetailDashboard({
+  initialParticipantTab,
   roomId,
   user,
 }: {
+  initialParticipantTab: ParticipantTab | null;
   roomId: string;
   user: SessionUser;
 }) {
   const router = useRouter();
   const dashboard = useQuery(trpc.hackRoom.dashboard.queryOptions());
+  const { sendContractCalls } = useSponsoredHackathonTransactions();
   const [activeRoomTab, setActiveRoomTab] = useState<RoomTab | null>(null);
-  const [activeParticipantTab, setActiveParticipantTab] = useState<ParticipantTab | null>(null);
+  const [activeParticipantTab, setActiveParticipantTab] =
+    useState<ParticipantTab | null>(initialParticipantTab);
   const [taskForm, setTaskForm] = useState(emptyTaskForm);
   const [taskKind, setTaskKind] = useState<TaskKind>("task");
   const [assignmentMode, setAssignmentMode] = useState<AssignmentMode>("task");
@@ -869,6 +1171,7 @@ function HackRoomDetailDashboard({
   const [message, setMessage] = useState<{ text: string; tone: Tone } | null>(null);
   const [feedbackBySubmission, setFeedbackBySubmission] = useState<Record<string, string>>({});
   const [awardBySubmission, setAwardBySubmission] = useState<Record<string, string>>({});
+  const [createdTaskCardId, setCreatedTaskCardId] = useState("");
 
   const hostedRooms = dashboard.data?.hostedRooms ?? [];
   const joinedRooms = dashboard.data?.joinedRooms ?? [];
@@ -897,6 +1200,7 @@ function HackRoomDetailDashboard({
   const selectedRoomEntry = allRooms.find((entry) => entry.room._id === roomId);
   const selectedRoom = selectedRoomEntry?.room;
   const selectedRoomRole = selectedRoomEntry?.role ?? "member";
+  const effectiveRoomRole = activeParticipantTab === "wallet" ? "member" : selectedRoomRole;
   const roomTasks = useMemo(
     () => tasks.filter((task) => task.roomId === roomId),
     [roomId, tasks],
@@ -959,12 +1263,15 @@ function HackRoomDetailDashboard({
   const createTask = useMutation(
     trpc.hackRoom.createTask.mutationOptions({
       onError: (error) => setMessage({ text: error.message, tone: "red" }),
-      onSuccess: async () => {
+      onSuccess: async (task) => {
         setTaskForm(emptyTaskForm);
         setAssignmentMode("task");
         setTaskKind("task");
         setProofTypes(defaultRegularProofTypes);
-        setMessage({ text: "Room assignment published", tone: "violet" });
+        setSelectedTaskId(task._id);
+        setCreatedTaskCardId(task._id);
+        setActiveRoomTab("created");
+        setMessage({ text: `${kindLabel(task.kind ?? "task")} card created`, tone: "violet" });
         await invalidateDashboard();
       },
     }),
@@ -994,20 +1301,20 @@ function HackRoomDetailDashboard({
   );
 
   const approveSubmission = useMutation(
-    trpc.hackRoom.approveSubmission.mutationOptions({
+    trpc.hackRoom.completeSubmissionApproval.mutationOptions({
       onError: (error) => setMessage({ text: error.message, tone: "red" }),
       onSuccess: async () => {
-        setMessage({ text: "Proof verified and added to room history", tone: "cyan" });
+        setMessage({ text: "Proof verified and XRDM confirmed on-chain", tone: "gold" });
         await invalidateDashboard();
       },
     }),
   );
 
   const selectWinner = useMutation(
-    trpc.hackRoom.selectWinner.mutationOptions({
+    trpc.hackRoom.completeWinnerSelection.mutationOptions({
       onError: (error) => setMessage({ text: error.message, tone: "red" }),
       onSuccess: async () => {
-        setMessage({ text: "Winner announced and XRDM award recorded", tone: "gold" });
+        setMessage({ text: "Winner announced and confirmed on-chain", tone: "gold" });
         await invalidateDashboard();
       },
     }),
@@ -1023,16 +1330,27 @@ function HackRoomDetailDashboard({
     }),
   );
 
-  const issueReward = useMutation(
-    trpc.hackRoom.issueReward.mutationOptions({
+  const prepareReward = useMutation(
+    trpc.hackRoom.prepareReward.mutationOptions({
+      onError: (error) => setMessage({ text: error.message, tone: "red" }),
+    }),
+  );
+  const completeReward = useMutation(
+    trpc.hackRoom.completeReward.mutationOptions({
       onError: (error) => setMessage({ text: error.message, tone: "red" }),
       onSuccess: async () => {
         setRewardForm(makeEmptyRewardForm());
-        setMessage({ text: "Reward issued to the in-app ledger", tone: "gold" });
+        setMessage({ text: "Reward issued and confirmed on-chain", tone: "gold" });
         await invalidateDashboard();
       },
     }),
   );
+  const completeParticipantRegistration = useMutation(
+    trpc.hackRoom.completeParticipantRegistration.mutationOptions({
+      onError: (error) => setMessage({ text: error.message, tone: "red" }),
+    }),
+  );
+  const issueRewardPending = prepareReward.isPending || completeReward.isPending;
 
   const isBusy =
     createTask.isPending ||
@@ -1040,8 +1358,16 @@ function HackRoomDetailDashboard({
     approveSubmission.isPending ||
     selectWinner.isPending ||
     returnSubmission.isPending ||
-    issueReward.isPending ||
+    issueRewardPending ||
+    completeParticipantRegistration.isPending ||
     sendRoomNotification.isPending;
+
+  useEffect(() => {
+    if (initialParticipantTab) {
+      setActiveRoomTab(null);
+      setActiveParticipantTab(initialParticipantTab);
+    }
+  }, [initialParticipantTab]);
 
   const handleNotifications = () => {
     setMessage({
@@ -1072,6 +1398,16 @@ function HackRoomDetailDashboard({
     }
     if (selectedRoomRole !== "host") {
       setMessage({ text: "Only the host can publish inside this room", tone: "red" });
+      return;
+    }
+    if (!taskForm.dueAt.trim()) {
+      setMessage({ text: "Select a due date and time before publishing", tone: "red" });
+      return;
+    }
+
+    const dueDateError = getTaskDueDateError(taskForm.dueAt);
+    if (dueDateError) {
+      setMessage({ text: dueDateError, tone: "red" });
       return;
     }
 
@@ -1164,15 +1500,95 @@ function HackRoomDetailDashboard({
     });
   };
 
+  const registerMissingParticipants = async (input: {
+    hackathonId: string | null;
+    pendingId: string;
+    registration: RegistrationPlan;
+    roomId: string;
+  }) => {
+    if (!input.registration.length) {
+      return;
+    }
+
+    if (!input.hackathonId) {
+      throw new Error("Room is not confirmed on-chain yet.");
+    }
+
+    setMessage({ text: "Registering recipient wallets on-chain...", tone: "gold" });
+    const txHash = await sendContractCalls({
+      calls: [
+        makeRegisterParticipantsCall({
+          hackathonId: input.hackathonId,
+          participantAddresses: input.registration.map((entry) => entry.address),
+        }),
+      ],
+      pendingId: `${input.pendingId}:register`,
+      pendingKind: "participants_registered",
+    });
+
+    if (!txHash) {
+      return;
+    }
+
+    await completeParticipantRegistration.mutateAsync({
+      participantIds: input.registration.map((entry) => entry.userId),
+      roomId: input.roomId,
+      txHash,
+    });
+    await forgetPendingChainEvent(`${input.pendingId}:register`);
+  };
+
   const handleApproveSubmission = (submission: HackSubmission) => {
     const feedback =
       feedbackBySubmission[submission._id] ||
       submission.hostFeedback ||
       "Verified. Clear proof and solid contribution.";
-    approveSubmission.mutate({
-      hostFeedback: feedback,
-      submissionId: submission._id,
-    });
+
+    void (async () => {
+      try {
+        setMessage({ text: "Preparing on-chain XRDM approval...", tone: "gold" });
+        const plan = await queryClient.fetchQuery(
+          trpc.hackRoom.prepareSubmissionApproval.queryOptions({
+            submissionId: submission._id,
+          }),
+        );
+        await registerMissingParticipants({
+          hackathonId: plan.hackathonId,
+          pendingId: `submission:${submission._id}:approval`,
+          registration: plan.registration,
+          roomId: plan.roomId,
+        });
+
+        let txHash: string | undefined;
+        if (plan.amount > 0 && plan.hackathonId && plan.recipientAddress) {
+          setMessage({ text: "Sending sponsored XRDM award...", tone: "gold" });
+          txHash =
+            (await sendContractCalls({
+              calls: [
+                makeAwardXrdmCall({
+                  amounts: [plan.amount],
+                  hackathonId: plan.hackathonId,
+                  recipientAddresses: [plan.recipientAddress],
+                }),
+              ],
+              pendingId: `submission:${submission._id}:approval:xrdm`,
+              pendingKind: "submission_xrdm_awarded",
+            })) ?? undefined;
+        }
+
+        await approveSubmission.mutateAsync({
+          hostFeedback: feedback,
+          submissionId: submission._id,
+          txHash,
+        });
+        await forgetPendingChainEvent(`submission:${submission._id}:approval:xrdm`);
+      } catch (error) {
+        setMessage({
+          text: error instanceof Error ? error.message : "Unable to approve on-chain.",
+          tone: "red",
+        });
+      }
+    })();
   };
 
   const handleReturnSubmission = (submission: HackSubmission) => {
@@ -1194,11 +1610,71 @@ function HackRoomDetailDashboard({
     const award = Number(
       awardBySubmission[submission._id] || submission.awardXrdm || submission.rewardXrdm || 20,
     );
-    selectWinner.mutate({
-      awardXrdm: award,
-      hostFeedback: feedback,
-      submissionId: submission._id,
-    });
+
+    void (async () => {
+      try {
+        setMessage({ text: "Preparing winner blockchain confirmation...", tone: "gold" });
+        const plan = await queryClient.fetchQuery(
+          trpc.hackRoom.prepareWinnerSelection.queryOptions({
+            awardXrdm: award,
+            submissionId: submission._id,
+          }),
+        );
+        await registerMissingParticipants({
+          hackathonId: plan.hackathonId,
+          pendingId: `submission:${submission._id}:winner`,
+          registration: plan.registration,
+          roomId: plan.roomId,
+        });
+
+        if (!plan.hackathonId || !plan.recipientAddress) {
+          throw new Error("Winner wallet is not ready for blockchain confirmation.");
+        }
+
+        const calls = [
+          makeNoteWinnersCall({
+            hackathonId: plan.hackathonId,
+            winnerAddresses: [plan.recipientAddress],
+          }),
+        ];
+
+        if (award > 0) {
+          calls.push(
+            makeAwardXrdmCall({
+              amounts: [award],
+              hackathonId: plan.hackathonId,
+              recipientAddresses: [plan.recipientAddress],
+            }),
+          );
+        }
+
+        setMessage({ text: "Sending sponsored winner transaction...", tone: "gold" });
+        const txHash =
+          (await sendContractCalls({
+            calls,
+            pendingId: `submission:${submission._id}:winner:chain`,
+            pendingKind: "winner_noted",
+          })) ?? undefined;
+
+        if (!txHash) {
+          throw new Error("Winner blockchain transaction did not return a transaction hash.");
+        }
+
+        await selectWinner.mutateAsync({
+          awardTxHash: award > 0 ? txHash : undefined,
+          awardXrdm: award,
+          hostFeedback: feedback,
+          submissionId: submission._id,
+          winnerTxHash: txHash,
+        });
+        await forgetPendingChainEvent(`submission:${submission._id}:winner:chain`);
+      } catch (error) {
+        setMessage({
+          text: error instanceof Error ? error.message : "Unable to announce winner on-chain.",
+          tone: "red",
+        });
+      }
+    })();
   };
 
   const handleIssueReward = (kind: RewardKind) => {
@@ -1211,21 +1687,116 @@ function HackRoomDetailDashboard({
       return;
     }
 
+    const rawRecipientEmails = [
+      ...rewardForm.recipientEmails,
+      ...getEmailTokens(rewardForm.recipientEmailDraft),
+    ];
+    const invalidRecipientEmails = getInvalidEmails(rawRecipientEmails);
+    const recipientEmails = normalizeEmails(rawRecipientEmails);
+    const participantsByEmail = new Map(
+      selectedRoom.participants.map((participant) => [
+        participant.email.trim().toLowerCase(),
+        participant,
+      ]),
+    );
+    const missingRecipientEmail = recipientEmails.find(
+      (email) => !participantsByEmail.has(email),
+    );
+
+    if (invalidRecipientEmails.length) {
+      setMessage({ text: `Check recipient email: ${invalidRecipientEmails[0]}`, tone: "red" });
+      return;
+    }
+
+    if (!recipientEmails.length) {
+      setMessage({ text: "Add at least one recipient email", tone: "red" });
+      return;
+    }
+
+    if (missingRecipientEmail) {
+      setMessage({
+        text: `${missingRecipientEmail} has not joined this room yet`,
+        tone: "red",
+      });
+      return;
+    }
+
     const sourceSubmissionId =
       kind === "participant_certificate"
         ? undefined
         : rewardForm.sourceSubmissionId || winnerSubmissions[0]?._id;
+    const recipientIds = recipientEmails.map(
+      (email) => participantsByEmail.get(email)?.userId ?? "",
+    ).filter(Boolean);
 
-    issueReward.mutate({
-      awardXrdm: Number(rewardForm.awardXrdm || 0),
-      description: rewardForm.description,
-      kind,
-      ledgerNote: rewardForm.ledgerNote,
-      recipientIds: kind === "participant_certificate" ? rewardForm.recipientIds : [],
-      roomId: selectedRoom._id,
-      sourceSubmissionId,
-      title: rewardForm.title || defaultRewardTitle(kind),
-    });
+    void (async () => {
+      try {
+        setMessage({ text: "Preparing reward blockchain transaction...", tone: "gold" });
+        const prepared = await prepareReward.mutateAsync({
+          awardXrdm: Number(rewardForm.awardXrdm || 0),
+          description: rewardForm.description,
+          kind,
+          ledgerNote: rewardForm.ledgerNote,
+          recipientIds,
+          roomId: selectedRoom._id,
+          sourceSubmissionId,
+          title: rewardForm.title || defaultRewardTitle(kind),
+        });
+        await registerMissingParticipants({
+          hackathonId: prepared.onchain.hackathonId,
+          pendingId: `reward:${prepared.reward._id}`,
+          registration: prepared.onchain.registration,
+          roomId: selectedRoom._id,
+        });
+
+        const calls: Array<ContractCall> = [];
+
+        if (prepared.onchain.requiresNft && prepared.onchain.metadataUri) {
+          prepared.onchain.recipientAddresses.forEach((recipientAddress) => {
+            calls.push(
+              makeAwardNftCall({
+                hackathonId: prepared.onchain.hackathonId ?? "",
+                metadataUri: prepared.onchain.metadataUri ?? "",
+                recipientAddress,
+              }),
+            );
+          });
+        }
+
+        if (prepared.onchain.requiresXrdm) {
+          calls.push(
+            makeAwardXrdmCall({
+              amounts: prepared.onchain.recipientAddresses.map(() => prepared.onchain.awardXrdm),
+              hackathonId: prepared.onchain.hackathonId ?? "",
+              recipientAddresses: prepared.onchain.recipientAddresses,
+            }),
+          );
+        }
+
+        let txHash: string | undefined;
+        if (calls.length) {
+          setMessage({ text: "Sending sponsored reward transaction...", tone: "gold" });
+          txHash =
+            (await sendContractCalls({
+              calls,
+              pendingId: `reward:${prepared.reward._id}:chain`,
+              pendingKind: kind,
+            })) ?? undefined;
+        }
+
+        await completeReward.mutateAsync({
+          nftTxHash: prepared.onchain.requiresNft ? txHash : undefined,
+          rewardId: prepared.reward._id,
+          xrdmTxHash: prepared.onchain.requiresXrdm ? txHash : undefined,
+        });
+        await forgetPendingChainEvent(`reward:${prepared.reward._id}:chain`);
+      } catch (error) {
+        setMessage({
+          text: error instanceof Error ? error.message : "Unable to issue reward on-chain.",
+          tone: "red",
+        });
+      }
+    })();
   };
 
   return (
@@ -1280,11 +1851,13 @@ function HackRoomDetailDashboard({
             approvedSubmissions={approvedHostSubmissions}
             approveSubmissionPending={approveSubmission.isPending}
             awardBySubmission={awardBySubmission}
+            createdTaskCardId={createdTaskCardId}
             createTaskPending={createTask.isPending}
             feedbackBySubmission={feedbackBySubmission}
             historySubmissions={historySubmissions}
             mySubmissions={roomMySubmissions}
             onApproveSubmission={handleApproveSubmission}
+            onClearCreatedTaskCard={() => setCreatedTaskCardId("")}
             onCreateTask={handleCreateTask}
             onParticipantTabChange={setActiveParticipantTab}
             onReturnSubmission={handleReturnSubmission}
@@ -1300,16 +1873,16 @@ function HackRoomDetailDashboard({
             proofTypes={proofTypes}
             returnSubmissionPending={returnSubmission.isPending}
             rewardForm={rewardForm}
-            rewards={selectedRoomRole === "host" ? roomRewards : myRoomRewards}
+            rewards={effectiveRoomRole === "host" ? roomRewards : myRoomRewards}
             room={selectedRoom}
-            roomRole={selectedRoomRole}
+            roomRole={effectiveRoomRole}
             roomTasks={roomTasks}
             roomWinners={roomWinners}
             selectedTask={selectedTask}
             selectedTaskId={selectedTaskId}
             selectWinnerPending={selectWinner.isPending}
             sendRoomNotificationPending={sendRoomNotification.isPending}
-            issueRewardPending={issueReward.isPending}
+            issueRewardPending={issueRewardPending}
             setAwardBySubmission={setAwardBySubmission}
             setFeedbackBySubmission={setFeedbackBySubmission}
             setProofTypes={setProofTypes}
@@ -1614,12 +2187,14 @@ function RoomWorkspace({
   approvedSubmissions,
   approveSubmissionPending,
   awardBySubmission,
+  createdTaskCardId,
   createTaskPending,
   feedbackBySubmission,
   historySubmissions,
   issueRewardPending,
   mySubmissions,
   onApproveSubmission,
+  onClearCreatedTaskCard,
   onCopyInvite,
   onCreateTask,
   onIssueReward,
@@ -1664,12 +2239,14 @@ function RoomWorkspace({
   approvedSubmissions: DashboardData["hostSubmissions"];
   approveSubmissionPending: boolean;
   awardBySubmission: Record<string, string>;
+  createdTaskCardId: string;
   createTaskPending: boolean;
   feedbackBySubmission: Record<string, string>;
   historySubmissions: DashboardData["hostSubmissions"];
   issueRewardPending: boolean;
   mySubmissions: DashboardData["mySubmissions"];
   onApproveSubmission: (submission: HackSubmission) => void;
+  onClearCreatedTaskCard: () => void;
   onCopyInvite: (room: HackRoom) => void;
   onCreateTask: (kind: TaskKind) => void;
   onIssueReward: (kind: RewardKind) => void;
@@ -1750,11 +2327,13 @@ function RoomWorkspace({
           approvedSubmissions={approvedSubmissions}
           approveSubmissionPending={approveSubmissionPending}
           awardBySubmission={awardBySubmission}
+          createdTaskCardId={createdTaskCardId}
           createTaskPending={createTaskPending}
           feedbackBySubmission={feedbackBySubmission}
           historySubmissions={historySubmissions}
           issueRewardPending={issueRewardPending}
           onApproveSubmission={onApproveSubmission}
+          onClearCreatedTaskCard={onClearCreatedTaskCard}
           onCopyInvite={onCopyInvite}
           onCreateTask={onCreateTask}
           onIssueReward={onIssueReward}
@@ -1771,6 +2350,7 @@ function RoomWorkspace({
           room={room}
           roomTasks={roomTasks}
           selectWinnerPending={selectWinnerPending}
+          selectedTaskId={selectedTaskId}
           sendRoomNotificationPending={sendRoomNotificationPending}
           setAwardBySubmission={setAwardBySubmission}
           setAssignmentMode={setAssignmentMode}
@@ -1810,11 +2390,13 @@ function HostRoomWorkspace({
   approvedSubmissions,
   approveSubmissionPending,
   awardBySubmission,
+  createdTaskCardId,
   createTaskPending,
   feedbackBySubmission,
   historySubmissions,
   issueRewardPending,
   onApproveSubmission,
+  onClearCreatedTaskCard,
   onCopyInvite,
   onCreateTask,
   onIssueReward,
@@ -1831,6 +2413,7 @@ function HostRoomWorkspace({
   room,
   roomTasks,
   selectWinnerPending,
+  selectedTaskId,
   sendRoomNotificationPending,
   setAwardBySubmission,
   setAssignmentMode,
@@ -1848,11 +2431,13 @@ function HostRoomWorkspace({
   approvedSubmissions: DashboardData["hostSubmissions"];
   approveSubmissionPending: boolean;
   awardBySubmission: Record<string, string>;
+  createdTaskCardId: string;
   createTaskPending: boolean;
   feedbackBySubmission: Record<string, string>;
   historySubmissions: DashboardData["hostSubmissions"];
   issueRewardPending: boolean;
   onApproveSubmission: (submission: HackSubmission) => void;
+  onClearCreatedTaskCard: () => void;
   onCopyInvite: (room: HackRoom) => void;
   onCreateTask: (kind: TaskKind) => void;
   onIssueReward: (kind: RewardKind) => void;
@@ -1869,6 +2454,7 @@ function HostRoomWorkspace({
   room: HackRoom;
   roomTasks: DashboardData["tasks"];
   selectWinnerPending: boolean;
+  selectedTaskId: string;
   sendRoomNotificationPending: boolean;
   setAwardBySubmission: React.Dispatch<React.SetStateAction<Record<string, string>>>;
   setAssignmentMode: React.Dispatch<React.SetStateAction<AssignmentMode>>;
@@ -2065,10 +2651,12 @@ function HostRoomWorkspace({
         <HostCreatedTasksPanel
           historySubmissions={historySubmissions}
           onOpenTaskHistory={(taskId) => {
+            onClearCreatedTaskCard();
             setHistoryTaskId(taskId);
             onRoomTabChange("history");
           }}
           roomTasks={roomTasks}
+          selectedTaskId={createdTaskCardId || selectedTaskId}
         />
       ) : null}
 
@@ -2283,10 +2871,12 @@ function HostCreatedTasksPanel({
   historySubmissions,
   onOpenTaskHistory,
   roomTasks,
+  selectedTaskId,
 }: {
   historySubmissions: DashboardData["hostSubmissions"];
   onOpenTaskHistory: (taskId: string) => void;
   roomTasks: DashboardData["tasks"];
+  selectedTaskId: string;
 }) {
   const taskKinds: Array<{
     icon: React.ComponentProps<typeof Ionicons>["name"];
@@ -2342,6 +2932,7 @@ function HostCreatedTasksPanel({
               historyCount={historyCountByTask.get(task._id) ?? 0}
               key={task._id}
               onPress={() => onOpenTaskHistory(task._id)}
+              selected={task._id === selectedTaskId}
               task={task}
             />
           ))
@@ -2655,7 +3246,6 @@ function ParticipantRoomWorkspace({
         <ParticipantWalletPanel
           mySubmissions={mySubmissions}
           rewards={rewards}
-          roomWinners={roomWinners}
         />
       ) : null}
     </View>
@@ -3580,10 +4170,6 @@ function HostCertificatesPanel({
   winnerSubmissions: DashboardData["hostSubmissions"];
 }) {
   const certificateRewards = rewards.filter((reward) => reward.kind !== "winner_nft_badge");
-  const selectedRecipientIds = rewardForm.recipientIds.length
-    ? rewardForm.recipientIds
-    : room.participants.map((participant) => participant.userId);
-
   return (
     <View style={styles.trackStack}>
       <Panel
@@ -3623,9 +4209,9 @@ function HostCertificatesPanel({
             value={rewardForm.awardXrdm}
           />
         </Field>
-        <RewardRecipientSelector
+        <RewardRecipientEmailComposer
           room={room}
-          selectedRecipientIds={selectedRecipientIds}
+          rewardForm={rewardForm}
           setRewardForm={setRewardForm}
         />
         <HackButton
@@ -3649,6 +4235,11 @@ function HostCertificatesPanel({
           rewardForm={rewardForm}
           setRewardForm={setRewardForm}
           winnerSubmissions={winnerSubmissions}
+        />
+        <RewardRecipientEmailComposer
+          room={room}
+          rewardForm={rewardForm}
+          setRewardForm={setRewardForm}
         />
         <Field label="Winner certificate title">
           <HackTextInput
@@ -3745,6 +4336,11 @@ function HostNftBadgesPanel({
           setRewardForm={setRewardForm}
           winnerSubmissions={winnerSubmissions}
         />
+        <RewardRecipientEmailComposer
+          room={room}
+          rewardForm={rewardForm}
+          setRewardForm={setRewardForm}
+        />
         <Field label="NFT badge name">
           <HackTextInput
             onChangeText={(value) =>
@@ -3821,23 +4417,22 @@ function HostNftBadgesPanel({
 function ParticipantWalletPanel({
   mySubmissions,
   rewards,
-  roomWinners,
 }: {
   mySubmissions: DashboardData["mySubmissions"];
   rewards: Array<HackReward>;
-  roomWinners: DashboardData["visibleWinners"];
 }) {
   const certificateRewards = rewards.filter((reward) => reward.kind !== "winner_nft_badge");
   const nftRewards = rewards.filter((reward) => reward.kind === "winner_nft_badge");
+  const confirmedSubmissions = mySubmissions.filter((submission) =>
+    ["approved", "winner"].includes(submission.status),
+  );
   const xrdmTotal =
     rewards.reduce((total, reward) => total + (reward.awardXrdm ?? 0), 0) +
-    roomWinners.reduce(
+    confirmedSubmissions.reduce(
       (total, submission) => total + (submission.awardXrdm ?? submission.rewardXrdm ?? 0),
       0,
     );
-  const verifiedCount = mySubmissions.filter((submission) =>
-    ["approved", "winner"].includes(submission.status),
-  ).length;
+  const verifiedCount = confirmedSubmissions.length;
 
   return (
     <View style={styles.trackStack}>
@@ -3908,14 +4503,14 @@ function ParticipantWalletPanel({
       </Panel>
 
       <Panel
-        action={<CounterLabel label={`${mySubmissions.length + rewards.length} rows`} />}
+        action={<CounterLabel label={`${confirmedSubmissions.length + rewards.length} rows`} />}
         eyebrow="Ledger"
         icon="shield-checkmark-outline"
         title="So.Good Ledger Rows"
         tone="cyan"
       >
         <View style={styles.listStack}>
-          {mySubmissions.map((submission) => (
+          {confirmedSubmissions.map((submission) => (
             <LedgerRow
               key={submission._id}
               label={submission.taskTitle}
@@ -3931,7 +4526,7 @@ function ParticipantWalletPanel({
               value={reward.awardXrdm ? `+${reward.awardXrdm} XRDM` : "Issued"}
             />
           ))}
-          {!mySubmissions.length && !rewards.length ? (
+          {!confirmedSubmissions.length && !rewards.length ? (
             <EmptyState
               icon="shield-checkmark-outline"
               text="Verified proof, certificates, NFT badges, and XRDM records will appear here."
@@ -3952,70 +4547,115 @@ function ParticipantWalletPanel({
   );
 }
 
-function RewardRecipientSelector({
+function RewardRecipientEmailComposer({
   room,
-  selectedRecipientIds,
+  rewardForm,
   setRewardForm,
 }: {
   room: HackRoom;
-  selectedRecipientIds: Array<string>;
+  rewardForm: ReturnType<typeof makeEmptyRewardForm>;
   setRewardForm: React.Dispatch<React.SetStateAction<ReturnType<typeof makeEmptyRewardForm>>>;
 }) {
-  const allRecipientIds = room.participants.map((participant) => participant.userId);
+  const participantEmails = new Set(
+    room.participants.map((participant) => participant.email.trim().toLowerCase()),
+  );
 
-  const toggleRecipient = (userId: string) => {
+  const addDraftEmails = () => {
     setRewardForm((current) => {
-      const currentIds = current.recipientIds.length ? current.recipientIds : allRecipientIds;
-      const nextIds = currentIds.includes(userId)
-        ? currentIds.filter((id) => id !== userId)
-        : [...currentIds, userId];
-      return { ...current, recipientIds: nextIds };
+      const tokens = getEmailTokens(current.recipientEmailDraft);
+      if (!tokens.length) {
+        return current;
+      }
+      const validEmails = tokens.filter(isEmailLike);
+      const invalidEmails = tokens.filter((email) => !isEmailLike(email));
+
+      return {
+        ...current,
+        recipientEmailDraft: invalidEmails.join(", "),
+        recipientEmails: normalizeEmails([...current.recipientEmails, ...validEmails]),
+      };
     });
   };
 
+  const handleDraftChange = (value: string) => {
+    if (/[,\n;]/.test(value)) {
+      setRewardForm((current) => {
+        const tokens = getEmailTokens(value);
+        const validEmails = tokens.filter(isEmailLike);
+        const invalidEmails = tokens.filter((email) => !isEmailLike(email));
+
+        return {
+          ...current,
+          recipientEmailDraft: invalidEmails.join(", "),
+          recipientEmails: normalizeEmails([...current.recipientEmails, ...validEmails]),
+        };
+      });
+      return;
+    }
+
+    setRewardForm((current) => ({ ...current, recipientEmailDraft: value }));
+  };
+
+  const removeEmail = (email: string) => {
+    setRewardForm((current) => ({
+      ...current,
+      recipientEmails: current.recipientEmails.filter((item) => item !== email),
+    }));
+  };
+
   return (
-    <Field label="Recipients">
-      <View style={styles.rewardSelectorGrid}>
-        <Pressable
-          accessibilityRole="button"
-          onPress={() =>
-            setRewardForm((current) => ({ ...current, recipientIds: allRecipientIds }))
-          }
-          style={({ pressed }) => [
-            styles.rewardSelectorChip,
-            selectedRecipientIds.length === allRecipientIds.length && styles.rewardSelectorChipActive,
-            pressed && styles.pressed,
-          ]}
-        >
-          <Text
-            style={[
-              styles.rewardSelectorText,
-              selectedRecipientIds.length === allRecipientIds.length &&
-                styles.rewardSelectorTextActive,
-            ]}
+    <Field label="Recipient emails">
+      <View style={styles.emailComposer}>
+        {rewardForm.recipientEmails.length ? (
+          <View style={styles.emailChipWrap}>
+            {rewardForm.recipientEmails.map((email) => {
+              const knownParticipant = participantEmails.has(email);
+              return (
+                <View
+                  key={email}
+                  style={[styles.emailChip, !knownParticipant && styles.emailChipWarning]}
+                >
+                  <Text
+                    numberOfLines={1}
+                    style={[styles.emailChipText, !knownParticipant && styles.emailChipTextWarning]}
+                  >
+                    {email}
+                  </Text>
+                  <Pressable
+                    accessibilityLabel={`Remove ${email}`}
+                    accessibilityRole="button"
+                    onPress={() => removeEmail(email)}
+                    style={({ pressed }) => [styles.emailChipRemove, pressed && styles.pressed]}
+                  >
+                    <Ionicons
+                      name="close-outline"
+                      size={13}
+                      color={knownParticipant ? theme.participant : theme.warning}
+                    />
+                  </Pressable>
+                </View>
+              );
+            })}
+          </View>
+        ) : null}
+        <View style={styles.emailComposerInputRow}>
+          <HackTextInput
+            autoCapitalize="none"
+            keyboardType="email-address"
+            onChangeText={handleDraftChange}
+            onSubmitEditing={addDraftEmails}
+            placeholder="recipient@domain.com"
+            style={styles.emailComposerInput}
+            value={rewardForm.recipientEmailDraft}
+          />
+          <Pressable
+            accessibilityRole="button"
+            onPress={addDraftEmails}
+            style={({ pressed }) => [styles.emailAddButton, pressed && styles.pressed]}
           >
-            All members
-          </Text>
-        </Pressable>
-        {room.participants.map((participant) => {
-          const active = selectedRecipientIds.includes(participant.userId);
-          return (
-            <Pressable
-              accessibilityRole="button"
-              key={participant.userId}
-              onPress={() => toggleRecipient(participant.userId)}
-              style={({ pressed }) => [
-                styles.rewardSelectorChip,
-                active && styles.rewardSelectorChipActive,
-                pressed && styles.pressed,
-              ]}
-            >
-              <Text style={[styles.rewardSelectorText, active && styles.rewardSelectorTextActive]}>
-                {participant.name}
-              </Text>
-            </Pressable>
-          );
-        })}
+            <Ionicons name="add-outline" size={18} color="#03120c" />
+          </Pressable>
+        </View>
       </View>
     </Field>
   );
@@ -4179,6 +4819,7 @@ function AssignmentComposer({
   const selectableProofTypeOptions = isGame
     ? proofTypeOptions.filter((option) => option.value === "game_score")
     : proofTypeOptions.filter((option) => option.value !== "game_score");
+  const dueDateError = isNotification ? null : getTaskDueDateError(taskForm.dueAt);
   const canSubmitNotification =
     isNotification && taskForm.title.trim() && taskForm.description.trim() && !sendNotificationPending;
   const canSubmitTask =
@@ -4186,6 +4827,7 @@ function AssignmentComposer({
     taskForm.title.trim() &&
     taskForm.description.trim() &&
     taskForm.dueAt.trim() &&
+    !dueDateError &&
     (!isSpecialTask || taskForm.assignedToEmail.trim()) &&
     !createTaskPending;
 
@@ -4321,11 +4963,15 @@ function AssignmentComposer({
       </Field>
 
       {!isNotification ? (
-        <DateTimeField
-          label={dateLabel}
-          onChange={(value) => setTaskForm((current) => ({ ...current, dueAt: value }))}
-          value={taskForm.dueAt}
-        />
+        <View style={styles.fieldWithHelper}>
+          <DateTimeField
+            label={dateLabel}
+            minimumDate={getMinimumTaskDueDate()}
+            onChange={(value) => setTaskForm((current) => ({ ...current, dueAt: value }))}
+            value={taskForm.dueAt}
+          />
+          {dueDateError ? <Text style={styles.fieldErrorText}>{dueDateError}</Text> : null}
+        </View>
       ) : null}
 
       {isGame ? (
@@ -5367,10 +6013,12 @@ function HackTextInput({
 
 function DateTimeField({
   label,
+  minimumDate,
   onChange,
   value,
 }: {
   label: string;
+  minimumDate?: Date;
   onChange: (value: string) => void;
   value: string;
 }) {
@@ -5403,6 +6051,7 @@ function DateTimeField({
 
   const openAndroidPicker = (mode: "date" | "time") => {
     DateTimePickerAndroid.open({
+      minimumDate,
       mode,
       onDismiss: handlePickerDismiss,
       onNeutralButtonPress: handlePickerDismiss,
@@ -5472,6 +6121,7 @@ function DateTimeField({
           <DateTimePicker
             display={Platform.OS === "ios" ? "spinner" : "default"}
             mode={pickerMode}
+            minimumDate={minimumDate}
             onDismiss={handlePickerDismiss}
             onNeutralButtonPress={handlePickerDismiss}
             onValueChange={handlePickerValueChange}
@@ -6261,6 +6911,28 @@ function formatDate(value: string) {
   });
 }
 
+function getMinimumTaskDueDate(date = new Date()) {
+  return new Date(date.getTime() + minimumTaskDueOffsetMs);
+}
+
+function getTaskDueDateError(value: string, date = new Date()) {
+  const trimmedValue = value.trim();
+  if (!trimmedValue) {
+    return null;
+  }
+
+  const timestamp = new Date(trimmedValue).getTime();
+  if (Number.isNaN(timestamp)) {
+    return "Choose a valid due date and time";
+  }
+
+  if (timestamp <= getMinimumTaskDueDate(date).getTime()) {
+    return "Due date and time must be in the future";
+  }
+
+  return null;
+}
+
 function parseDateTimeValue(value: string) {
   const parsedDate = value ? new Date(value) : new Date();
   if (Number.isNaN(parsedDate.getTime())) {
@@ -6698,6 +7370,13 @@ const styles = StyleSheet.create({
     paddingRight: 4,
     paddingVertical: 4,
   },
+  emailChipTextWarning: {
+    color: theme.warning,
+  },
+  emailChipWarning: {
+    backgroundColor: theme.warningDark,
+    borderColor: theme.warningBorder,
+  },
   emailChipRemove: {
     alignItems: "center",
     backgroundColor: theme.backgroundAlt,
@@ -6757,12 +7436,22 @@ const styles = StyleSheet.create({
   field: {
     gap: 6,
   },
+  fieldErrorText: {
+    color: theme.danger,
+    fontFamily: Platform.select({ default: "monospace" }),
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "uppercase",
+  },
   fieldLabel: {
     color: theme.faint,
     fontFamily: Platform.select({ default: "monospace" }),
     fontSize: 9,
     letterSpacing: 1.1,
     textTransform: "uppercase",
+  },
+  fieldWithHelper: {
+    gap: 6,
   },
   formTitle: {
     color: theme.text,
@@ -7866,8 +8555,10 @@ const styles = StyleSheet.create({
     borderColor: theme.border,
     borderRadius: 7,
     borderWidth: 1,
+    maxWidth: "100%",
+    minWidth: 172,
     paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingVertical: 8,
   },
   rewardSelectorChipActive: {
     backgroundColor: theme.awardDark,

@@ -9,7 +9,10 @@
       "default": "./src/*.ts"
     }
   },
-  "scripts": {},
+  "scripts": {
+    "role:backfill": "bun scripts/set-user-role.ts --backfill-missing",
+    "role:set": "bun scripts/set-user-role.ts"
+  },
   "dependencies": {
     "@rdm-hack/env": "workspace:*",
     "dotenv": "catalog:",

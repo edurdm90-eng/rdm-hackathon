@@ -12,12 +12,14 @@
   "scripts": {},
   "dependencies": {
     "@rdm-hack/auth": "workspace:*",
+    "@rdm-hack/blockchain-client": "workspace:*",
     "@rdm-hack/db": "workspace:*",
     "@rdm-hack/env": "workspace:*",
     "@trpc/client": "catalog:",
     "@trpc/server": "catalog:",
     "dotenv": "catalog:",
     "mongodb": "7.2.0",
+    "viem": "2.52.0",
     "zod": "catalog:"
   },
   "devDependencies": {
