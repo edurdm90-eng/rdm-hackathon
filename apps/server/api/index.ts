@@ -1,10 +1,13 @@
 import { handle } from "@hono/node-server/vercel";
+import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import type { IncomingHttpHeaders, IncomingMessage, ServerResponse } from "node:http";
 
+import { appRouter } from "../../../packages/api/src/routers/index.js";
 import { auth } from "../../../packages/auth/src/index.js";
 import app from "../src/index.js";
 
 const DIRECT_AUTH_EXCHANGE_TIMEOUT_MS = 18_000;
+const DIRECT_TRPC_TIMEOUT_MS = 18_000;
 
 export const config = {
   api: {
@@ -24,6 +27,20 @@ function isPrivyExchangeRequest(req: VercelRequest) {
   }
 
   return new URL(req.url, "http://localhost").pathname === "/api/auth/privy/exchange";
+}
+
+function isTrpcRequest(req: VercelRequest) {
+  if (!req.url) {
+    return false;
+  }
+
+  const pathname = new URL(req.url, "http://localhost").pathname;
+
+  return pathname === "/trpc" || pathname.startsWith("/trpc/");
+}
+
+function requestCanHaveBody(method: string | undefined) {
+  return method !== "GET" && method !== "HEAD";
 }
 
 function copyHeaders(source: IncomingHttpHeaders) {
@@ -64,7 +81,7 @@ async function readRequestBody(req: VercelRequest) {
   return Buffer.concat(chunks);
 }
 
-type AuthHandlerResponse = {
+type WebHandlerResponse = {
   arrayBuffer: () => Promise<ArrayBuffer>;
   headers: {
     forEach: (callback: (value: string, key: string) => void) => void;
@@ -74,23 +91,31 @@ type AuthHandlerResponse = {
   status: number;
 };
 
-function withResponseTimeout(responsePromise: Promise<unknown>) {
+function withResponseTimeout(
+  responsePromise: Promise<unknown>,
+  input: {
+    code: string;
+    message: string;
+    status: number;
+    timeoutMs: number;
+  },
+) {
   let timeout: ReturnType<typeof setTimeout> | undefined;
 
   return Promise.race([
-    responsePromise as Promise<AuthHandlerResponse>,
-    new Promise<AuthHandlerResponse>((resolve) => {
+    responsePromise as Promise<WebHandlerResponse>,
+    new Promise<WebHandlerResponse>((resolve) => {
       timeout = setTimeout(() => {
         resolve(
           Response.json(
             {
-              code: "PRIVY_EXCHANGE_TIMEOUT",
-              message: "Privy session exchange timed out. Please try again.",
+              code: input.code,
+              message: input.message,
             },
-            { status: 503 },
-          ) as AuthHandlerResponse,
+            { status: input.status },
+          ) as WebHandlerResponse,
         );
-      }, DIRECT_AUTH_EXCHANGE_TIMEOUT_MS);
+      }, input.timeoutMs);
     }),
   ]).finally(() => {
     if (timeout) {
@@ -99,7 +124,7 @@ function withResponseTimeout(responsePromise: Promise<unknown>) {
   });
 }
 
-async function sendWebResponse(res: ServerResponse, response: AuthHandlerResponse) {
+async function sendWebResponse(res: ServerResponse, response: WebHandlerResponse) {
   res.statusCode = response.status;
 
   const setCookies =
@@ -126,15 +151,73 @@ async function sendWebResponse(res: ServerResponse, response: AuthHandlerRespons
   res.end(Buffer.from(await response.arrayBuffer()));
 }
 
-async function handlePrivyExchange(req: VercelRequest, res: ServerResponse) {
+async function buildWebRequest(req: VercelRequest) {
   const host = req.headers.host ?? "localhost";
   const protocol = req.headers["x-forwarded-proto"] ?? "https";
-  const request = new Request(`${protocol}://${host}${req.url ?? ""}`, {
-    body: await readRequestBody(req),
+  const method = req.method ?? "GET";
+  const init: {
+    body?: Buffer | string;
+    headers: Headers;
+    method: string;
+  } = {
     headers: copyHeaders(req.headers),
-    method: req.method,
+    method,
+  };
+
+  if (requestCanHaveBody(method)) {
+    init.body = await readRequestBody(req);
+  }
+
+  return new Request(`${protocol}://${host}${req.url ?? ""}`, init as never);
+}
+
+async function handlePrivyExchange(req: VercelRequest, res: ServerResponse) {
+  const request = await buildWebRequest(req);
+  const response = await withResponseTimeout(auth.handler(request), {
+    code: "PRIVY_EXCHANGE_TIMEOUT",
+    message: "Privy session exchange timed out. Please try again.",
+    status: 503,
+    timeoutMs: DIRECT_AUTH_EXCHANGE_TIMEOUT_MS,
   });
-  const response = await withResponseTimeout(auth.handler(request));
+
+  await sendWebResponse(res, response);
+}
+
+async function handleTrpc(req: VercelRequest, res: ServerResponse) {
+  const startedAt = Date.now();
+  const request = await buildWebRequest(req);
+  const path = new URL(request.url).pathname.replace(/^\/trpc\/?/, "");
+
+  console.log("[server.trpc] direct request", {
+    method: req.method,
+    path,
+  });
+
+  const response = await withResponseTimeout(
+    fetchRequestHandler({
+      createContext: async () => ({
+        auth: null,
+        session: await auth.api.getSession({
+          headers: request.headers,
+        }),
+      }),
+      endpoint: "/trpc",
+      req: request,
+      router: appRouter,
+    }),
+    {
+      code: "TRPC_TIMEOUT",
+      message: "Request timed out. Please try again.",
+      status: 503,
+      timeoutMs: DIRECT_TRPC_TIMEOUT_MS,
+    },
+  );
+
+  console.log("[server.trpc] direct response", {
+    durationMs: Date.now() - startedAt,
+    path,
+    status: response.status,
+  });
 
   await sendWebResponse(res, response);
 }
@@ -142,6 +225,11 @@ async function handlePrivyExchange(req: VercelRequest, res: ServerResponse) {
 export default async function handler(req: VercelRequest, res: ServerResponse) {
   if (isPrivyExchangeRequest(req)) {
     await handlePrivyExchange(req, res);
+    return;
+  }
+
+  if (isTrpcRequest(req)) {
+    await handleTrpc(req, res);
     return;
   }
 
