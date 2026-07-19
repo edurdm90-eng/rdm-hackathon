@@ -154,6 +154,11 @@ const emptyRoomForm = {
   name: "",
 };
 
+type PendingRoomCreate = {
+  pendingId: string;
+  txHash: string;
+};
+
 const emptyTaskForm = {
   assignedToEmail: "",
   description: "",
@@ -952,6 +957,8 @@ function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
   const [roomForm, setRoomForm] = useState(emptyRoomForm);
   const [inviteCode, setInviteCode] = useState("");
   const [createRoomModalOpen, setCreateRoomModalOpen] = useState(false);
+  const [isCreatingRoomOnchain, setIsCreatingRoomOnchain] = useState(false);
+  const [pendingRoomCreate, setPendingRoomCreate] = useState<PendingRoomCreate | null>(null);
   const [message, setMessage] = useState<{ text: string; tone: Tone } | null>(null);
 
   const hostedRooms = dashboard.data?.hostedRooms ?? [];
@@ -981,9 +988,6 @@ function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
   };
 
   const createRoom = useMutation(trpc.hackRoom.createRoom.mutationOptions());
-  const completeRoomOnchainCreate = useMutation(
-    trpc.hackRoom.completeRoomOnchainCreate.mutationOptions(),
-  );
 
   const joinRoom = useMutation(
     trpc.hackRoom.joinRoom.mutationOptions({
@@ -998,7 +1002,7 @@ function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
 
   const isBusy =
     createRoom.isPending ||
-    completeRoomOnchainCreate.isPending ||
+    isCreatingRoomOnchain ||
     joinRoom.isPending;
 
   const handleNotifications = () => {
@@ -1031,35 +1035,52 @@ function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
       return;
     }
 
-    try {
-      setMessage({ text: "Creating room record...", tone: "violet" });
-      const room = await createRoom.mutateAsync(roomForm);
-      setRoomForm(emptyRoomForm);
-      setCreateRoomModalOpen(false);
-      setMessage({ text: "Confirming room on-chain with sponsored gas...", tone: "gold" });
+    let pendingId = pendingRoomCreate?.pendingId ?? `room:create:${Date.now()}`;
+    let txHash = pendingRoomCreate?.txHash;
 
-      const txHash = await sendContractCalls({
-        calls: [makeCreateHackathonCall()],
-        pendingId: `room:${room._id}:create`,
-        pendingKind: "room_created",
-      });
+    try {
+      setIsCreatingRoomOnchain(true);
 
       if (txHash) {
-        await completeRoomOnchainCreate.mutateAsync({
-          roomId: room._id,
-          txHash,
-        });
-        await forgetPendingChainEvent(`room:${room._id}:create`);
+        setMessage({ text: "Finishing room sync from confirmed on-chain transaction...", tone: "gold" });
+      } else {
+        setMessage({ text: "Confirming room on-chain with sponsored gas...", tone: "gold" });
+        txHash =
+          (await sendContractCalls({
+            calls: [makeCreateHackathonCall()],
+            pendingId,
+            pendingKind: "room_created",
+          })) ?? undefined;
       }
 
+      if (!txHash) {
+        throw new Error("Room blockchain transaction did not return a transaction hash.");
+      }
+
+      setPendingRoomCreate({ pendingId, txHash });
+      setMessage({ text: "Creating room after chain confirmation...", tone: "violet" });
+      const room = await createRoom.mutateAsync({
+        ...roomForm,
+        txHash,
+      });
+
+      await forgetPendingChainEvent(pendingId);
+      setPendingRoomCreate(null);
+      setRoomForm(emptyRoomForm);
+      setCreateRoomModalOpen(false);
       setMessage({ text: `Created ${room.name} on-chain with invite ${room.inviteCode}`, tone: "gold" });
       await invalidateDashboard();
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unable to create the room on-chain.";
+      const retryMessage =
+        "Tap Create Room again to finish sync without sending another transaction.";
       setMessage({
-        text: error instanceof Error ? error.message : "Unable to create the room on-chain.",
+        text: txHash ? `${errorMessage} ${retryMessage}` : errorMessage,
         tone: "red",
       });
       await invalidateDashboard();
+    } finally {
+      setIsCreatingRoomOnchain(false);
     }
   };
 
@@ -1083,7 +1104,7 @@ function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
 
 
         <RoomCommandCenter
-          createRoomPending={createRoom.isPending || completeRoomOnchainCreate.isPending}
+          createRoomPending={createRoom.isPending || isCreatingRoomOnchain}
           createRoomModalOpen={createRoomModalOpen}
           inviteCode={inviteCode}
           joinRoomPending={joinRoom.isPending}

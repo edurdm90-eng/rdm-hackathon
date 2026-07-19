@@ -882,8 +882,16 @@ export const hackRoomRouter = router({
           smartWalletAddress: 1,
         },
       }),
-      roomCollection().find({ hostId: user.id }).toArray(),
-      roomCollection().find({ "participants.userId": user.id }).toArray(),
+      roomCollection()
+        .find({ hostId: user.id, onchainStatus: "confirmed", status: "active" })
+        .toArray(),
+      roomCollection()
+        .find({
+          "participants.userId": user.id,
+          onchainStatus: "confirmed",
+          status: "active",
+        })
+        .toArray(),
     ]);
 
     const hostedRoomIds = hostedRooms.map((room) => room._id);
@@ -1016,6 +1024,7 @@ export const hackRoomRouter = router({
       z.object({
         name: z.string().trim().min(3).max(80),
         description: z.string().trim().max(240).default(""),
+        txHash: txHashSchema,
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -1028,11 +1037,35 @@ export const hackRoomRouter = router({
           smartWalletAddress: 1,
         },
       });
+      const hostAddress =
+        normalizeStoredAddress(hostUser?.onchainAddress) ??
+        normalizeStoredAddress(hostUser?.smartWalletAddress);
+
+      if (!hostAddress) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Sync the host smart wallet before creating the room on-chain",
+        });
+      }
+
+      const existingRoom = await roomCollection().findOne({ createTxHash: input.txHash });
+      if (existingRoom) {
+        if (existingRoom.hostId !== ctx.session.user.id) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "This blockchain transaction is already linked to another room",
+          });
+        }
+        return existingRoom;
+      }
+
+      const { hackathonId, receipt } = await verifyHackathonCreated(input.txHash, hostAddress);
       const timestamp = now();
       const room: HackRoomRecord = {
         _id: makeId("room"),
         chainId: polygonAmoyDeployment.chainId,
         contractAddress: polygonAmoyDeployment.eduProxy,
+        createTxHash: input.txHash,
         name: input.name,
         description: input.description,
         inviteCode: await createUniqueInviteCode(),
@@ -1041,7 +1074,8 @@ export const hackRoomRouter = router({
         hostName: ctx.session.user.name,
         hostOnchainAddress: hostUser?.onchainAddress,
         hostSmartWalletAddress: hostUser?.smartWalletAddress,
-        onchainStatus: "not_created",
+        onchainHackathonId: hackathonId.toString(),
+        onchainStatus: "confirmed",
         status: "active",
         participants: [],
         createdAt: timestamp,
@@ -1049,6 +1083,17 @@ export const hackRoomRouter = router({
       };
 
       await roomCollection().insertOne(room);
+      await recordConfirmedChainEvent({
+        appEntityId: room._id,
+        expectedHackathonId: hackathonId,
+        expectedRecipients: [hostAddress],
+        idempotencyKey: `room:${room._id}:created`,
+        kind: "room_created",
+        receipt,
+        roomId: room._id,
+        txHash: input.txHash,
+      });
+
       return room;
     }),
 
@@ -1060,7 +1105,11 @@ export const hackRoomRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       const inviteCode = input.inviteCode.toUpperCase();
-      const room = await roomCollection().findOne({ inviteCode, status: "active" });
+      const room = await roomCollection().findOne({
+        inviteCode,
+        onchainStatus: "confirmed",
+        status: "active",
+      });
 
       if (!room) {
         throw new TRPCError({
