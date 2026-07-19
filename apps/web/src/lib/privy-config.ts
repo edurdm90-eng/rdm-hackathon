@@ -1,5 +1,5 @@
 export function getWebPrivyAppId() {
-  return (import.meta.env.VITE_PRIVY_APP_ID as string | undefined) ?? "";
+  return ((import.meta.env.VITE_PRIVY_APP_ID as string | undefined) ?? "").trim();
 }
 
 export function getWebPrivyConfigurationError() {

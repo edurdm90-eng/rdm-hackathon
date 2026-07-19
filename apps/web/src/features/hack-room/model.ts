@@ -174,6 +174,7 @@ const participantTabsBySegment: Partial<Record<string, ParticipantTab>> = {
 export const emptyRoomForm = {
   description: "",
   name: "",
+  txHash: "",
 };
 
 export const emptyTaskForm = {

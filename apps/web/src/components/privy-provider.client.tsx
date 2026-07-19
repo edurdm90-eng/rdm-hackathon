@@ -41,6 +41,22 @@ function getUserName(user: NonNullable<ReturnType<typeof usePrivy>["user"]>) {
   );
 }
 
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string) {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
+}
+
 function PrivySessionBridge({ children }: { children: ReactNode }) {
   const { authenticated, getAccessToken, login, logout: privyLogout, ready, user } = usePrivy();
   const {
@@ -60,6 +76,8 @@ function PrivySessionBridge({ children }: { children: ReactNode }) {
   const { createWallet } = useCreateWallet();
   const { ready: walletsReady, wallets } = useWallets();
   const [hasSyncedSession, setHasSyncedSession] = useState(false);
+  const [isSyncingSession, setIsSyncingSession] = useState(false);
+  const [sessionSyncError, setSessionSyncError] = useState<string | null>(null);
   const [isCreatingWallet, setIsCreatingWallet] = useState(false);
   const [walletError, setWalletError] = useState<string | null>(null);
   const embeddedWallet = getEmbeddedConnectedWallet(wallets);
@@ -72,6 +90,8 @@ function PrivySessionBridge({ children }: { children: ReactNode }) {
 
     if (!authenticated || !user) {
       setHasSyncedSession(false);
+      setIsSyncingSession(false);
+      setSessionSyncError(null);
       clearStoredPrivySession();
       void queryClient.invalidateQueries();
       return;
@@ -82,6 +102,8 @@ function PrivySessionBridge({ children }: { children: ReactNode }) {
 
     async function syncPrivySession() {
       setHasSyncedSession(false);
+      setIsSyncingSession(true);
+      setSessionSyncError(null);
       const token = await getAccessToken();
 
       if (!active) {
@@ -94,9 +116,13 @@ function PrivySessionBridge({ children }: { children: ReactNode }) {
         throw new Error("Privy did not return an access token for this login.");
       }
 
-      const exchangeResult = await authClient.privy.exchange({
-        accessToken: token,
-      });
+      const exchangeResult = await withTimeout(
+        authClient.privy.exchange({
+          accessToken: token,
+        }),
+        15_000,
+        "Server did not finish Privy session exchange. Check deployed server auth env and logs.",
+      );
 
       if (exchangeResult.error) {
         throw new Error(
@@ -119,13 +145,19 @@ function PrivySessionBridge({ children }: { children: ReactNode }) {
         },
       });
       setHasSyncedSession(true);
+      setSessionSyncError(null);
       await queryClient.invalidateQueries();
     }
 
     void syncPrivySession().catch((error) => {
       const message = error instanceof Error ? error.message : "Unable to sync Privy session.";
       setHasSyncedSession(false);
+      setSessionSyncError(message);
       toast.error(message);
+    }).finally(() => {
+      if (active) {
+        setIsSyncingSession(false);
+      }
     });
 
     return () => {
@@ -165,6 +197,7 @@ function PrivySessionBridge({ children }: { children: ReactNode }) {
       authenticated: authenticated && hasSyncedSession,
       configurationError: null,
       emailLoginStatus: emailLoginState.status,
+      isSyncingSession: authenticated && isSyncingSession,
       loginWithEmailCode: async (code: string) => {
         await loginWithCode({ code });
       },
@@ -173,6 +206,8 @@ function PrivySessionBridge({ children }: { children: ReactNode }) {
       },
       logout: async () => {
         setHasSyncedSession(false);
+        setIsSyncingSession(false);
+        setSessionSyncError(null);
         clearStoredPrivySession();
         await queryClient.cancelQueries();
         queryClient.clear();
@@ -182,16 +217,19 @@ function PrivySessionBridge({ children }: { children: ReactNode }) {
       sendEmailCode: async (email: string) => {
         await sendCode({ email });
       },
+      sessionSyncError,
     }),
     [
       authenticated,
       emailLoginState.status,
       hasSyncedSession,
+      isSyncingSession,
       login,
       loginWithCode,
       privyLogout,
       ready,
       sendCode,
+      sessionSyncError,
     ],
   );
 

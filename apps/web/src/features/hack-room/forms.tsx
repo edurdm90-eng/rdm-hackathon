@@ -140,6 +140,14 @@ function RoomCommandCenter({
                 value={roomForm.description}
               />
             </Field>
+            <Field label="On-chain TX Hash">
+              <Input
+                className="h-10 rounded-[9px] border-[rgba(238,232,222,0.12)] bg-[#0D0F12] font-mono text-[12px] text-[#EEE8DE] placeholder:text-[#626058] focus-visible:border-[#A060FF]"
+                onChange={(event) => onRoomFormChange((current) => ({ ...current, txHash: event.target.value }))}
+                placeholder="0x..."
+                value={roomForm.txHash}
+              />
+            </Field>
             <div className="grid gap-2 sm:grid-cols-2">
               <Button
                 className="h-10 rounded-[9px] border-[#FF5A4A] bg-[#280A08] text-[#FF5A4A] hover:bg-[#280A08]/80"
@@ -151,7 +159,7 @@ function RoomCommandCenter({
               </Button>
               <Button
                 className="h-10 rounded-[9px] bg-[#A060FF] text-[#060214] hover:bg-[#A060FF]/85"
-                disabled={!roomForm.name.trim() || createRoomPending}
+                disabled={!roomForm.name.trim() || !roomForm.txHash.trim() || createRoomPending}
                 type="submit"
               >
                 <NativeIcon className="size-4" name="add-outline" />

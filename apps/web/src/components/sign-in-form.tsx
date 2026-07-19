@@ -19,9 +19,11 @@ export default function SignInForm() {
     authenticated,
     configurationError,
     emailLoginStatus,
+    isSyncingSession,
     loginWithEmailCode,
     ready,
     sendEmailCode,
+    sessionSyncError,
   } = usePrivyAuth();
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
@@ -103,7 +105,11 @@ export default function SignInForm() {
                 void handleSendCode();
               }}
             >
-              {emailLoginStatus === "awaiting-code-input" || emailLoginStatus === "error" ? (
+              {isSyncingSession ? (
+                <div className="rounded-[9px] border border-[#1EEAB0] bg-[#061F18] px-3 py-3 text-sm font-semibold text-[#1EEAB0]">
+                  Finishing sign in...
+                </div>
+              ) : emailLoginStatus === "awaiting-code-input" || emailLoginStatus === "error" ? (
                 <div className="grid gap-1.5">
                   <Label
                     className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#626058]"
@@ -148,16 +154,25 @@ export default function SignInForm() {
                   {configurationError}
                 </p>
               ) : null}
+              {sessionSyncError ? (
+                <p className="rounded-[9px] border border-[#7A120A] bg-[#2A0806] px-3 py-2 text-xs leading-5 text-[#FF8A7C]">
+                  {sessionSyncError}
+                </p>
+              ) : null}
 
               <Button
                 className="mt-1 h-[42px] w-full rounded-[9px] bg-[#1EEAB0] text-[13px] font-bold text-[#03120C] hover:bg-[#1EEAB0]/85"
                 disabled={
-                  emailLoginStatus === "sending-code" || emailLoginStatus === "submitting-code"
+                  isSyncingSession ||
+                  emailLoginStatus === "sending-code" ||
+                  emailLoginStatus === "submitting-code"
                 }
                 type="submit"
               >
                 <LogIn className="size-4" />
-                {emailLoginStatus === "sending-code"
+                {isSyncingSession
+                  ? "Finishing..."
+                  : emailLoginStatus === "sending-code"
                   ? "Sending OTP..."
                   : emailLoginStatus === "submitting-code"
                     ? "Verifying..."
