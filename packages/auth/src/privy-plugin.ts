@@ -3,7 +3,9 @@ import { APIError, createAuthEndpoint, formCsrfMiddleware } from "better-auth/ap
 import { setSessionCookie } from "better-auth/cookies";
 import { z } from "zod";
 import type { PrivyClient, User as PrivyUser } from "@privy-io/node";
+import { ObjectId } from "mongodb";
 
+import { client as authDbClient } from "../../db/src/index.js";
 import {
   derivePrivyProfile,
   PRIVY_PROVIDER_ID,
@@ -36,9 +38,7 @@ type NormalizedBetterAuthUserRecord = BetterAuthUserRecord & {
 };
 
 type BetterAuthUserUpdate = Partial<
-  Pick<BetterAuthUserRecord, "emailVerified" | "image" | "name"> & {
-    role: UserRole;
-  }
+  Pick<BetterAuthUserRecord, "emailVerified" | "image" | "name">
 >;
 
 let privyClientPromise: Promise<PrivyClient> | null = null;
@@ -121,11 +121,26 @@ function buildUserUpdate(
     update.name = profile.name;
   }
 
-  if (user.roleNeedsPersist) {
-    update.role = user.role;
+  return Object.keys(update).length > 0 ? update : null;
+}
+
+function authUserDocumentFilter(userId: string) {
+  const filters: Array<Record<string, unknown>> = [{ id: userId }];
+
+  if (ObjectId.isValid(userId)) {
+    filters.push({ _id: new ObjectId(userId) });
   }
 
-  return Object.keys(update).length > 0 ? update : null;
+  return { $or: filters };
+}
+
+async function persistAuthUserDefaults(user: NormalizedBetterAuthUserRecord) {
+  await authDbClient.collection("user").updateOne(authUserDocumentFilter(user.id), {
+    $set: {
+      role: user.role,
+      updatedAt: new Date(),
+    },
+  });
 }
 
 type PrivyUserVerificationDependencies = {
@@ -291,6 +306,8 @@ export function privyBridge() {
               )) as BetterAuthUserRecord,
             );
           }
+
+          await persistAuthUserDefaults(user);
 
           if (!linkedAccount) {
             await ctx.context.internalAdapter.createAccount({

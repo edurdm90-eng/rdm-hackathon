@@ -1,0 +1,16 @@
+{
+  "name": "@rdm-hack/blockchain-client",
+  "type": "module",
+  "exports": {
+    ".": {
+      "default": "./src/index.ts"
+    }
+  },
+  "dependencies": {
+    "viem": "2.52.0"
+  },
+  "devDependencies": {
+    "@rdm-hack/config": "workspace:*",
+    "typescript": "catalog:"
+  }
+}

@@ -1,6 +1,8 @@
 import type { AppRouter } from "@rdm-hack/api/routers/index";
 import { Ionicons } from "@expo/vector-icons";
 import { useLoginWithEmail, usePrivy } from "@privy-io/expo";
+import { useSmartWallets } from "@privy-io/expo/smart-wallets";
+import { polygonAmoyDeployment } from "@rdm-hack/blockchain-client";
 import DateTimePicker, { DateTimePickerAndroid } from "@react-native-community/datetimepicker";
 import * as Clipboard from "expo-clipboard";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -28,7 +30,20 @@ import z from "zod";
 
 import { authClient } from "@/lib/auth-client";
 import { useNativePrivyBridge } from "@/components/privy-provider";
+import {
+  makeAwardNftCall,
+  makeAwardXrdmCall,
+  makeCreateHackathonCall,
+  makeNoteWinnersCall,
+  makeRegisterParticipantsCall,
+  resolveTransactionHash,
+  type ContractCall,
+} from "@/lib/blockchain";
 import { HACK_THEME as theme } from "@/lib/constants";
+import {
+  forgetPendingChainEvent,
+  rememberPendingChainEvent,
+} from "@/lib/pending-chain-events";
 import { queryClient, trpc } from "@/utils/trpc";
 
 const rdmLogo = require("@/assets/logo/rdm-logo.png");
@@ -76,6 +91,10 @@ type MiniGameSession = {
   task?: HackTask;
   type: GameType;
 };
+type RegistrationPlan = Array<{
+  address: string;
+  userId: string;
+}>;
 type Tone = "cyan" | "violet" | "gold" | "orange" | "red" | "lime" | "sky";
 type SessionUser = {
   email: string;
@@ -145,10 +164,146 @@ const emptyTaskForm = {
 };
 
 const minimumTaskDueOffsetMs = 60_000;
+const walletSyncRetryDelaysMs = [0, 800, 1_600, 3_200, 6_400, 10_000] as const;
 let cachedNativeSessionUser: SessionUser | null = null;
+const syncedWalletKeys = new Set<string>();
+
+function walletProfileValue(value: string | null | undefined, fallback = "Not synced yet") {
+  return value && value.trim().length > 0 ? value : fallback;
+}
+
+function waitForWalletSyncRetry(delayMs: number) {
+  return new Promise<void>((resolve) => {
+    setTimeout(resolve, delayMs);
+  });
+}
 
 function setCachedNativeSessionUser(user: SessionUser | null) {
   cachedNativeSessionUser = user;
+}
+
+function useSponsoredWalletSync(user: SessionUser | null) {
+  const { walletAddress } = useNativePrivyBridge();
+  const { client: readySmartWalletClient, getClientForChain } = useSmartWallets();
+  const syncWallets = useMutation(trpc.hackRoom.syncWallets.mutationOptions());
+
+  useEffect(() => {
+    if (!user || !walletAddress || syncWallets.isPending) {
+      return;
+    }
+
+    let cancelled = false;
+    const sessionUser = user;
+    const embeddedWalletAddress = walletAddress;
+
+    async function syncWalletsForUser() {
+      const embeddedSyncKey = `${sessionUser.id}:${embeddedWalletAddress}:embedded`;
+
+      if (!syncedWalletKeys.has(embeddedSyncKey)) {
+        syncedWalletKeys.add(embeddedSyncKey);
+        await syncWallets.mutateAsync({
+          embeddedWalletAddress,
+        });
+        await queryClient.invalidateQueries({ queryKey: trpc.hackRoom.dashboard.queryKey() });
+      }
+
+      for (const delayMs of walletSyncRetryDelaysMs) {
+        if (cancelled) {
+          return;
+        }
+
+        if (delayMs > 0) {
+          await waitForWalletSyncRetry(delayMs);
+        }
+
+        let smartWalletAddress = "";
+
+        try {
+          const smartWalletClient =
+            readySmartWalletClient ??
+            (await getClientForChain({
+              chainId: polygonAmoyDeployment.chainId,
+            }));
+          smartWalletAddress = (smartWalletClient.account?.address ?? "").toString();
+        } catch {
+          continue;
+        }
+
+        if (!smartWalletAddress) {
+          continue;
+        }
+
+        const smartSyncKey = `${sessionUser.id}:${embeddedWalletAddress}:${smartWalletAddress}`;
+        if (syncedWalletKeys.has(smartSyncKey) || cancelled) {
+          return;
+        }
+
+        syncedWalletKeys.add(smartSyncKey);
+        await syncWallets.mutateAsync({
+          embeddedWalletAddress,
+          smartWalletAddress,
+        });
+        await queryClient.invalidateQueries({ queryKey: trpc.hackRoom.dashboard.queryKey() });
+        return;
+      }
+    }
+
+    void syncWalletsForUser().catch(() => {
+      syncedWalletKeys.delete(`${sessionUser.id}:${embeddedWalletAddress}:embedded`);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [getClientForChain, readySmartWalletClient, syncWallets, user, walletAddress]);
+}
+
+function useSponsoredHackathonTransactions() {
+  const { getClientForChain } = useSmartWallets();
+
+  const sendContractCalls = async (input: {
+    calls: Array<ContractCall>;
+    pendingId: string;
+    pendingKind: string;
+  }) => {
+    if (!input.calls.length) {
+      return null;
+    }
+
+    const smartWalletClient = await getClientForChain({
+      chainId: polygonAmoyDeployment.chainId,
+    });
+    const smartWalletAddress = (smartWalletClient.account?.address ?? "").toString();
+
+    if (!smartWalletAddress) {
+      throw new Error("Privy smart wallet is not ready yet.");
+    }
+
+    await rememberPendingChainEvent({
+      id: input.pendingId,
+      kind: input.pendingKind,
+    });
+
+    const operationHash = await smartWalletClient.sendTransaction({
+      calls: input.calls,
+    } as never);
+    const txHash = await resolveTransactionHash({
+      client: smartWalletClient,
+      hash: operationHash,
+    });
+
+    await rememberPendingChainEvent({
+      id: input.pendingId,
+      kind: input.pendingKind,
+      txHash,
+    });
+
+    return txHash;
+  };
+
+  return {
+    sendContractCalls,
+  };
 }
 
 function makeEmptyRewardForm() {
@@ -222,6 +377,7 @@ export function AuthenticatedTabs({ children }: { children: React.ReactNode }) {
     setCachedNativeSessionUser(session.user);
   }
   const sessionUser = session?.user ?? cachedNativeSessionUser;
+  useSponsoredWalletSync(sessionUser);
 
   if (isPending && !sessionUser) {
     return (
@@ -281,6 +437,7 @@ function AuthenticatedRoute({
     setCachedNativeSessionUser(session.user);
   }
   const sessionUser = session?.user ?? cachedNativeSessionUser;
+  useSponsoredWalletSync(sessionUser);
 
   if (isPending && !sessionUser) {
     return (
@@ -684,11 +841,16 @@ function HomeDashboard({ user }: { user: SessionUser }) {
 function ProfileDashboard({ user }: { user: SessionUser }) {
   const dashboard = useQuery(trpc.hackRoom.dashboard.queryOptions());
   const { logout } = usePrivy();
+  const { isCreatingWallet, retryCreateWallet, walletAddress, walletError } = useNativePrivyBridge();
   const [message, setMessage] = useState<{ text: string; tone: Tone } | null>(null);
   const stats = dashboard.data?.stats;
+  const wallets = dashboard.data?.wallets;
   const hostedRooms = dashboard.data?.hostedRooms ?? [];
   const notifications = dashboard.data?.notifications ?? [];
   const networkCount = countNativeNetworkParticipants(hostedRooms, user);
+  const role = dashboard.data?.viewerRole ?? "member";
+  const embeddedWalletAddress = wallets?.embeddedWalletAddress ?? walletAddress;
+  const walletFallback = isCreatingWallet ? "Creating wallet..." : "Not synced yet";
 
   const handleSignOut = async () => {
     setCachedNativeSessionUser(null);
@@ -747,13 +909,35 @@ function ProfileDashboard({ user }: { user: SessionUser }) {
 
         {dashboard.error ? <ErrorBanner message={dashboard.error.message} /> : null}
         {message ? <StatusBanner message={message.text} tone={message.tone} /> : null}
+        {walletError ? <ErrorBanner message={walletError} /> : null}
 
         <Panel eyebrow="Account" icon="person-circle-outline" title="Profile" tone="cyan">
           <View style={styles.profileDetails}>
             <ProfileRow label="Name" value={user.name} />
             <ProfileRow label="Email" value={user.email} />
             <ProfileRow label="User ID" value={user.id} />
+            <ProfileRow label="Role" value={role} />
+            <ProfileRow
+              label="Embedded wallet"
+              value={walletProfileValue(embeddedWalletAddress, walletFallback)}
+            />
+            <ProfileRow
+              label="Smart wallet"
+              value={walletProfileValue(wallets?.smartWalletAddress, walletFallback)}
+            />
+            <ProfileRow
+              label="On-chain address"
+              value={walletProfileValue(wallets?.onchainAddress, walletFallback)}
+            />
           </View>
+          {walletError ? (
+            <HackButton
+              icon="refresh-outline"
+              label="Retry Wallet"
+              onPress={() => void retryCreateWallet()}
+              tone="gold"
+            />
+          ) : null}
           <HackButton icon="log-out-outline" label="Sign Out" onPress={handleSignOut} tone="red" />
         </Panel>
       </ScrollView>
@@ -764,6 +948,7 @@ function ProfileDashboard({ user }: { user: SessionUser }) {
 function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
   const router = useRouter();
   const dashboard = useQuery(trpc.hackRoom.dashboard.queryOptions());
+  const { sendContractCalls } = useSponsoredHackathonTransactions();
   const [roomForm, setRoomForm] = useState(emptyRoomForm);
   const [inviteCode, setInviteCode] = useState("");
   const [createRoomModalOpen, setCreateRoomModalOpen] = useState(false);
@@ -795,16 +980,9 @@ function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
     await queryClient.invalidateQueries({ queryKey: trpc.hackRoom.dashboard.queryKey() });
   };
 
-  const createRoom = useMutation(
-    trpc.hackRoom.createRoom.mutationOptions({
-      onError: (error) => setMessage({ text: error.message, tone: "red" }),
-      onSuccess: async (room) => {
-        setRoomForm(emptyRoomForm);
-        setCreateRoomModalOpen(false);
-        setMessage({ text: `Created ${room.name} with invite ${room.inviteCode}`, tone: "violet" });
-        await invalidateDashboard();
-      },
-    }),
+  const createRoom = useMutation(trpc.hackRoom.createRoom.mutationOptions());
+  const completeRoomOnchainCreate = useMutation(
+    trpc.hackRoom.completeRoomOnchainCreate.mutationOptions(),
   );
 
   const joinRoom = useMutation(
@@ -820,6 +998,7 @@ function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
 
   const isBusy =
     createRoom.isPending ||
+    completeRoomOnchainCreate.isPending ||
     joinRoom.isPending;
 
   const handleNotifications = () => {
@@ -847,6 +1026,43 @@ function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
     });
   };
 
+  const handleCreateRoom = async () => {
+    if (!canCreateRoom) {
+      return;
+    }
+
+    try {
+      setMessage({ text: "Creating room record...", tone: "violet" });
+      const room = await createRoom.mutateAsync(roomForm);
+      setRoomForm(emptyRoomForm);
+      setCreateRoomModalOpen(false);
+      setMessage({ text: "Confirming room on-chain with sponsored gas...", tone: "gold" });
+
+      const txHash = await sendContractCalls({
+        calls: [makeCreateHackathonCall()],
+        pendingId: `room:${room._id}:create`,
+        pendingKind: "room_created",
+      });
+
+      if (txHash) {
+        await completeRoomOnchainCreate.mutateAsync({
+          roomId: room._id,
+          txHash,
+        });
+        await forgetPendingChainEvent(`room:${room._id}:create`);
+      }
+
+      setMessage({ text: `Created ${room.name} on-chain with invite ${room.inviteCode}`, tone: "gold" });
+      await invalidateDashboard();
+    } catch (error) {
+      setMessage({
+        text: error instanceof Error ? error.message : "Unable to create the room on-chain.",
+        tone: "red",
+      });
+      await invalidateDashboard();
+    }
+  };
+
   return (
     <View style={styles.screen}>
       <AppHeader
@@ -867,18 +1083,12 @@ function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
 
 
         <RoomCommandCenter
-          createRoomPending={createRoom.isPending}
+          createRoomPending={createRoom.isPending || completeRoomOnchainCreate.isPending}
           createRoomModalOpen={createRoomModalOpen}
           inviteCode={inviteCode}
           joinRoomPending={joinRoom.isPending}
           canCreateRoom={canCreateRoom}
-          onCreateRoom={() => {
-            if (!canCreateRoom) {
-              return;
-            }
-
-            createRoom.mutate(roomForm);
-          }}
+          onCreateRoom={handleCreateRoom}
           onInviteCodeChange={setInviteCode}
           onJoinRoom={() => joinRoom.mutate({ inviteCode })}
           onRoomFormChange={setRoomForm}
@@ -926,6 +1136,7 @@ function HackRoomDetailDashboard({
 }) {
   const router = useRouter();
   const dashboard = useQuery(trpc.hackRoom.dashboard.queryOptions());
+  const { sendContractCalls } = useSponsoredHackathonTransactions();
   const [activeRoomTab, setActiveRoomTab] = useState<RoomTab | null>(null);
   const [activeParticipantTab, setActiveParticipantTab] =
     useState<ParticipantTab | null>(initialParticipantTab);
@@ -1069,20 +1280,20 @@ function HackRoomDetailDashboard({
   );
 
   const approveSubmission = useMutation(
-    trpc.hackRoom.approveSubmission.mutationOptions({
+    trpc.hackRoom.completeSubmissionApproval.mutationOptions({
       onError: (error) => setMessage({ text: error.message, tone: "red" }),
       onSuccess: async () => {
-        setMessage({ text: "Proof verified and added to room history", tone: "cyan" });
+        setMessage({ text: "Proof verified and XRDM confirmed on-chain", tone: "gold" });
         await invalidateDashboard();
       },
     }),
   );
 
   const selectWinner = useMutation(
-    trpc.hackRoom.selectWinner.mutationOptions({
+    trpc.hackRoom.completeWinnerSelection.mutationOptions({
       onError: (error) => setMessage({ text: error.message, tone: "red" }),
       onSuccess: async () => {
-        setMessage({ text: "Winner announced and XRDM award recorded", tone: "gold" });
+        setMessage({ text: "Winner announced and confirmed on-chain", tone: "gold" });
         await invalidateDashboard();
       },
     }),
@@ -1098,16 +1309,27 @@ function HackRoomDetailDashboard({
     }),
   );
 
-  const issueReward = useMutation(
-    trpc.hackRoom.issueReward.mutationOptions({
+  const prepareReward = useMutation(
+    trpc.hackRoom.prepareReward.mutationOptions({
+      onError: (error) => setMessage({ text: error.message, tone: "red" }),
+    }),
+  );
+  const completeReward = useMutation(
+    trpc.hackRoom.completeReward.mutationOptions({
       onError: (error) => setMessage({ text: error.message, tone: "red" }),
       onSuccess: async () => {
         setRewardForm(makeEmptyRewardForm());
-        setMessage({ text: "Reward issued to the in-app ledger", tone: "gold" });
+        setMessage({ text: "Reward issued and confirmed on-chain", tone: "gold" });
         await invalidateDashboard();
       },
     }),
   );
+  const completeParticipantRegistration = useMutation(
+    trpc.hackRoom.completeParticipantRegistration.mutationOptions({
+      onError: (error) => setMessage({ text: error.message, tone: "red" }),
+    }),
+  );
+  const issueRewardPending = prepareReward.isPending || completeReward.isPending;
 
   const isBusy =
     createTask.isPending ||
@@ -1115,7 +1337,8 @@ function HackRoomDetailDashboard({
     approveSubmission.isPending ||
     selectWinner.isPending ||
     returnSubmission.isPending ||
-    issueReward.isPending ||
+    issueRewardPending ||
+    completeParticipantRegistration.isPending ||
     sendRoomNotification.isPending;
 
   useEffect(() => {
@@ -1256,15 +1479,95 @@ function HackRoomDetailDashboard({
     });
   };
 
+  const registerMissingParticipants = async (input: {
+    hackathonId: string | null;
+    pendingId: string;
+    registration: RegistrationPlan;
+    roomId: string;
+  }) => {
+    if (!input.registration.length) {
+      return;
+    }
+
+    if (!input.hackathonId) {
+      throw new Error("Room is not confirmed on-chain yet.");
+    }
+
+    setMessage({ text: "Registering recipient wallets on-chain...", tone: "gold" });
+    const txHash = await sendContractCalls({
+      calls: [
+        makeRegisterParticipantsCall({
+          hackathonId: input.hackathonId,
+          participantAddresses: input.registration.map((entry) => entry.address),
+        }),
+      ],
+      pendingId: `${input.pendingId}:register`,
+      pendingKind: "participants_registered",
+    });
+
+    if (!txHash) {
+      return;
+    }
+
+    await completeParticipantRegistration.mutateAsync({
+      participantIds: input.registration.map((entry) => entry.userId),
+      roomId: input.roomId,
+      txHash,
+    });
+    await forgetPendingChainEvent(`${input.pendingId}:register`);
+  };
+
   const handleApproveSubmission = (submission: HackSubmission) => {
     const feedback =
       feedbackBySubmission[submission._id] ||
       submission.hostFeedback ||
       "Verified. Clear proof and solid contribution.";
-    approveSubmission.mutate({
-      hostFeedback: feedback,
-      submissionId: submission._id,
-    });
+
+    void (async () => {
+      try {
+        setMessage({ text: "Preparing on-chain XRDM approval...", tone: "gold" });
+        const plan = await queryClient.fetchQuery(
+          trpc.hackRoom.prepareSubmissionApproval.queryOptions({
+            submissionId: submission._id,
+          }),
+        );
+        await registerMissingParticipants({
+          hackathonId: plan.hackathonId,
+          pendingId: `submission:${submission._id}:approval`,
+          registration: plan.registration,
+          roomId: plan.roomId,
+        });
+
+        let txHash: string | undefined;
+        if (plan.amount > 0 && plan.hackathonId && plan.recipientAddress) {
+          setMessage({ text: "Sending sponsored XRDM award...", tone: "gold" });
+          txHash =
+            (await sendContractCalls({
+              calls: [
+                makeAwardXrdmCall({
+                  amounts: [plan.amount],
+                  hackathonId: plan.hackathonId,
+                  recipientAddresses: [plan.recipientAddress],
+                }),
+              ],
+              pendingId: `submission:${submission._id}:approval:xrdm`,
+              pendingKind: "submission_xrdm_awarded",
+            })) ?? undefined;
+        }
+
+        await approveSubmission.mutateAsync({
+          hostFeedback: feedback,
+          submissionId: submission._id,
+          txHash,
+        });
+        await forgetPendingChainEvent(`submission:${submission._id}:approval:xrdm`);
+      } catch (error) {
+        setMessage({
+          text: error instanceof Error ? error.message : "Unable to approve on-chain.",
+          tone: "red",
+        });
+      }
+    })();
   };
 
   const handleReturnSubmission = (submission: HackSubmission) => {
@@ -1286,11 +1589,71 @@ function HackRoomDetailDashboard({
     const award = Number(
       awardBySubmission[submission._id] || submission.awardXrdm || submission.rewardXrdm || 20,
     );
-    selectWinner.mutate({
-      awardXrdm: award,
-      hostFeedback: feedback,
-      submissionId: submission._id,
-    });
+
+    void (async () => {
+      try {
+        setMessage({ text: "Preparing winner blockchain confirmation...", tone: "gold" });
+        const plan = await queryClient.fetchQuery(
+          trpc.hackRoom.prepareWinnerSelection.queryOptions({
+            awardXrdm: award,
+            submissionId: submission._id,
+          }),
+        );
+        await registerMissingParticipants({
+          hackathonId: plan.hackathonId,
+          pendingId: `submission:${submission._id}:winner`,
+          registration: plan.registration,
+          roomId: plan.roomId,
+        });
+
+        if (!plan.hackathonId || !plan.recipientAddress) {
+          throw new Error("Winner wallet is not ready for blockchain confirmation.");
+        }
+
+        const calls = [
+          makeNoteWinnersCall({
+            hackathonId: plan.hackathonId,
+            winnerAddresses: [plan.recipientAddress],
+          }),
+        ];
+
+        if (award > 0) {
+          calls.push(
+            makeAwardXrdmCall({
+              amounts: [award],
+              hackathonId: plan.hackathonId,
+              recipientAddresses: [plan.recipientAddress],
+            }),
+          );
+        }
+
+        setMessage({ text: "Sending sponsored winner transaction...", tone: "gold" });
+        const txHash =
+          (await sendContractCalls({
+            calls,
+            pendingId: `submission:${submission._id}:winner:chain`,
+            pendingKind: "winner_noted",
+          })) ?? undefined;
+
+        if (!txHash) {
+          throw new Error("Winner blockchain transaction did not return a transaction hash.");
+        }
+
+        await selectWinner.mutateAsync({
+          awardTxHash: award > 0 ? txHash : undefined,
+          awardXrdm: award,
+          hostFeedback: feedback,
+          submissionId: submission._id,
+          winnerTxHash: txHash,
+        });
+        await forgetPendingChainEvent(`submission:${submission._id}:winner:chain`);
+      } catch (error) {
+        setMessage({
+          text: error instanceof Error ? error.message : "Unable to announce winner on-chain.",
+          tone: "red",
+        });
+      }
+    })();
   };
 
   const handleIssueReward = (kind: RewardKind) => {
@@ -1345,16 +1708,74 @@ function HackRoomDetailDashboard({
       (email) => participantsByEmail.get(email)?.userId ?? "",
     ).filter(Boolean);
 
-    issueReward.mutate({
-      awardXrdm: Number(rewardForm.awardXrdm || 0),
-      description: rewardForm.description,
-      kind,
-      ledgerNote: rewardForm.ledgerNote,
-      recipientIds,
-      roomId: selectedRoom._id,
-      sourceSubmissionId,
-      title: rewardForm.title || defaultRewardTitle(kind),
-    });
+    void (async () => {
+      try {
+        setMessage({ text: "Preparing reward blockchain transaction...", tone: "gold" });
+        const prepared = await prepareReward.mutateAsync({
+          awardXrdm: Number(rewardForm.awardXrdm || 0),
+          description: rewardForm.description,
+          kind,
+          ledgerNote: rewardForm.ledgerNote,
+          recipientIds,
+          roomId: selectedRoom._id,
+          sourceSubmissionId,
+          title: rewardForm.title || defaultRewardTitle(kind),
+        });
+        await registerMissingParticipants({
+          hackathonId: prepared.onchain.hackathonId,
+          pendingId: `reward:${prepared.reward._id}`,
+          registration: prepared.onchain.registration,
+          roomId: selectedRoom._id,
+        });
+
+        const calls: Array<ContractCall> = [];
+
+        if (prepared.onchain.requiresNft && prepared.onchain.metadataUri) {
+          prepared.onchain.recipientAddresses.forEach((recipientAddress) => {
+            calls.push(
+              makeAwardNftCall({
+                hackathonId: prepared.onchain.hackathonId ?? "",
+                metadataUri: prepared.onchain.metadataUri ?? "",
+                recipientAddress,
+              }),
+            );
+          });
+        }
+
+        if (prepared.onchain.requiresXrdm) {
+          calls.push(
+            makeAwardXrdmCall({
+              amounts: prepared.onchain.recipientAddresses.map(() => prepared.onchain.awardXrdm),
+              hackathonId: prepared.onchain.hackathonId ?? "",
+              recipientAddresses: prepared.onchain.recipientAddresses,
+            }),
+          );
+        }
+
+        let txHash: string | undefined;
+        if (calls.length) {
+          setMessage({ text: "Sending sponsored reward transaction...", tone: "gold" });
+          txHash =
+            (await sendContractCalls({
+              calls,
+              pendingId: `reward:${prepared.reward._id}:chain`,
+              pendingKind: kind,
+            })) ?? undefined;
+        }
+
+        await completeReward.mutateAsync({
+          nftTxHash: prepared.onchain.requiresNft ? txHash : undefined,
+          rewardId: prepared.reward._id,
+          xrdmTxHash: prepared.onchain.requiresXrdm ? txHash : undefined,
+        });
+        await forgetPendingChainEvent(`reward:${prepared.reward._id}:chain`);
+      } catch (error) {
+        setMessage({
+          text: error instanceof Error ? error.message : "Unable to issue reward on-chain.",
+          tone: "red",
+        });
+      }
+    })();
   };
 
   return (
@@ -1440,7 +1861,7 @@ function HackRoomDetailDashboard({
             selectedTaskId={selectedTaskId}
             selectWinnerPending={selectWinner.isPending}
             sendRoomNotificationPending={sendRoomNotification.isPending}
-            issueRewardPending={issueReward.isPending}
+            issueRewardPending={issueRewardPending}
             setAwardBySubmission={setAwardBySubmission}
             setFeedbackBySubmission={setFeedbackBySubmission}
             setProofTypes={setProofTypes}
@@ -3981,15 +4402,16 @@ function ParticipantWalletPanel({
 }) {
   const certificateRewards = rewards.filter((reward) => reward.kind !== "winner_nft_badge");
   const nftRewards = rewards.filter((reward) => reward.kind === "winner_nft_badge");
+  const confirmedSubmissions = mySubmissions.filter((submission) =>
+    ["approved", "winner"].includes(submission.status),
+  );
   const xrdmTotal =
     rewards.reduce((total, reward) => total + (reward.awardXrdm ?? 0), 0) +
-    mySubmissions.reduce(
+    confirmedSubmissions.reduce(
       (total, submission) => total + (submission.awardXrdm ?? submission.rewardXrdm ?? 0),
       0,
     );
-  const verifiedCount = mySubmissions.filter((submission) =>
-    ["approved", "winner"].includes(submission.status),
-  ).length;
+  const verifiedCount = confirmedSubmissions.length;
 
   return (
     <View style={styles.trackStack}>
@@ -4060,14 +4482,14 @@ function ParticipantWalletPanel({
       </Panel>
 
       <Panel
-        action={<CounterLabel label={`${mySubmissions.length + rewards.length} rows`} />}
+        action={<CounterLabel label={`${confirmedSubmissions.length + rewards.length} rows`} />}
         eyebrow="Ledger"
         icon="shield-checkmark-outline"
         title="So.Good Ledger Rows"
         tone="cyan"
       >
         <View style={styles.listStack}>
-          {mySubmissions.map((submission) => (
+          {confirmedSubmissions.map((submission) => (
             <LedgerRow
               key={submission._id}
               label={submission.taskTitle}
@@ -4083,7 +4505,7 @@ function ParticipantWalletPanel({
               value={reward.awardXrdm ? `+${reward.awardXrdm} XRDM` : "Issued"}
             />
           ))}
-          {!mySubmissions.length && !rewards.length ? (
+          {!confirmedSubmissions.length && !rewards.length ? (
             <EmptyState
               icon="shield-checkmark-outline"
               text="Verified proof, certificates, NFT badges, and XRDM records will appear here."

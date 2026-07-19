@@ -1,6 +1,9 @@
 import mongoose from "mongoose";
+import dotenv from "dotenv";
 
-import { client } from "../src/index.js";
+dotenv.config({ path: "../../apps/server/.env" });
+
+const { client } = await import("../src/index.js");
 
 const validRoles = ["member", "host"] as const;
 type UserRole = (typeof validRoles)[number];
@@ -37,7 +40,7 @@ function parseRole(value: string | undefined): UserRole {
 
 async function backfillMissingRoles() {
   const result = await client.collection("user").updateMany(
-    { role: { $exists: false } },
+    { $or: [{ role: { $exists: false } }, { role: null }] },
     {
       $set: {
         role: "member",

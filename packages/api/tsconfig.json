@@ -11,6 +11,8 @@
   "include": [
     "src",
     "../auth/src",
+    "../blockchain-client/*.json",
+    "../blockchain-client/src",
     "../db/src",
     "../env/src"
   ]

@@ -9,6 +9,35 @@ import { privyBridge } from "./privy-plugin.js";
 export function createAuth() {
   return betterAuth({
     database: mongodbAdapter(client),
+    user: {
+      additionalFields: {
+        embeddedWalletAddress: {
+          input: false,
+          required: false,
+          returned: true,
+          type: "string",
+        },
+        onchainAddress: {
+          input: false,
+          required: false,
+          returned: true,
+          type: "string",
+        },
+        role: {
+          defaultValue: "member",
+          input: false,
+          required: false,
+          returned: true,
+          type: "string",
+        },
+        smartWalletAddress: {
+          input: false,
+          required: false,
+          returned: true,
+          type: "string",
+        },
+      },
+    },
     trustedOrigins: [
       ...env.CORS_ORIGIN,
       "rdm-hack://",

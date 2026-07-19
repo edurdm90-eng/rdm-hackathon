@@ -1,4 +1,6 @@
 import { PrivyProvider, useEmbeddedEthereumWallet, usePrivy } from "@privy-io/expo";
+import { SmartWalletsProvider } from "@privy-io/expo/smart-wallets";
+import { polygonAmoyChain } from "@rdm-hack/blockchain-client";
 import { env } from "@rdm-hack/env/native";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
@@ -222,6 +224,7 @@ export function NativePrivyProvider({ children }: { children: React.ReactNode })
     <PrivyProvider
       appId={env.EXPO_PUBLIC_PRIVY_APP_ID}
       clientId={env.EXPO_PUBLIC_PRIVY_CLIENT_ID}
+      supportedChains={[polygonAmoyChain]}
       config={{
         embedded: {
           ethereum: {
@@ -230,7 +233,9 @@ export function NativePrivyProvider({ children }: { children: React.ReactNode })
         },
       }}
     >
-      <NativePrivySessionBridge>{children}</NativePrivySessionBridge>
+      <SmartWalletsProvider>
+        <NativePrivySessionBridge>{children}</NativePrivySessionBridge>
+      </SmartWalletsProvider>
     </PrivyProvider>
   );
 }

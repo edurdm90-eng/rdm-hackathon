@@ -1,0 +1,13 @@
+{
+  "network": "polygonAmoy",
+  "chainId": "80002",
+  "deployedAt": "2026-07-18T11:56:54.730Z",
+  "deployer": "0xe515dEB6cb0639613Ec931e77bB86A1ab46bde39",
+  "owner": "0xe515dEB6cb0639613Ec931e77bB86A1ab46bde39",
+  "baseURI": "https://metadata.rdm.io/{id}.json",
+  "xrdm": "0x593CFc23fe863AD0082C76ac77D54Fee1DD4B963",
+  "eduProxy": "0x0f93018F0392500DEF05a96D2cEa1E9DD6F9ca32",
+  "eduImplementation": "0x91D04adb8A0DB60e336Eecacb9927f733499F419",
+  "corpProxy": "0x2687b73AA933b6f737EA1347cc3851Fd956c9d73",
+  "corpImplementation": "0x521266057Cc48D1D72D37e53b56b924279C0A9Da"
+}
