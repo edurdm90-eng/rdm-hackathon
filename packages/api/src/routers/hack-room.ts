@@ -2,7 +2,7 @@ import {
   polygonAmoyChain,
   polygonAmoyDeployment,
   xrdmImplementationAbi,
-} from "@rdm-hack/blockchain-client";
+} from "../../../blockchain-client/src/index.js";
 import { TRPCError } from "@trpc/server";
 import { ObjectId, type Filter } from "mongodb";
 import {

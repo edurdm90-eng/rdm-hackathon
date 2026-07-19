@@ -1,4 +1,3 @@
-import { env } from "@rdm-hack/env/server";
 import { APIError, createAuthEndpoint, formCsrfMiddleware } from "better-auth/api";
 import { setSessionCookie } from "better-auth/cookies";
 import { z } from "zod";
@@ -6,6 +5,7 @@ import type { PrivyClient, User as PrivyUser } from "@privy-io/node";
 import { ObjectId } from "mongodb";
 
 import { client as authDbClient } from "../../db/src/index.js";
+import { env } from "../../env/src/server.js";
 import {
   derivePrivyProfile,
   PRIVY_PROVIDER_ID,
