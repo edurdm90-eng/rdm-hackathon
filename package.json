@@ -33,6 +33,8 @@
     "dev": "turbo dev",
     "build": "turbo build",
     "check-types": "turbo check-types",
+    "db:role:backfill": "bun run --cwd packages/db role:backfill",
+    "db:role:set": "bun run --cwd packages/db role:set",
     "dev:native": "turbo -F native dev",
     "dev:web": "turbo -F web dev",
     "dev:server": "turbo -F server dev"
