@@ -19,6 +19,9 @@ const privyExchangeBodySchema = z.object({
   accessToken: z.string().min(1),
 });
 
+const PRIVY_API_TIMEOUT_MS = 8_000;
+const PRIVY_EXCHANGE_STEP_TIMEOUT_MS = 12_000;
+
 type BetterAuthUserRecord = {
   createdAt: Date;
   email: string;
@@ -44,6 +47,39 @@ type BetterAuthUserUpdate = Partial<
 let privyClientPromise: Promise<PrivyClient> | null = null;
 let privyNodeModulePromise: Promise<typeof import("@privy-io/node")> | null = null;
 
+class OperationTimeoutError extends Error {
+  constructor(
+    readonly operation: string,
+    readonly timeoutMs: number,
+  ) {
+    super(`${operation} timed out after ${timeoutMs}ms`);
+    this.name = "OperationTimeoutError";
+  }
+}
+
+function isOperationTimeoutError(error: unknown): error is OperationTimeoutError {
+  return error instanceof OperationTimeoutError;
+}
+
+async function withTimeout<T>(operation: string, promise: Promise<T>, timeoutMs: number) {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => {
+          reject(new OperationTimeoutError(operation, timeoutMs));
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+  }
+}
+
 function normalizePemKey(value: string) {
   return value.trim().replace(/^"(.*)"$/, "$1").replace(/\\n/g, "\n");
 }
@@ -64,6 +100,8 @@ function getPrivyClient() {
           appId: env.PRIVY_APP_ID,
           appSecret: env.PRIVY_APP_SECRET,
           jwtVerificationKey: normalizePemKey(env.PRIVY_JWT_VERIFICATION_KEY),
+          maxRetries: 0,
+          timeout: PRIVY_API_TIMEOUT_MS,
         }),
     );
   }
@@ -171,14 +209,25 @@ export async function loadVerifiedPrivyUser(
     (async (userId) => {
       const client = await getPrivyClient();
 
-      return client.users()._get(userId) as Promise<PrivyUser>;
+      return client.users()._get(userId, {
+        maxRetries: 0,
+        timeout: PRIVY_API_TIMEOUT_MS,
+      }) as Promise<PrivyUser>;
     });
-  const verifiedToken = await verifyAccessToken({
-    access_token: accessToken,
-    app_id: env.PRIVY_APP_ID,
-    verification_key: normalizePemKey(env.PRIVY_JWT_VERIFICATION_KEY),
-  });
-  const user = await loadUser(verifiedToken.user_id);
+  const verifiedToken = await withTimeout(
+    "privy.verify_access_token",
+    verifyAccessToken({
+      access_token: accessToken,
+      app_id: env.PRIVY_APP_ID,
+      verification_key: normalizePemKey(env.PRIVY_JWT_VERIFICATION_KEY),
+    }),
+    PRIVY_EXCHANGE_STEP_TIMEOUT_MS,
+  );
+  const user = await withTimeout(
+    "privy.load_user",
+    loadUser(verifiedToken.user_id),
+    PRIVY_EXCHANGE_STEP_TIMEOUT_MS,
+  );
 
   if (!user || user.id !== verifiedToken.user_id) {
     throw new Error(
@@ -207,12 +256,40 @@ export function privyBridge() {
           use: [formCsrfMiddleware],
         },
         async (ctx) => {
+          const exchangeStartedAt = Date.now();
+          const logStep = (step: string, extra?: Record<string, unknown>) => {
+            ctx.context.logger.info(`privy.exchange.${step}`, {
+              durationMs: Date.now() - exchangeStartedAt,
+              ...extra,
+            });
+          };
           let privyUser: PrivyUser;
 
           try {
+            logStep("started");
             privyUser = await loadVerifiedPrivyUser(ctx.body.accessToken);
           } catch (error) {
-            ctx.context.logger.error("privy.exchange.invalid_token", undefined, error);
+            if (isOperationTimeoutError(error)) {
+              ctx.context.logger.error(
+                "privy.exchange.timeout",
+                {
+                  durationMs: Date.now() - exchangeStartedAt,
+                  operation: error.operation,
+                  timeoutMs: error.timeoutMs,
+                },
+                error,
+              );
+              throw new APIError("SERVICE_UNAVAILABLE", {
+                code: "PRIVY_EXCHANGE_TIMEOUT",
+                message: "Privy session exchange timed out. Please try again.",
+              });
+            }
+
+            ctx.context.logger.error(
+              "privy.exchange.invalid_token",
+              { durationMs: Date.now() - exchangeStartedAt },
+              error,
+            );
             throw new APIError("UNAUTHORIZED", {
               code: "PRIVY_INVALID_ACCESS_TOKEN",
               message: "Privy access token is invalid or expired.",
@@ -220,6 +297,10 @@ export function privyBridge() {
           }
 
           const profile = derivePrivyProfile(privyUser);
+          logStep("verified_privy_user", {
+            linkedAccountCount: privyUser.linked_accounts?.length ?? 0,
+            privyUserId: privyUser.id,
+          });
 
           if (!profile) {
             ctx.context.logger.info("privy.exchange.missing_email", {
@@ -249,6 +330,10 @@ export function privyBridge() {
           const identityResolution = resolvePrivyIdentity({
             emailUserId: normalizedEmailUser?.id ?? null,
             linkedUserId: normalizedLinkedUser?.id ?? null,
+          });
+          logStep("resolved_identity", {
+            identityResolution: identityResolution.kind,
+            privyUserId: privyUser.id,
           });
 
           if (linkedAccount && !normalizedLinkedUser) {
@@ -316,6 +401,11 @@ export function privyBridge() {
               userId: user.id,
             });
           }
+          logStep("persisted_user", {
+            betterAuthUserId: user.id,
+            createdUser,
+            privyUserId: privyUser.id,
+          });
 
           const session = await ctx.context.internalAdapter.createSession(user.id);
 
@@ -327,6 +417,7 @@ export function privyBridge() {
           ctx.context.logger.info("privy.exchange.success", {
             betterAuthUserId: user.id,
             createdUser,
+            durationMs: Date.now() - exchangeStartedAt,
             email: user.email,
             linkedAccountType: profile.linkedAccountType,
             privyUserId: privyUser.id,
