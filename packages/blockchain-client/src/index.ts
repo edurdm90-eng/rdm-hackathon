@@ -1,8 +1,8 @@
 import type { Abi, Chain } from "viem";
 
-import deploymentArtifact from "../polygonAmoy-1784375814730.json";
-import xrdmArtifact from "../XRDM.json";
-import xrdmImplementationArtifact from "../XRDMImplementation.json";
+import deploymentArtifact from "../polygonAmoy-1784375814730.json" with { type: "json" };
+import xrdmArtifact from "../XRDM.json" with { type: "json" };
+import xrdmImplementationArtifact from "../XRDMImplementation.json" with { type: "json" };
 
 export const polygonAmoyChain = {
   blockExplorers: {
