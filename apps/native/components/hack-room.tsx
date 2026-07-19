@@ -4253,6 +4253,7 @@ function HostCertificatesPanel({
           room={room}
           rewardForm={rewardForm}
           setRewardForm={setRewardForm}
+          showSelectAll
         />
         <HackButton
           disabled={!room.participants.length || issueRewardPending}
@@ -4591,14 +4592,20 @@ function RewardRecipientEmailComposer({
   room,
   rewardForm,
   setRewardForm,
+  showSelectAll = false,
 }: {
   room: HackRoom;
   rewardForm: ReturnType<typeof makeEmptyRewardForm>;
   setRewardForm: React.Dispatch<React.SetStateAction<ReturnType<typeof makeEmptyRewardForm>>>;
+  showSelectAll?: boolean;
 }) {
-  const participantEmails = new Set(
-    room.participants.map((participant) => participant.email.trim().toLowerCase()),
+  const participantEmailList = normalizeEmails(
+    room.participants.map((participant) => participant.email),
   );
+  const participantEmails = new Set(participantEmailList);
+  const selectedAllParticipants =
+    participantEmailList.length > 0 &&
+    participantEmailList.every((email) => rewardForm.recipientEmails.includes(email));
 
   const addDraftEmails = () => {
     setRewardForm((current) => {
@@ -4643,9 +4650,47 @@ function RewardRecipientEmailComposer({
     }));
   };
 
+  const selectAllParticipants = () => {
+    setRewardForm((current) => ({
+      ...current,
+      recipientEmailDraft: "",
+      recipientEmails: normalizeEmails([...current.recipientEmails, ...participantEmailList]),
+    }));
+  };
+
   return (
     <Field label="Recipient emails">
       <View style={styles.emailComposer}>
+        {showSelectAll ? (
+          <View style={styles.emailComposerActionRow}>
+            <Pressable
+              accessibilityRole="button"
+              disabled={!participantEmailList.length || selectedAllParticipants}
+              onPress={selectAllParticipants}
+              style={({ pressed }) => [
+                styles.emailComposerAction,
+                selectedAllParticipants && styles.emailComposerActionActive,
+                (!participantEmailList.length || selectedAllParticipants) && styles.disabled,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Ionicons
+                name="people-outline"
+                size={14}
+                color={selectedAllParticipants ? theme.participant : theme.text}
+              />
+              <Text
+                style={[
+                  styles.emailComposerActionText,
+                  selectedAllParticipants && styles.emailComposerActionTextActive,
+                ]}
+              >
+                Select all
+              </Text>
+            </Pressable>
+            <Text style={styles.emailComposerCount}>{participantEmailList.length} joined</Text>
+          </View>
+        ) : null}
         {rewardForm.recipientEmails.length ? (
           <View style={styles.emailChipWrap}>
             {rewardForm.recipientEmails.map((email) => {
@@ -7452,6 +7497,44 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     gap: 7,
     padding: 8,
+  },
+  emailComposerAction: {
+    alignItems: "center",
+    backgroundColor: theme.surface,
+    borderColor: theme.border,
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 5,
+    minHeight: 32,
+    paddingHorizontal: 9,
+  },
+  emailComposerActionActive: {
+    backgroundColor: theme.participantDark,
+    borderColor: theme.participantBorder,
+  },
+  emailComposerActionRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "space-between",
+  },
+  emailComposerActionText: {
+    color: theme.text,
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  emailComposerActionTextActive: {
+    color: theme.participant,
+  },
+  emailComposerCount: {
+    color: theme.faint,
+    flexShrink: 1,
+    fontFamily: Platform.select({ default: "monospace" }),
+    fontSize: 9,
+    fontWeight: "800",
+    textAlign: "right",
+    textTransform: "uppercase",
   },
   emailComposerInput: {
     backgroundColor: "transparent",
