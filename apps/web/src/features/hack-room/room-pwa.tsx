@@ -4,9 +4,11 @@ import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { usePrivyWallet } from "@/components/privy-provider";
 import { NativeIcon } from "@/lib/native-icons";
 import { queryClient, trpc } from "@/utils/trpc";
 
+import { getHackRoomBlockchainErrorMessage, useHackRoomBlockchain } from "./blockchain";
 import {
   buildLeaderboard,
   buildProofItemsForTask,
@@ -20,6 +22,7 @@ import {
   emptyTaskForm,
   friendlyMutationMessage,
   getEmailTokens,
+  getFriendlyHackRoomErrorMessage,
   getHostTabFromSegment,
   getParticipantTabFromSegment,
   getRoomRouteParam,
@@ -76,6 +79,9 @@ export default function HackRoomPwa({
   const [awardBySubmission, setAwardBySubmission] = useState<Record<string, string>>({});
   const [rewardForm, setRewardForm] = useState(makeEmptyRewardForm);
   const [message, setMessage] = useState<{ text: string; tone: Tone } | null>(null);
+  const [isCreatingRoomOnchain, setIsCreatingRoomOnchain] = useState(false);
+  const { createHackathonOnchain } = useHackRoomBlockchain();
+  const { isCreatingWallet, walletAddress, walletError } = usePrivyWallet();
 
   const hostedRooms = dashboard.data?.hostedRooms ?? [];
   const joinedRooms = dashboard.data?.joinedRooms ?? [];
@@ -85,6 +91,10 @@ export default function HackRoomPwa({
   const visibleWinners = dashboard.data?.visibleWinners ?? [];
   const rewards = dashboard.data?.rewards ?? [];
   const allRooms = useMemo(() => buildRoomEntries(hostedRooms, joinedRooms), [hostedRooms, joinedRooms]);
+  const canCreateRoom = dashboard.data?.viewerRole === "host";
+  const createRoomBlockMessage = dashboard.data && !canCreateRoom
+    ? "Only host accounts can create hack rooms. Ask the server/admin owner to make this account a host."
+    : null;
 
   const activeSelectionId = roomId || activeRoomId;
   const selectedRoomEntry = roomId
@@ -166,7 +176,7 @@ export default function HackRoomPwa({
 
   const createRoom = useMutation(
     trpc.hackRoom.createRoom.mutationOptions({
-      onError: (error) => showMessage(error.message, "red"),
+      onError: (error) => showMessage(getFriendlyHackRoomErrorMessage(error), "red"),
       onSuccess: async (room) => {
         setRoomForm(emptyRoomForm);
         setActiveRoomId(room._id);
@@ -178,7 +188,7 @@ export default function HackRoomPwa({
 
   const joinRoom = useMutation(
     trpc.hackRoom.joinRoom.mutationOptions({
-      onError: (error) => showMessage(error.message, "red"),
+      onError: (error) => showMessage(getFriendlyHackRoomErrorMessage(error), "red"),
       onSuccess: async (room) => {
         setInviteCode("");
         setActiveRoomId(room._id);
@@ -187,6 +197,46 @@ export default function HackRoomPwa({
       },
     }),
   );
+
+  const createRoomPending = createRoom.isPending || isCreatingRoomOnchain || isCreatingWallet;
+
+  async function handleCreateRoom() {
+    if (!roomForm.name.trim() || createRoomPending) {
+      return;
+    }
+
+    if (!canCreateRoom) {
+      showMessage(createRoomBlockMessage ?? "Only host accounts can create hack rooms.", "red");
+      return;
+    }
+
+    if (walletError) {
+      showMessage(walletError, "red");
+      return;
+    }
+
+    if (!walletAddress) {
+      showMessage("Privy wallet is still getting ready. Wait a moment and try again.", "gold");
+      return;
+    }
+
+    try {
+      setIsCreatingRoomOnchain(true);
+      showMessage("Confirming room on-chain with Privy smart wallet...", "gold");
+      const txHash = await createHackathonOnchain();
+      showMessage("Creating room after chain confirmation...", "violet");
+      const room = await createRoom.mutateAsync({
+        ...roomForm,
+        txHash,
+      });
+      setActiveRoomId(room._id);
+    } catch (error) {
+      const errorMessage = getFriendlyHackRoomErrorMessage(new Error(getHackRoomBlockchainErrorMessage(error)));
+      showMessage(errorMessage, "red");
+    } finally {
+      setIsCreatingRoomOnchain(false);
+    }
+  }
 
   const createTask = useMutation(
     trpc.hackRoom.createTask.mutationOptions({
@@ -589,7 +639,7 @@ export default function HackRoomPwa({
             activeTab={activeHostTab}
             approvedSubmissions={approvedSubmissions}
             assignmentMode={assignmentMode}
-            createRoomPending={createRoom.isPending}
+            createRoomPending={createRoomPending}
             createTaskPending={createTask.isPending}
             feedbackBySubmission={feedbackBySubmission}
             hostSubmissions={roomSubmissions}
@@ -604,7 +654,7 @@ export default function HackRoomPwa({
               setAwardBySubmission((current) => ({ ...current, [submissionId]: value }))
             }
             onCopyInvite={copyInviteCode}
-            onCreateRoom={() => createRoom.mutate(roomForm)}
+            onCreateRoom={handleCreateRoom}
             onCreateTask={handleCreateTask}
             onExitRoom={() => navigate({ to: "/hack-room" })}
             onFeedbackChange={(submissionId, value) =>

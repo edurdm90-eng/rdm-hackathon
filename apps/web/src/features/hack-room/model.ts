@@ -37,6 +37,7 @@ export type SessionUser = {
   name: string;
   walletAddress?: string;
 };
+export type ViewerRole = DashboardData["viewerRole"];
 export type MiniGameResult = {
   gameType: GameType;
   notes: string;
@@ -76,6 +77,24 @@ export const defaultSpecialProofTypes: ProofType[] = ["url"];
 export const minAssignmentDescriptionLength = 10;
 export const minNotificationMessageLength = 3;
 export const dueAtFutureBufferMs = 60_000;
+
+export function getFriendlyHackRoomErrorMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : "Something went wrong. Please try again.";
+
+  if (message.includes("Only users with the host role")) {
+    return "Only host accounts can create hack rooms. Ask the server/admin owner to make this account a host.";
+  }
+
+  if (message.includes("Sync the host smart wallet")) {
+    return "Your Privy smart wallet is still syncing. Wait a moment, refresh once, and try Create Room again.";
+  }
+
+  if (message.includes("Failed to fetch")) {
+    return "API server is not reachable from the browser. Check VITE_SERVER_URL and deployed server CORS.";
+  }
+
+  return message;
+}
 
 export const gameTypeOptions: Array<{
   description: string;
@@ -174,7 +193,6 @@ const participantTabsBySegment: Partial<Record<string, ParticipantTab>> = {
 export const emptyRoomForm = {
   description: "",
   name: "",
-  txHash: "",
 };
 
 export const emptyTaskForm = {

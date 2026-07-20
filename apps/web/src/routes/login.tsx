@@ -1,21 +1,19 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 
 import SignInForm from "@/components/sign-in-form";
-import { authClient } from "@/lib/auth-client";
+import { clearBrowserAuthStorageForSignOut, isPrivySignOutPending } from "@/lib/privy-session";
 
 export const Route = createFileRoute("/login")({
   beforeLoad: async () => {
-    let session: Awaited<ReturnType<typeof authClient.getSession>>;
-    try {
-      session = await authClient.getSession();
-    } catch {
-      return;
-    }
+    const isSignOutReturn =
+      typeof window !== "undefined" &&
+      new URLSearchParams(window.location.search).get("signout") === "1";
 
-    if (session.data) {
-      throw redirect({
-        to: "/dashboard",
-      });
+    if (isSignOutReturn || isPrivySignOutPending()) {
+      clearBrowserAuthStorageForSignOut();
+      if (isSignOutReturn) {
+        window.history.replaceState(window.history.state, "", "/login");
+      }
     }
   },
   component: RouteComponent,

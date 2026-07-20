@@ -3,16 +3,18 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 
-import { usePrivyAuth } from "@/components/privy-provider";
+import { usePrivyAuth, usePrivyWallet } from "@/components/privy-provider";
 import { NativeIcon, createNativeIcon } from "@/lib/native-icons";
 import { queryClient, trpc } from "@/utils/trpc";
 
 import { RoomCommandCenter } from "./forms";
+import { getHackRoomBlockchainErrorMessage, useHackRoomBlockchain } from "./blockchain";
 import {
   buildRoomEntries,
   countUniqueNetworkParticipants,
   emptyRoomForm,
   firstName,
+  getFriendlyHackRoomErrorMessage,
   getRoomRouteParam,
   type HackRoom,
   type RoomTabSegment,
@@ -170,10 +172,17 @@ export function HackRoomRoomsPwa({ user: _user }: { user: SessionUser }) {
   const [roomForm, setRoomForm] = useState(emptyRoomForm);
   const [inviteCode, setInviteCode] = useState("");
   const [message, setMessage] = useState<{ text: string; tone: Tone } | null>(null);
+  const [isCreatingRoomOnchain, setIsCreatingRoomOnchain] = useState(false);
+  const { createHackathonOnchain } = useHackRoomBlockchain();
+  const { isCreatingWallet, walletAddress, walletError } = usePrivyWallet();
 
   const hostedRooms = dashboard.data?.hostedRooms ?? [];
   const joinedRooms = dashboard.data?.joinedRooms ?? [];
   const allRooms = useMemo(() => buildRoomEntries(hostedRooms, joinedRooms), [hostedRooms, joinedRooms]);
+  const canCreateRoom = dashboard.data?.viewerRole === "host";
+  const createRoomBlockMessage = dashboard.data && !canCreateRoom
+    ? "Only host accounts can create hack rooms. Ask the server/admin owner to make this account a host."
+    : null;
 
   const invalidateDashboard = async () => {
     await queryClient.invalidateQueries({ queryKey: trpc.hackRoom.dashboard.queryKey() });
@@ -181,7 +190,7 @@ export function HackRoomRoomsPwa({ user: _user }: { user: SessionUser }) {
 
   const createRoom = useMutation(
     trpc.hackRoom.createRoom.mutationOptions({
-      onError: (error) => setMessage({ text: error.message, tone: "red" }),
+      onError: (error) => setMessage({ text: getFriendlyHackRoomErrorMessage(error), tone: "red" }),
       onSuccess: async (room) => {
         setRoomForm(emptyRoomForm);
         setMessage({ text: `Created ${room.name} with invite ${room.inviteCode}`, tone: "violet" });
@@ -192,7 +201,7 @@ export function HackRoomRoomsPwa({ user: _user }: { user: SessionUser }) {
 
   const joinRoom = useMutation(
     trpc.hackRoom.joinRoom.mutationOptions({
-      onError: (error) => setMessage({ text: error.message, tone: "red" }),
+      onError: (error) => setMessage({ text: getFriendlyHackRoomErrorMessage(error), tone: "red" }),
       onSuccess: async (room) => {
         setInviteCode("");
         setMessage({ text: `Joined ${room.name}`, tone: "cyan" });
@@ -200,6 +209,48 @@ export function HackRoomRoomsPwa({ user: _user }: { user: SessionUser }) {
       },
     }),
   );
+
+  const createRoomPending = createRoom.isPending || isCreatingRoomOnchain || isCreatingWallet;
+
+  async function handleCreateRoom() {
+    if (!roomForm.name.trim() || createRoomPending) {
+      return;
+    }
+
+    if (!canCreateRoom) {
+      setMessage({
+        text: createRoomBlockMessage ?? "Only host accounts can create hack rooms.",
+        tone: "red",
+      });
+      return;
+    }
+
+    if (walletError) {
+      setMessage({ text: walletError, tone: "red" });
+      return;
+    }
+
+    if (!walletAddress) {
+      setMessage({ text: "Privy wallet is still getting ready. Wait a moment and try again.", tone: "gold" });
+      return;
+    }
+
+    try {
+      setIsCreatingRoomOnchain(true);
+      setMessage({ text: "Confirming room on-chain with Privy smart wallet...", tone: "gold" });
+      const txHash = await createHackathonOnchain();
+      setMessage({ text: "Creating room after chain confirmation...", tone: "violet" });
+      await createRoom.mutateAsync({
+        ...roomForm,
+        txHash,
+      });
+    } catch (error) {
+      const errorMessage = getFriendlyHackRoomErrorMessage(new Error(getHackRoomBlockchainErrorMessage(error)));
+      setMessage({ text: errorMessage, tone: "red" });
+    } finally {
+      setIsCreatingRoomOnchain(false);
+    }
+  }
 
   async function shareInvite(room: HackRoom) {
     const text = `Join ${room.name} in XRDM Hack Room with invite code ${room.inviteCode}`;
@@ -213,7 +264,7 @@ export function HackRoomRoomsPwa({ user: _user }: { user: SessionUser }) {
 
   return (
     <WebAppScreen activeNav="rooms">
-      {(dashboard.isLoading || createRoom.isPending || joinRoom.isPending) ? (
+      {(dashboard.isLoading || createRoomPending || joinRoom.isPending) ? (
         <div className="mb-3 flex items-center gap-2 rounded-[10px] border border-[rgba(238,232,222,0.12)] bg-[#141618] px-3 py-2 text-xs text-[#9C9690]">
           <NativeIcon className="size-4 animate-spin text-[#F0C040]" name="refresh-outline" />
           Syncing Hack Room...
@@ -221,10 +272,11 @@ export function HackRoomRoomsPwa({ user: _user }: { user: SessionUser }) {
       ) : null}
 
       <RoomCommandCenter
-        createRoomPending={createRoom.isPending}
+        createRoomBlockMessage={createRoomBlockMessage}
+        createRoomPending={createRoomPending}
         inviteCode={inviteCode}
         joinRoomPending={joinRoom.isPending}
-        onCreateRoom={() => createRoom.mutate(roomForm)}
+        onCreateRoom={handleCreateRoom}
         onInviteCodeChange={setInviteCode}
         onJoinRoom={() => joinRoom.mutate({ inviteCode })}
         onRoomFormChange={setRoomForm}
@@ -253,15 +305,14 @@ export function HackRoomRoomsPwa({ user: _user }: { user: SessionUser }) {
 
 export function HackRoomProfilePwa({ user }: { user: SessionUser }) {
   const navigate = useNavigate();
-  const { logout } = usePrivyAuth();
+  const { logoutAndRedirect } = usePrivyAuth();
   const dashboard = useQuery(trpc.hackRoom.dashboard.queryOptions());
   const stats = dashboard.data?.stats;
   const hostedRooms = dashboard.data?.hostedRooms ?? [];
   const networkCount = countUniqueNetworkParticipants(hostedRooms, user.id);
 
-  async function handleSignOut() {
-    await logout();
-    navigate({ to: "/login" });
+  function handleSignOut() {
+    void logoutAndRedirect();
   }
 
   return (

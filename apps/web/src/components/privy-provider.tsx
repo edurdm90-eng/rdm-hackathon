@@ -20,6 +20,7 @@ type PrivyAuthContextValue = {
   loginWithEmailCode: (code: string) => Promise<void>;
   login: (options?: PrivyLoginOptions) => Promise<void>;
   logout: () => Promise<void>;
+  logoutAndRedirect: () => Promise<void>;
   ready: boolean;
   sendEmailCode: (email: string) => Promise<void>;
   sessionSyncError: string | null;
@@ -39,6 +40,7 @@ const defaultPrivyAuthValue: PrivyAuthContextValue = {
   loginWithEmailCode: async () => {},
   login: async () => {},
   logout: async () => {},
+  logoutAndRedirect: async () => {},
   ready: false,
   sendEmailCode: async () => {},
   sessionSyncError: null,

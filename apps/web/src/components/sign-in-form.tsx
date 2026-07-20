@@ -27,17 +27,19 @@ export default function SignInForm() {
   } = usePrivyAuth();
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
+  const [shouldRedirectAfterOtp, setShouldRedirectAfterOtp] = useState(false);
 
   useEffect(() => {
-    if (!authenticated) {
+    if (!authenticated || !shouldRedirectAfterOtp) {
       return;
     }
 
     navigate({
+      replace: true,
       to: "/dashboard",
     });
     toast.success("Privy sign in successful");
-  }, [authenticated, navigate]);
+  }, [authenticated, navigate, shouldRedirectAfterOtp]);
 
   async function handleSendCode() {
     const trimmedEmail = email.trim().toLowerCase();
@@ -54,6 +56,7 @@ export default function SignInForm() {
 
     setEmail(trimmedEmail);
     setCode("");
+    setShouldRedirectAfterOtp(false);
     await sendEmailCode(trimmedEmail);
     toast.success("OTP sent to your email.");
   }
@@ -73,6 +76,7 @@ export default function SignInForm() {
     }
 
     await loginWithEmailCode(trimmedCode);
+    setShouldRedirectAfterOtp(true);
   }
 
   if (!ready) {

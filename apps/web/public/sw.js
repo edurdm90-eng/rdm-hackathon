@@ -1,5 +1,5 @@
 const IS_LOCAL_DEV = ["localhost", "127.0.0.1"].includes(self.location.hostname);
-const CACHE_NAME = "rdm-hack-room-v4";
+const CACHE_NAME = "rdm-hack-room-v5";
 const APP_SHELL = ["/login", "/dashboard", "/hack-room", "/profile", "/manifest.webmanifest", "/icons/rdm-logo.png"];
 
 function clearAllCaches() {
@@ -12,11 +12,7 @@ self.addEventListener("install", (event) => {
     return;
   }
 
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(APP_SHELL);
-    }),
-  );
+  event.waitUntil(clearAllCaches());
   self.skipWaiting();
 });
 
@@ -61,12 +57,8 @@ self.addEventListener("fetch", (event) => {
   }
 
   event.respondWith(
-    caches.match(request).then((cachedResponse) => {
-      if (cachedResponse) {
-        return cachedResponse;
-      }
-
-      return fetch(request).then((networkResponse) => {
+    fetch(request)
+      .then((networkResponse) => {
         if (!networkResponse || networkResponse.status !== 200 || networkResponse.type === "opaque") {
           return networkResponse;
         }
@@ -77,7 +69,7 @@ self.addEventListener("fetch", (event) => {
         });
 
         return networkResponse;
-      });
-    }),
+      })
+      .catch(() => caches.match(request)),
   );
 });

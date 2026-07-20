@@ -52,6 +52,7 @@ import {
 
 export function LobbySurface({
   allRooms,
+  createRoomBlockMessage,
   createRoomPending,
   inviteCode,
   joinRoomPending,
@@ -63,6 +64,7 @@ export function LobbySurface({
   roomForm,
 }: {
   allRooms: Array<{ role: Role; room: HackRoom }>;
+  createRoomBlockMessage?: string | null;
   createRoomPending: boolean;
   inviteCode: string;
   joinRoomPending: boolean;
@@ -76,6 +78,7 @@ export function LobbySurface({
   return (
     <section className="grid gap-3">
       <RoomCommandCenter
+        createRoomBlockMessage={createRoomBlockMessage}
         createRoomPending={createRoomPending}
         inviteCode={inviteCode}
         joinRoomPending={joinRoomPending}
