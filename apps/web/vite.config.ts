@@ -30,6 +30,17 @@ export default defineConfig(({ mode }) => {
           }
         : undefined,
     },
+    build: {
+      rollupOptions: {
+        onwarn(warning, warn) {
+          if (warning.code === "INVALID_ANNOTATION") {
+            return;
+          }
+
+          warn(warning);
+        },
+      },
+    },
     resolve: {
       tsconfigPaths: true,
     },
