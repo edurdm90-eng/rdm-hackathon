@@ -11,6 +11,16 @@ type ContractCall = {
   value: bigint;
 };
 
+type UserOperationReceipt = {
+  receipt?: { transactionHash?: Hex };
+  transactionHash?: Hex;
+};
+
+type WaitForUserOperationReceipt = (args: { hash: Hex }) => Promise<UserOperationReceipt>;
+type WaitForTransactionReceipt = (args: { hash: Hex; timeout: number }) => Promise<unknown>;
+
+const TRANSACTION_RECEIPT_TIMEOUT_MS = 180_000;
+
 export const hackathonPublicClient = createPublicClient({
   chain: polygonAmoyChain,
   transport: http(polygonAmoyChain.rpcUrls.default.http[0]),
@@ -108,35 +118,75 @@ export async function resolveTransactionHash(input: {
   hash: Hex;
 }) {
   const maybeSmartClient = input.client as {
-    waitForUserOperationReceipt?: (args: { hash: Hex }) => Promise<{
-      receipt?: { transactionHash?: Hex };
-      transactionHash?: Hex;
-    }>;
+    waitForUserOperationReceipt?: WaitForUserOperationReceipt;
   };
 
-  if (maybeSmartClient.waitForUserOperationReceipt) {
-    try {
-      const userOperationReceipt = await maybeSmartClient.waitForUserOperationReceipt({
-        hash: input.hash,
-      });
-      const transactionHash =
-        userOperationReceipt.receipt?.transactionHash ??
-        userOperationReceipt.transactionHash;
+  return resolveTransactionHashWithWaiters({
+    hash: input.hash,
+    waitForTransactionReceipt: (args) => hackathonPublicClient.waitForTransactionReceipt(args),
+    waitForUserOperationReceipt: maybeSmartClient.waitForUserOperationReceipt,
+  });
+}
 
-      if (transactionHash) {
-        return transactionHash;
-      }
-    } catch {
-      // Some smart-wallet clients already return the mined transaction hash.
-    }
+export async function resolveTransactionHashWithWaiters(input: {
+  hash: Hex;
+  waitForTransactionReceipt: WaitForTransactionReceipt;
+  waitForUserOperationReceipt?: WaitForUserOperationReceipt;
+}) {
+  const waitForDirectTransaction = async () => {
+    await input.waitForTransactionReceipt({
+      hash: input.hash,
+      timeout: TRANSACTION_RECEIPT_TIMEOUT_MS,
+    });
+
+    return input.hash;
+  };
+
+  if (!input.waitForUserOperationReceipt) {
+    return waitForDirectTransaction();
   }
 
-  await hackathonPublicClient.waitForTransactionReceipt({
-    hash: input.hash,
-    timeout: 60_000,
-  });
+  const waitForSmartWalletOperation = async () => {
+    const userOperationReceipt = await input.waitForUserOperationReceipt?.({
+      hash: input.hash,
+    });
+    const transactionHash =
+      userOperationReceipt?.receipt?.transactionHash ??
+      userOperationReceipt?.transactionHash;
 
-  return input.hash;
+    if (!transactionHash) {
+      throw new Error("Smart wallet receipt did not include a transaction hash.");
+    }
+
+    return transactionHash;
+  };
+
+  // Privy may return either a UserOperation hash or an already-submitted tx hash.
+  // Racing both receipt paths avoids a slow AA receipt wait when the tx hash is already usable.
+  return firstResolvedTransactionHash([
+    waitForDirectTransaction,
+    waitForSmartWalletOperation,
+  ]);
+}
+
+async function firstResolvedTransactionHash(tasks: Array<() => Promise<Hex>>) {
+  return new Promise<Hex>((resolve, reject) => {
+    const errors: Array<unknown> = [];
+    let pending = tasks.length;
+
+    tasks.forEach((task) => {
+      void task()
+        .then(resolve)
+        .catch((error) => {
+          errors.push(error);
+          pending -= 1;
+
+          if (pending === 0) {
+            reject(errors[0] ?? new Error("Unable to resolve blockchain transaction hash."));
+          }
+        });
+    });
+  });
 }
 
 export type { ContractCall };
