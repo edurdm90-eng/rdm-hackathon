@@ -4,6 +4,7 @@ import type { IncomingHttpHeaders, IncomingMessage, ServerResponse } from "node:
 
 import { appRouter } from "../../../packages/api/src/routers/index.js";
 import { auth } from "../../../packages/auth/src/index.js";
+import { env } from "../../../packages/env/src/server.js";
 import app from "../src/index.js";
 
 const DIRECT_AUTH_EXCHANGE_TIMEOUT_MS = 18_000;
@@ -16,17 +17,22 @@ export const config = {
 };
 
 const honoHandler = handle(app);
+const allowedOrigins = new Set(env.CORS_ORIGIN);
 
 type VercelRequest = IncomingMessage & {
   body?: unknown;
 };
 
-function isPrivyExchangeRequest(req: VercelRequest) {
-  if (req.method !== "POST" || !req.url) {
+function isPrivyExchangePath(req: VercelRequest) {
+  if (!req.url) {
     return false;
   }
 
   return new URL(req.url, "http://localhost").pathname === "/api/auth/privy/exchange";
+}
+
+function isPrivyExchangeRequest(req: VercelRequest) {
+  return req.method === "POST" && isPrivyExchangePath(req);
 }
 
 function isTrpcRequest(req: VercelRequest) {
@@ -37,6 +43,46 @@ function isTrpcRequest(req: VercelRequest) {
   const pathname = new URL(req.url, "http://localhost").pathname;
 
   return pathname === "/trpc" || pathname.startsWith("/trpc/");
+}
+
+function resolveCorsOrigin(origin: string | undefined) {
+  if (!origin) {
+    return null;
+  }
+
+  if (allowedOrigins.has("*")) {
+    return origin;
+  }
+
+  if (allowedOrigins.has(origin)) {
+    return origin;
+  }
+
+  return null;
+}
+
+function setCorsHeaders(req: VercelRequest, res: ServerResponse) {
+  const origin = Array.isArray(req.headers.origin) ? req.headers.origin[0] : req.headers.origin;
+  const allowedOrigin = resolveCorsOrigin(origin);
+
+  if (!allowedOrigin) {
+    return;
+  }
+
+  res.setHeader("access-control-allow-origin", allowedOrigin);
+  res.setHeader("access-control-allow-credentials", "true");
+  res.setHeader("access-control-allow-methods", "GET,POST,OPTIONS");
+  res.setHeader(
+    "access-control-allow-headers",
+    req.headers["access-control-request-headers"] ?? "Content-Type,Authorization",
+  );
+  res.setHeader("vary", "Origin");
+}
+
+function sendCorsPreflight(req: VercelRequest, res: ServerResponse) {
+  setCorsHeaders(req, res);
+  res.statusCode = 204;
+  res.end();
 }
 
 function requestCanHaveBody(method: string | undefined) {
@@ -124,7 +170,7 @@ function withResponseTimeout(
   });
 }
 
-async function sendWebResponse(res: ServerResponse, response: WebHandlerResponse) {
+async function sendWebResponse(req: VercelRequest, res: ServerResponse, response: WebHandlerResponse) {
   res.statusCode = response.status;
 
   const setCookies =
@@ -148,6 +194,7 @@ async function sendWebResponse(res: ServerResponse, response: WebHandlerResponse
     }
   }
 
+  setCorsHeaders(req, res);
   res.end(Buffer.from(await response.arrayBuffer()));
 }
 
@@ -180,7 +227,7 @@ async function handlePrivyExchange(req: VercelRequest, res: ServerResponse) {
     timeoutMs: DIRECT_AUTH_EXCHANGE_TIMEOUT_MS,
   });
 
-  await sendWebResponse(res, response);
+  await sendWebResponse(req, res, response);
 }
 
 async function handleTrpc(req: VercelRequest, res: ServerResponse) {
@@ -219,10 +266,15 @@ async function handleTrpc(req: VercelRequest, res: ServerResponse) {
     status: response.status,
   });
 
-  await sendWebResponse(res, response);
+  await sendWebResponse(req, res, response);
 }
 
 export default async function handler(req: VercelRequest, res: ServerResponse) {
+  if (req.method === "OPTIONS" && (isPrivyExchangePath(req) || isTrpcRequest(req))) {
+    sendCorsPreflight(req, res);
+    return;
+  }
+
   if (isPrivyExchangeRequest(req)) {
     await handlePrivyExchange(req, res);
     return;
