@@ -63,6 +63,57 @@ function makeCreateHackathonCall(): ContractCall {
   };
 }
 
+function makeRegisterParticipantsCall(input: {
+  hackathonId: string;
+  participantAddresses: Array<string>;
+}): ContractCall {
+  return {
+    data: encodeFunctionData({
+      abi: xrdmImplementationAbi,
+      args: [BigInt(input.hackathonId), input.participantAddresses as Array<Hex>],
+      functionName: "registerParticipants",
+    }),
+    to: polygonAmoyDeployment.eduProxy as Hex,
+    value: 0n,
+  };
+}
+
+function makeAwardXrdmCall(input: {
+  amounts: Array<number>;
+  hackathonId: string;
+  recipientAddresses: Array<string>;
+}): ContractCall {
+  return {
+    data: encodeFunctionData({
+      abi: xrdmImplementationAbi,
+      args: [
+        BigInt(input.hackathonId),
+        input.recipientAddresses as Array<Hex>,
+        input.amounts.map((amount) => BigInt(amount)),
+      ],
+      functionName: "awardXRDM",
+    }),
+    to: polygonAmoyDeployment.eduProxy as Hex,
+    value: 0n,
+  };
+}
+
+function makeAwardNftCall(input: {
+  hackathonId: string;
+  metadataUri: string;
+  recipientAddress: string;
+}): ContractCall {
+  return {
+    data: encodeFunctionData({
+      abi: xrdmImplementationAbi,
+      args: [BigInt(input.hackathonId), input.recipientAddress as Hex, input.metadataUri],
+      functionName: "awardNFT",
+    }),
+    to: polygonAmoyDeployment.eduProxy as Hex,
+    value: 0n,
+  };
+}
+
 async function resolveTransactionHash(input: { client: unknown; hash: Hex }) {
   const startedAt = Date.now();
   const logTiming = (stage: string) => {
@@ -154,7 +205,7 @@ export function getHackRoomBlockchainErrorMessage(error: unknown) {
 export function useHackRoomBlockchain() {
   const { getClientForChain } = useSmartWallets();
 
-  async function createHackathonOnchain() {
+  async function getSmartWalletClient() {
     const smartWalletClient = await getClientForChain({
       id: polygonAmoyDeployment.chainId,
     });
@@ -162,6 +213,12 @@ export function useHackRoomBlockchain() {
     if (!smartWalletClient) {
       throw new Error("Privy smart wallet is not ready yet.");
     }
+
+    return smartWalletClient;
+  }
+
+  async function createHackathonOnchain() {
+    const smartWalletClient = await getSmartWalletClient();
 
     const operationHash = await smartWalletClient.sendTransaction({
       calls: [makeCreateHackathonCall()],
@@ -173,9 +230,32 @@ export function useHackRoomBlockchain() {
     });
   }
 
+  async function sendContractCalls(calls: Array<ContractCall>) {
+    if (!calls.length) {
+      return null;
+    }
+
+    const smartWalletClient = await getSmartWalletClient();
+    const operationHash = await smartWalletClient.sendTransaction({
+      calls,
+    });
+
+    return resolveTransactionHash({
+      client: smartWalletClient,
+      hash: operationHash,
+    });
+  }
+
   return {
     createHackathonOnchain,
+    sendContractCalls,
   };
 }
 
-export { polygonAmoyChain };
+export {
+  makeAwardNftCall,
+  makeAwardXrdmCall,
+  makeRegisterParticipantsCall,
+  polygonAmoyChain,
+};
+export type { ContractCall };

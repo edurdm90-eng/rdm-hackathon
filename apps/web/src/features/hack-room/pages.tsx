@@ -48,7 +48,11 @@ function shortWalletAddress(address?: string) {
 
 export function HackRoomHomePwa({ user }: { user: SessionUser }) {
   const navigate = useNavigate();
-  const dashboard = useQuery(trpc.hackRoom.dashboard.queryOptions());
+  const dashboard = useQuery({
+    ...trpc.hackRoom.dashboard.queryOptions(),
+    refetchInterval: 10_000,
+    refetchIntervalInBackground: false,
+  });
 
   const stats = dashboard.data?.stats;
   const hostedRooms = dashboard.data?.hostedRooms ?? [];
@@ -169,7 +173,11 @@ export function HackRoomHomePwa({ user }: { user: SessionUser }) {
 }
 
 export function HackRoomRoomsPwa({ user: _user }: { user: SessionUser }) {
-  const dashboard = useQuery(trpc.hackRoom.dashboard.queryOptions());
+  const dashboard = useQuery({
+    ...trpc.hackRoom.dashboard.queryOptions(),
+    refetchInterval: 10_000,
+    refetchIntervalInBackground: false,
+  });
   const [roomForm, setRoomForm] = useState(emptyRoomForm);
   const [inviteCode, setInviteCode] = useState("");
   const [message, setMessage] = useState<{ text: string; tone: Tone } | null>(null);
@@ -331,7 +339,11 @@ export function HackRoomProfilePwa({ user }: { user: SessionUser }) {
     walletAddress: liveWalletAddress,
     walletError,
   } = usePrivyWallet();
-  const dashboard = useQuery(trpc.hackRoom.dashboard.queryOptions());
+  const dashboard = useQuery({
+    ...trpc.hackRoom.dashboard.queryOptions(),
+    refetchInterval: 10_000,
+    refetchIntervalInBackground: false,
+  });
   const stats = dashboard.data?.stats;
   const syncedWallets = dashboard.data?.wallets;
   const hostedRooms = dashboard.data?.hostedRooms ?? [];

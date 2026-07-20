@@ -14,6 +14,8 @@ export default function Header() {
   const dashboard = useQuery({
     ...trpc.hackRoom.dashboard.queryOptions(),
     enabled: Boolean(user),
+    refetchInterval: 10_000,
+    refetchIntervalInBackground: false,
   });
   const notifications = dashboard.data?.notifications ?? [];
 
