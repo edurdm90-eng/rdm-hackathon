@@ -10,6 +10,7 @@
     "start": "bun run dist/index.mjs"
   },
   "dependencies": {
+    "@hono/node-server": "^1.19.14",
     "@hono/trpc-server": "^0.4.0",
     "@rdm-hack/api": "workspace:*",
     "@rdm-hack/auth": "workspace:*",
@@ -24,6 +25,7 @@
   "devDependencies": {
     "@rdm-hack/config": "workspace:*",
     "@types/bun": "catalog:",
+    "@types/node": "catalog:",
     "tsdown": "^0.21.9",
     "typescript": "catalog:"
   }

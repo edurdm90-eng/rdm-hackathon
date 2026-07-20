@@ -8,7 +8,7 @@ import * as Clipboard from "expo-clipboard";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import type { inferRouterOutputs } from "@trpc/server";
 import { useNavigation, useRouter } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Dimensions,
@@ -16,6 +16,8 @@ import {
   KeyboardAvoidingView,
   Linking,
   Modal,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
   Platform,
   Pressable,
   ScrollView,
@@ -48,6 +50,9 @@ import { queryClient, trpc } from "@/utils/trpc";
 
 const rdmLogo = require("@/assets/logo/rdm-logo.png");
 const SCREEN_WIDTH = Dimensions.get("window").width;
+const ROOM_SWIPE_GAP = 10;
+const ROOM_SWIPE_CARD_WIDTH = Math.max(248, SCREEN_WIDTH - 48);
+const ROOM_SWIPE_SNAP_INTERVAL = ROOM_SWIPE_CARD_WIDTH + ROOM_SWIPE_GAP;
 
 type RouterOutputs = inferRouterOutputs<AppRouter>;
 type DashboardData = RouterOutputs["hackRoom"]["dashboard"];
@@ -320,6 +325,18 @@ function makeEmptyRewardForm() {
     recipientEmails: [] as Array<string>,
     sourceSubmissionId: "",
     title: "",
+  };
+}
+
+type RewardForm = ReturnType<typeof makeEmptyRewardForm>;
+type RewardFormsByKind = Record<RewardKind, RewardForm>;
+type RewardFormSetter = React.Dispatch<React.SetStateAction<RewardForm>>;
+
+function makeEmptyRewardForms(): RewardFormsByKind {
+  return {
+    participant_certificate: makeEmptyRewardForm(),
+    winner_certificate: makeEmptyRewardForm(),
+    winner_nft_badge: makeEmptyRewardForm(),
   };
 }
 
@@ -1167,11 +1184,17 @@ function HackRoomDetailDashboard({
   const [proofTypes, setProofTypes] = useState<Array<ProofType>>(defaultRegularProofTypes);
   const [selectedTaskId, setSelectedTaskId] = useState("");
   const [submitForm, setSubmitForm] = useState(() => makeEmptySubmitForm(user.name));
-  const [rewardForm, setRewardForm] = useState(makeEmptyRewardForm());
+  const [rewardForms, setRewardForms] = useState(makeEmptyRewardForms);
   const [message, setMessage] = useState<{ text: string; tone: Tone } | null>(null);
   const [feedbackBySubmission, setFeedbackBySubmission] = useState<Record<string, string>>({});
   const [awardBySubmission, setAwardBySubmission] = useState<Record<string, string>>({});
   const [createdTaskCardId, setCreatedTaskCardId] = useState("");
+  const [pendingRewardKind, setPendingRewardKind] = useState<RewardKind | null>(null);
+  const [pendingApprovalSubmissionId, setPendingApprovalSubmissionId] = useState("");
+  const [pendingWinnerSubmissionId, setPendingWinnerSubmissionId] = useState("");
+  const approvalInFlightRef = useRef(false);
+  const rewardIssueInFlightRef = useRef(false);
+  const winnerSelectionInFlightRef = useRef(false);
 
   const hostedRooms = dashboard.data?.hostedRooms ?? [];
   const joinedRooms = dashboard.data?.joinedRooms ?? [];
@@ -1339,7 +1362,6 @@ function HackRoomDetailDashboard({
     trpc.hackRoom.completeReward.mutationOptions({
       onError: (error) => setMessage({ text: error.message, tone: "red" }),
       onSuccess: async () => {
-        setRewardForm(makeEmptyRewardForm());
         setMessage({ text: "Reward issued and confirmed on-chain", tone: "gold" });
         await invalidateDashboard();
       },
@@ -1350,13 +1372,17 @@ function HackRoomDetailDashboard({
       onError: (error) => setMessage({ text: error.message, tone: "red" }),
     }),
   );
-  const issueRewardPending = prepareReward.isPending || completeReward.isPending;
+  const issueRewardPending =
+    Boolean(pendingRewardKind) || prepareReward.isPending || completeReward.isPending;
+  const approveSubmissionPending =
+    Boolean(pendingApprovalSubmissionId) || approveSubmission.isPending;
+  const selectWinnerPending = Boolean(pendingWinnerSubmissionId) || selectWinner.isPending;
 
   const isBusy =
     createTask.isPending ||
     submitProof.isPending ||
-    approveSubmission.isPending ||
-    selectWinner.isPending ||
+    approveSubmissionPending ||
+    selectWinnerPending ||
     returnSubmission.isPending ||
     issueRewardPending ||
     completeParticipantRegistration.isPending ||
@@ -1539,11 +1565,17 @@ function HackRoomDetailDashboard({
   };
 
   const handleApproveSubmission = (submission: HackSubmission) => {
+    if (approvalInFlightRef.current || approveSubmissionPending) {
+      return;
+    }
+
     const feedback =
       feedbackBySubmission[submission._id] ||
       submission.hostFeedback ||
       "Verified. Clear proof and solid contribution.";
 
+    approvalInFlightRef.current = true;
+    setPendingApprovalSubmissionId(submission._id);
     void (async () => {
       try {
         setMessage({ text: "Preparing on-chain XRDM approval...", tone: "gold" });
@@ -1587,6 +1619,9 @@ function HackRoomDetailDashboard({
           text: error instanceof Error ? error.message : "Unable to approve on-chain.",
           tone: "red",
         });
+      } finally {
+        approvalInFlightRef.current = false;
+        setPendingApprovalSubmissionId("");
       }
     })();
   };
@@ -1603,6 +1638,10 @@ function HackRoomDetailDashboard({
   };
 
   const handleSelectWinner = (submission: HackSubmission) => {
+    if (winnerSelectionInFlightRef.current || selectWinnerPending) {
+      return;
+    }
+
     const feedback =
       feedbackBySubmission[submission._id] ||
       submission.hostFeedback ||
@@ -1611,6 +1650,13 @@ function HackRoomDetailDashboard({
       awardBySubmission[submission._id] || submission.awardXrdm || submission.rewardXrdm || 20,
     );
 
+    if (!Number.isFinite(award) || award < 0) {
+      setMessage({ text: "Enter a valid winner XRDM amount", tone: "red" });
+      return;
+    }
+
+    winnerSelectionInFlightRef.current = true;
+    setPendingWinnerSubmissionId(submission._id);
     void (async () => {
       try {
         setMessage({ text: "Preparing winner blockchain confirmation...", tone: "gold" });
@@ -1673,17 +1719,30 @@ function HackRoomDetailDashboard({
           text: error instanceof Error ? error.message : "Unable to announce winner on-chain.",
           tone: "red",
         });
+      } finally {
+        winnerSelectionInFlightRef.current = false;
+        setPendingWinnerSubmissionId("");
       }
     })();
   };
 
   const handleIssueReward = (kind: RewardKind) => {
+    if (rewardIssueInFlightRef.current || issueRewardPending) {
+      return;
+    }
     if (!selectedRoom) {
       setMessage({ text: "Room is still loading", tone: "red" });
       return;
     }
     if (selectedRoomRole !== "host") {
       setMessage({ text: "Only the host can issue room rewards", tone: "red" });
+      return;
+    }
+
+    const rewardForm = rewardForms[kind];
+    const awardXrdm = Number(rewardForm.awardXrdm || 0);
+    if (!Number.isFinite(awardXrdm) || awardXrdm < 0) {
+      setMessage({ text: "Enter a valid XRDM amount", tone: "red" });
       return;
     }
 
@@ -1729,11 +1788,13 @@ function HackRoomDetailDashboard({
       (email) => participantsByEmail.get(email)?.userId ?? "",
     ).filter(Boolean);
 
+    rewardIssueInFlightRef.current = true;
+    setPendingRewardKind(kind);
     void (async () => {
       try {
         setMessage({ text: "Preparing reward blockchain transaction...", tone: "gold" });
         const prepared = await prepareReward.mutateAsync({
-          awardXrdm: Number(rewardForm.awardXrdm || 0),
+          awardXrdm,
           description: rewardForm.description,
           kind,
           ledgerNote: rewardForm.ledgerNote,
@@ -1790,11 +1851,15 @@ function HackRoomDetailDashboard({
           xrdmTxHash: prepared.onchain.requiresXrdm ? txHash : undefined,
         });
         await forgetPendingChainEvent(`reward:${prepared.reward._id}:chain`);
+        setRewardForms((current) => ({ ...current, [kind]: makeEmptyRewardForm() }));
       } catch (error) {
         setMessage({
           text: error instanceof Error ? error.message : "Unable to issue reward on-chain.",
           tone: "red",
         });
+      } finally {
+        rewardIssueInFlightRef.current = false;
+        setPendingRewardKind(null);
       }
     })();
   };
@@ -1849,7 +1914,7 @@ function HackRoomDetailDashboard({
             activeRoomTab={activeRoomTab}
             assignmentMode={assignmentMode}
             approvedSubmissions={approvedHostSubmissions}
-            approveSubmissionPending={approveSubmission.isPending}
+            approveSubmissionPending={approveSubmissionPending}
             awardBySubmission={awardBySubmission}
             createdTaskCardId={createdTaskCardId}
             createTaskPending={createTask.isPending}
@@ -1869,10 +1934,13 @@ function HackRoomDetailDashboard({
             onSelectWinner={handleSelectWinner}
             onShareRoom={handleShareCode}
             onSubmitProof={handleSubmitProof}
+            pendingApprovalSubmissionId={pendingApprovalSubmissionId}
             pendingSubmissions={pendingHostSubmissions}
             proofTypes={proofTypes}
             returnSubmissionPending={returnSubmission.isPending}
-            rewardForm={rewardForm}
+            pendingRewardKind={pendingRewardKind}
+            pendingWinnerSubmissionId={pendingWinnerSubmissionId}
+            rewardForms={rewardForms}
             rewards={effectiveRoomRole === "host" ? roomRewards : myRoomRewards}
             room={selectedRoom}
             roomRole={effectiveRoomRole}
@@ -1880,13 +1948,13 @@ function HackRoomDetailDashboard({
             roomWinners={roomWinners}
             selectedTask={selectedTask}
             selectedTaskId={selectedTaskId}
-            selectWinnerPending={selectWinner.isPending}
+            selectWinnerPending={selectWinnerPending}
             sendRoomNotificationPending={sendRoomNotification.isPending}
             issueRewardPending={issueRewardPending}
             setAwardBySubmission={setAwardBySubmission}
             setFeedbackBySubmission={setFeedbackBySubmission}
             setProofTypes={setProofTypes}
-            setRewardForm={setRewardForm}
+            setRewardForms={setRewardForms}
             setAssignmentMode={setAssignmentMode}
             setSubmitForm={setSubmitForm}
             setTaskForm={setTaskForm}
@@ -1998,7 +2066,11 @@ function RoomCommandCenter({
       {canCreateRoom ? (
         <Modal
           animationType="fade"
-          onRequestClose={() => onSetCreateRoomModalOpen(false)}
+          onRequestClose={() => {
+            if (!createRoomPending) {
+              onSetCreateRoomModalOpen(false);
+            }
+          }}
           transparent
           visible={createRoomModalOpen}
         >
@@ -2016,14 +2088,28 @@ function RoomCommandCenter({
                 <Pressable
                   accessibilityLabel="Close create room"
                   accessibilityRole="button"
+                  disabled={createRoomPending}
                   onPress={() => onSetCreateRoomModalOpen(false)}
-                  style={({ pressed }) => [styles.modalCloseButton, pressed && styles.pressed]}
+                  style={({ pressed }) => [
+                    styles.modalCloseButton,
+                    createRoomPending && styles.disabled,
+                    pressed && !createRoomPending && styles.pressed,
+                  ]}
                 >
                   <Ionicons name="close-outline" size={22} color={theme.text} />
                 </Pressable>
               </View>
 
               <StatusPill label="Host owns room" tone="violet" />
+
+              {createRoomPending ? (
+                <View style={styles.compactBusyRow}>
+                  <ActivityIndicator color={theme.award} />
+                  <Text style={styles.mutedText}>
+                    Room is being created. Confirming on-chain and syncing details.
+                  </Text>
+                </View>
+              ) : null}
 
               <Field label="Room name">
                 <HackTextInput
@@ -2055,7 +2141,7 @@ function RoomCommandCenter({
                 <HackButton
                   disabled={!roomForm.name.trim() || createRoomPending}
                   icon="add-outline"
-                  label="Create Room"
+                  label={createRoomPending ? "Creating Room" : "Create Room"}
                   loading={createRoomPending}
                   onPress={onCreateRoom}
                   tone="violet"
@@ -2081,6 +2167,21 @@ function RoomShelf({
   onSelectRoom: (roomId: string) => void;
   onShareRoom: (room: HackRoom) => void;
 }) {
+  const [activeRoomIndex, setActiveRoomIndex] = useState(0);
+
+  useEffect(() => {
+    if (activeRoomIndex >= allRooms.length) {
+      setActiveRoomIndex(Math.max(allRooms.length - 1, 0));
+    }
+  }, [activeRoomIndex, allRooms.length]);
+
+  const handleRoomMomentumEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const nextIndex = Math.round(
+      event.nativeEvent.contentOffset.x / ROOM_SWIPE_SNAP_INTERVAL,
+    );
+    setActiveRoomIndex(Math.min(Math.max(nextIndex, 0), allRooms.length - 1));
+  };
+
   return (
     <View style={styles.roomShelfSection}>
       <View style={styles.roomShelfHeaderOutside}>
@@ -2093,10 +2194,15 @@ function RoomShelf({
       {allRooms.length ? (
         <ScrollView
           contentContainerStyle={styles.roomShelf}
+          decelerationRate="fast"
+          disableIntervalMomentum
           horizontal
+          onMomentumScrollEnd={handleRoomMomentumEnd}
           showsHorizontalScrollIndicator={false}
+          snapToAlignment="start"
+          snapToInterval={ROOM_SWIPE_SNAP_INTERVAL}
         >
-          {allRooms.map(({ role, room }) => (
+          {allRooms.map(({ role, room }, index) => (
             <SelectableRoomCard
               key={room._id}
               onCopyInvite={() => onCopyInvite(room)}
@@ -2104,13 +2210,28 @@ function RoomShelf({
               onShare={() => onShareRoom(room)}
               role={role}
               room={room}
-              selected={false}
+              selected={index === activeRoomIndex}
             />
           ))}
         </ScrollView>
       ) : (
         <EmptyState icon="flash-outline" text="Created and joined rooms will appear here." />
       )}
+      {allRooms.length > 1 ? (
+        <View style={styles.roomSwipeDots}>
+          {allRooms.map(({ room }, index) => (
+            <View
+              accessibilityElementsHidden
+              importantForAccessibility="no"
+              key={room._id}
+              style={[
+                styles.roomSwipeDot,
+                index === activeRoomIndex && styles.roomSwipeDotActive,
+              ]}
+            />
+          ))}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -2206,10 +2327,13 @@ function RoomWorkspace({
   onSelectWinner,
   onShareRoom,
   onSubmitProof,
+  pendingApprovalSubmissionId,
+  pendingRewardKind,
   pendingSubmissions,
+  pendingWinnerSubmissionId,
   proofTypes,
   returnSubmissionPending,
-  rewardForm,
+  rewardForms,
   rewards,
   room,
   roomRole,
@@ -2223,7 +2347,7 @@ function RoomWorkspace({
   setAssignmentMode,
   setFeedbackBySubmission,
   setProofTypes,
-  setRewardForm,
+  setRewardForms,
   setSubmitForm,
   setTaskForm,
   setTaskKind,
@@ -2258,10 +2382,13 @@ function RoomWorkspace({
   onSelectWinner: (submission: HackSubmission) => void;
   onShareRoom: (room: HackRoom) => void;
   onSubmitProof: () => void;
+  pendingApprovalSubmissionId: string;
+  pendingRewardKind: RewardKind | null;
   pendingSubmissions: DashboardData["hostSubmissions"];
+  pendingWinnerSubmissionId: string;
   proofTypes: Array<ProofType>;
   returnSubmissionPending: boolean;
-  rewardForm: ReturnType<typeof makeEmptyRewardForm>;
+  rewardForms: RewardFormsByKind;
   rewards: Array<HackReward>;
   room: HackRoom;
   roomRole: Role;
@@ -2275,7 +2402,7 @@ function RoomWorkspace({
   setAssignmentMode: React.Dispatch<React.SetStateAction<AssignmentMode>>;
   setFeedbackBySubmission: React.Dispatch<React.SetStateAction<Record<string, string>>>;
   setProofTypes: React.Dispatch<React.SetStateAction<Array<ProofType>>>;
-  setRewardForm: React.Dispatch<React.SetStateAction<ReturnType<typeof makeEmptyRewardForm>>>;
+  setRewardForms: React.Dispatch<React.SetStateAction<RewardFormsByKind>>;
   setSubmitForm: React.Dispatch<React.SetStateAction<typeof emptySubmitForm>>;
   setTaskForm: React.Dispatch<React.SetStateAction<typeof emptyTaskForm>>;
   setTaskKind: React.Dispatch<React.SetStateAction<TaskKind>>;
@@ -2342,10 +2469,13 @@ function RoomWorkspace({
           onSendRoomNotification={onSendRoomNotification}
           onSelectWinner={onSelectWinner}
           onShareRoom={onShareRoom}
+          pendingApprovalSubmissionId={pendingApprovalSubmissionId}
+          pendingRewardKind={pendingRewardKind}
           pendingSubmissions={pendingSubmissions}
+          pendingWinnerSubmissionId={pendingWinnerSubmissionId}
           proofTypes={proofTypes}
           returnSubmissionPending={returnSubmissionPending}
-          rewardForm={rewardForm}
+          rewardForms={rewardForms}
           rewards={rewards}
           room={room}
           roomTasks={roomTasks}
@@ -2356,7 +2486,7 @@ function RoomWorkspace({
           setAssignmentMode={setAssignmentMode}
           setFeedbackBySubmission={setFeedbackBySubmission}
           setProofTypes={setProofTypes}
-          setRewardForm={setRewardForm}
+          setRewardForms={setRewardForms}
           setTaskForm={setTaskForm}
           setTaskKind={setTaskKind}
           taskForm={taskForm}
@@ -2405,10 +2535,13 @@ function HostRoomWorkspace({
   onSendRoomNotification,
   onSelectWinner,
   onShareRoom,
+  pendingApprovalSubmissionId,
+  pendingRewardKind,
   pendingSubmissions,
+  pendingWinnerSubmissionId,
   proofTypes,
   returnSubmissionPending,
-  rewardForm,
+  rewardForms,
   rewards,
   room,
   roomTasks,
@@ -2419,7 +2552,7 @@ function HostRoomWorkspace({
   setAssignmentMode,
   setFeedbackBySubmission,
   setProofTypes,
-  setRewardForm,
+  setRewardForms,
   setTaskForm,
   setTaskKind,
   taskForm,
@@ -2446,10 +2579,13 @@ function HostRoomWorkspace({
   onSendRoomNotification: () => void;
   onSelectWinner: (submission: HackSubmission) => void;
   onShareRoom: (room: HackRoom) => void;
+  pendingApprovalSubmissionId: string;
+  pendingRewardKind: RewardKind | null;
   pendingSubmissions: DashboardData["hostSubmissions"];
+  pendingWinnerSubmissionId: string;
   proofTypes: Array<ProofType>;
   returnSubmissionPending: boolean;
-  rewardForm: ReturnType<typeof makeEmptyRewardForm>;
+  rewardForms: RewardFormsByKind;
   rewards: Array<HackReward>;
   room: HackRoom;
   roomTasks: DashboardData["tasks"];
@@ -2460,7 +2596,7 @@ function HostRoomWorkspace({
   setAssignmentMode: React.Dispatch<React.SetStateAction<AssignmentMode>>;
   setFeedbackBySubmission: React.Dispatch<React.SetStateAction<Record<string, string>>>;
   setProofTypes: React.Dispatch<React.SetStateAction<Array<ProofType>>>;
-  setRewardForm: React.Dispatch<React.SetStateAction<ReturnType<typeof makeEmptyRewardForm>>>;
+  setRewardForms: React.Dispatch<React.SetStateAction<RewardFormsByKind>>;
   setTaskForm: React.Dispatch<React.SetStateAction<typeof emptyTaskForm>>;
   setTaskKind: React.Dispatch<React.SetStateAction<TaskKind>>;
   taskForm: typeof emptyTaskForm;
@@ -2670,28 +2806,32 @@ function HostRoomWorkspace({
         >
           <View style={styles.listStack}>
             {pendingSubmissions.length ? (
-              pendingSubmissions.map((submission) => (
-                <SubmissionReviewCard
-                  approveSubmissionPending={approveSubmissionPending}
-                  feedback={
-                    feedbackBySubmission[submission._id] ??
-                    submission.hostFeedback ??
-                    "Verified. Clear proof and solid contribution."
-                  }
-                  key={submission._id}
-                  mode="review"
-                  onApprove={() => onApproveSubmission(submission)}
-                  onFeedbackChange={(value) =>
-                    setFeedbackBySubmission((current) => ({
-                      ...current,
-                      [submission._id]: value,
-                    }))
-                  }
-                  onReturn={() => onReturnSubmission(submission)}
-                  returnSubmissionPending={returnSubmissionPending}
-                  submission={submission}
-                />
-              ))
+              pendingSubmissions.map((submission) => {
+                const approvalButtonLoading = pendingApprovalSubmissionId === submission._id;
+                return (
+                  <SubmissionReviewCard
+                    approveSubmissionDisabled={approveSubmissionPending}
+                    approveSubmissionLoading={approvalButtonLoading}
+                    feedback={
+                      feedbackBySubmission[submission._id] ??
+                      submission.hostFeedback ??
+                      "Verified. Clear proof and solid contribution."
+                    }
+                    key={submission._id}
+                    mode="review"
+                    onApprove={() => onApproveSubmission(submission)}
+                    onFeedbackChange={(value) =>
+                      setFeedbackBySubmission((current) => ({
+                        ...current,
+                        [submission._id]: value,
+                      }))
+                    }
+                    onReturn={() => onReturnSubmission(submission)}
+                    returnSubmissionPending={returnSubmissionPending}
+                    submission={submission}
+                  />
+                );
+              })
             ) : (
               <EmptyState
                 icon="ribbon-outline"
@@ -2745,33 +2885,37 @@ function HostRoomWorkspace({
           <View style={styles.listStack}>
             {approvedSubmissions.length ? (
               filteredApprovedSubmissions.length ? (
-                filteredApprovedSubmissions.map((submission) => (
-                  <SubmissionReviewCard
-                    award={
-                      awardBySubmission[submission._id] ??
-                      String(submission.awardXrdm ?? submission.rewardXrdm ?? 20)
-                    }
-                    feedback={
-                      feedbackBySubmission[submission._id] ??
-                      submission.hostFeedback ??
-                      "Strong contribution and clear proof of participation."
-                    }
-                    key={submission._id}
-                    mode="winner"
-                    onAwardChange={(value) =>
-                      setAwardBySubmission((current) => ({ ...current, [submission._id]: value }))
-                    }
-                    onFeedbackChange={(value) =>
-                      setFeedbackBySubmission((current) => ({
-                        ...current,
-                        [submission._id]: value,
-                      }))
-                    }
-                    onSelectWinner={() => onSelectWinner(submission)}
-                    selectWinnerPending={selectWinnerPending}
-                    submission={submission}
-                  />
-                ))
+                filteredApprovedSubmissions.map((submission) => {
+                  const winnerButtonLoading = pendingWinnerSubmissionId === submission._id;
+                  return (
+                    <SubmissionReviewCard
+                      award={
+                        awardBySubmission[submission._id] ??
+                        String(submission.awardXrdm ?? submission.rewardXrdm ?? 20)
+                      }
+                      feedback={
+                        feedbackBySubmission[submission._id] ??
+                        submission.hostFeedback ??
+                        "Strong contribution and clear proof of participation."
+                      }
+                      key={submission._id}
+                      mode="winner"
+                      onAwardChange={(value) =>
+                        setAwardBySubmission((current) => ({ ...current, [submission._id]: value }))
+                      }
+                      onFeedbackChange={(value) =>
+                        setFeedbackBySubmission((current) => ({
+                          ...current,
+                          [submission._id]: value,
+                        }))
+                      }
+                      onSelectWinner={() => onSelectWinner(submission)}
+                      selectWinnerDisabled={selectWinnerPending}
+                      selectWinnerLoading={winnerButtonLoading}
+                      submission={submission}
+                    />
+                  );
+                })
               ) : (
                 <EmptyState
                   icon="search-outline"
@@ -2806,10 +2950,11 @@ function HostRoomWorkspace({
         <HostAwardsPanel
           issueRewardPending={issueRewardPending}
           onIssueReward={onIssueReward}
-          rewardForm={rewardForm}
+          pendingRewardKind={pendingRewardKind}
+          rewardForms={rewardForms}
           rewards={rewards}
           room={room}
-          setRewardForm={setRewardForm}
+          setRewardForms={setRewardForms}
           winnerSubmissions={winnerSubmissions}
         />
       ) : null}
@@ -4089,26 +4234,38 @@ function QuickMathsGame({ onComplete }: { onComplete: (result: MiniGameResult) =
 function HostAwardsPanel({
   issueRewardPending,
   onIssueReward,
-  rewardForm,
+  pendingRewardKind,
+  rewardForms,
   rewards,
   room,
-  setRewardForm,
+  setRewardForms,
   winnerSubmissions,
 }: {
   issueRewardPending: boolean;
   onIssueReward: (kind: RewardKind) => void;
-  rewardForm: ReturnType<typeof makeEmptyRewardForm>;
+  pendingRewardKind: RewardKind | null;
+  rewardForms: RewardFormsByKind;
   rewards: Array<HackReward>;
   room: HackRoom;
-  setRewardForm: React.Dispatch<React.SetStateAction<ReturnType<typeof makeEmptyRewardForm>>>;
+  setRewardForms: React.Dispatch<React.SetStateAction<RewardFormsByKind>>;
   winnerSubmissions: DashboardData["hostSubmissions"];
 }) {
   const [awardMode, setAwardMode] = useState<"certificates" | "nfts">("certificates");
 
   const switchMode = (mode: "certificates" | "nfts") => {
     setAwardMode(mode);
-    setRewardForm(makeEmptyRewardForm());
   };
+  const setRewardFormForKind =
+    (kind: RewardKind): RewardFormSetter =>
+    (update) => {
+      setRewardForms((current) => ({
+        ...current,
+        [kind]:
+          typeof update === "function"
+            ? (update as (currentForm: RewardForm) => RewardForm)(current[kind])
+            : update,
+      }));
+    };
 
   return (
     <View style={styles.trackStack}>
@@ -4131,20 +4288,24 @@ function HostAwardsPanel({
         <HostCertificatesPanel
           issueRewardPending={issueRewardPending}
           onIssueReward={onIssueReward}
-          rewardForm={rewardForm}
+          participantRewardForm={rewardForms.participant_certificate}
+          pendingRewardKind={pendingRewardKind}
           rewards={rewards}
           room={room}
-          setRewardForm={setRewardForm}
+          setParticipantRewardForm={setRewardFormForKind("participant_certificate")}
+          setWinnerRewardForm={setRewardFormForKind("winner_certificate")}
+          winnerRewardForm={rewardForms.winner_certificate}
           winnerSubmissions={winnerSubmissions}
         />
       ) : (
         <HostNftBadgesPanel
           issueRewardPending={issueRewardPending}
           onIssueReward={onIssueReward}
-          rewardForm={rewardForm}
+          pendingRewardKind={pendingRewardKind}
+          rewardForm={rewardForms.winner_nft_badge}
           rewards={rewards}
           room={room}
-          setRewardForm={setRewardForm}
+          setRewardForm={setRewardFormForKind("winner_nft_badge")}
           winnerSubmissions={winnerSubmissions}
         />
       )}
@@ -4155,21 +4316,29 @@ function HostAwardsPanel({
 function HostCertificatesPanel({
   issueRewardPending,
   onIssueReward,
-  rewardForm,
+  participantRewardForm,
+  pendingRewardKind,
   rewards,
   room,
-  setRewardForm,
+  setParticipantRewardForm,
+  setWinnerRewardForm,
+  winnerRewardForm,
   winnerSubmissions,
 }: {
   issueRewardPending: boolean;
   onIssueReward: (kind: RewardKind) => void;
-  rewardForm: ReturnType<typeof makeEmptyRewardForm>;
+  participantRewardForm: RewardForm;
+  pendingRewardKind: RewardKind | null;
   rewards: Array<HackReward>;
   room: HackRoom;
-  setRewardForm: React.Dispatch<React.SetStateAction<ReturnType<typeof makeEmptyRewardForm>>>;
+  setParticipantRewardForm: RewardFormSetter;
+  setWinnerRewardForm: RewardFormSetter;
+  winnerRewardForm: RewardForm;
   winnerSubmissions: DashboardData["hostSubmissions"];
 }) {
   const certificateRewards = rewards.filter((reward) => reward.kind !== "winner_nft_badge");
+  const participantRewardPending = pendingRewardKind === "participant_certificate";
+  const winnerRewardPending = pendingRewardKind === "winner_certificate";
   return (
     <View style={styles.trackStack}>
       <Panel
@@ -4182,43 +4351,44 @@ function HostCertificatesPanel({
         <Field label="Certificate title">
           <HackTextInput
             onChangeText={(value) =>
-              setRewardForm((current) => ({ ...current, title: value }))
+              setParticipantRewardForm((current) => ({ ...current, title: value }))
             }
             placeholder="Member Certificate"
-            value={rewardForm.title}
+            value={participantRewardForm.title}
           />
         </Field>
         <Field label="Certificate note">
           <HackTextInput
             multiline
             onChangeText={(value) =>
-              setRewardForm((current) => ({ ...current, description: value }))
+              setParticipantRewardForm((current) => ({ ...current, description: value }))
             }
             placeholder="Issued for verified participation in this hack room."
             style={styles.textArea}
-            value={rewardForm.description}
+            value={participantRewardForm.description}
           />
         </Field>
         <Field label="XRDM attached">
           <HackTextInput
             keyboardType="number-pad"
             onChangeText={(value) =>
-              setRewardForm((current) => ({ ...current, awardXrdm: value }))
+              setParticipantRewardForm((current) => ({ ...current, awardXrdm: value }))
             }
             placeholder="0"
-            value={rewardForm.awardXrdm}
+            value={participantRewardForm.awardXrdm}
           />
         </Field>
         <RewardRecipientEmailComposer
           room={room}
-          rewardForm={rewardForm}
-          setRewardForm={setRewardForm}
+          rewardForm={participantRewardForm}
+          setRewardForm={setParticipantRewardForm}
+          showSelectAll
         />
         <HackButton
           disabled={!room.participants.length || issueRewardPending}
           icon="ribbon-outline"
           label="Issue Member Certificates"
-          loading={issueRewardPending}
+          loading={participantRewardPending}
           onPress={() => onIssueReward("participant_certificate")}
           tone="gold"
         />
@@ -4232,50 +4402,50 @@ function HostCertificatesPanel({
         tone="violet"
       >
         <WinnerSourceSelector
-          rewardForm={rewardForm}
-          setRewardForm={setRewardForm}
+          rewardForm={winnerRewardForm}
+          setRewardForm={setWinnerRewardForm}
           winnerSubmissions={winnerSubmissions}
         />
         <RewardRecipientEmailComposer
           room={room}
-          rewardForm={rewardForm}
-          setRewardForm={setRewardForm}
+          rewardForm={winnerRewardForm}
+          setRewardForm={setWinnerRewardForm}
         />
         <Field label="Winner certificate title">
           <HackTextInput
             onChangeText={(value) =>
-              setRewardForm((current) => ({ ...current, title: value }))
+              setWinnerRewardForm((current) => ({ ...current, title: value }))
             }
             placeholder="Winner Certificate"
-            value={rewardForm.title}
+            value={winnerRewardForm.title}
           />
         </Field>
         <Field label="XRDM attached">
           <HackTextInput
             keyboardType="number-pad"
             onChangeText={(value) =>
-              setRewardForm((current) => ({ ...current, awardXrdm: value }))
+              setWinnerRewardForm((current) => ({ ...current, awardXrdm: value }))
             }
             placeholder="50"
-            value={rewardForm.awardXrdm}
+            value={winnerRewardForm.awardXrdm}
           />
         </Field>
         <Field label="Ledger note">
           <HackTextInput
             multiline
             onChangeText={(value) =>
-              setRewardForm((current) => ({ ...current, ledgerNote: value }))
+              setWinnerRewardForm((current) => ({ ...current, ledgerNote: value }))
             }
             placeholder="Team winner certificate issued by host."
             style={styles.textArea}
-            value={rewardForm.ledgerNote}
+            value={winnerRewardForm.ledgerNote}
           />
         </Field>
         <HackButton
           disabled={!winnerSubmissions.length || issueRewardPending}
           icon="trophy-outline"
           label="Issue Winner Certificate"
-          loading={issueRewardPending}
+          loading={winnerRewardPending}
           onPress={() => onIssueReward("winner_certificate")}
           tone="violet"
         />
@@ -4306,6 +4476,7 @@ function HostCertificatesPanel({
 function HostNftBadgesPanel({
   issueRewardPending,
   onIssueReward,
+  pendingRewardKind,
   rewardForm,
   rewards,
   room,
@@ -4314,13 +4485,15 @@ function HostNftBadgesPanel({
 }: {
   issueRewardPending: boolean;
   onIssueReward: (kind: RewardKind) => void;
-  rewardForm: ReturnType<typeof makeEmptyRewardForm>;
+  pendingRewardKind: RewardKind | null;
+  rewardForm: RewardForm;
   rewards: Array<HackReward>;
   room: HackRoom;
-  setRewardForm: React.Dispatch<React.SetStateAction<ReturnType<typeof makeEmptyRewardForm>>>;
+  setRewardForm: RewardFormSetter;
   winnerSubmissions: DashboardData["hostSubmissions"];
 }) {
   const nftRewards = rewards.filter((reward) => reward.kind === "winner_nft_badge");
+  const nftRewardPending = pendingRewardKind === "winner_nft_badge";
 
   return (
     <View style={styles.trackStack}>
@@ -4386,7 +4559,7 @@ function HostNftBadgesPanel({
           disabled={!winnerSubmissions.length || issueRewardPending}
           icon="diamond-outline"
           label="Issue NFT Badge"
-          loading={issueRewardPending}
+          loading={nftRewardPending}
           onPress={() => onIssueReward("winner_nft_badge")}
           tone="gold"
         />
@@ -4551,14 +4724,20 @@ function RewardRecipientEmailComposer({
   room,
   rewardForm,
   setRewardForm,
+  showSelectAll = false,
 }: {
   room: HackRoom;
-  rewardForm: ReturnType<typeof makeEmptyRewardForm>;
-  setRewardForm: React.Dispatch<React.SetStateAction<ReturnType<typeof makeEmptyRewardForm>>>;
+  rewardForm: RewardForm;
+  setRewardForm: RewardFormSetter;
+  showSelectAll?: boolean;
 }) {
-  const participantEmails = new Set(
-    room.participants.map((participant) => participant.email.trim().toLowerCase()),
+  const participantEmailList = normalizeEmails(
+    room.participants.map((participant) => participant.email),
   );
+  const participantEmails = new Set(participantEmailList);
+  const selectedAllParticipants =
+    participantEmailList.length > 0 &&
+    participantEmailList.every((email) => rewardForm.recipientEmails.includes(email));
 
   const addDraftEmails = () => {
     setRewardForm((current) => {
@@ -4603,9 +4782,47 @@ function RewardRecipientEmailComposer({
     }));
   };
 
+  const selectAllParticipants = () => {
+    setRewardForm((current) => ({
+      ...current,
+      recipientEmailDraft: "",
+      recipientEmails: normalizeEmails([...current.recipientEmails, ...participantEmailList]),
+    }));
+  };
+
   return (
     <Field label="Recipient emails">
       <View style={styles.emailComposer}>
+        {showSelectAll ? (
+          <View style={styles.emailComposerActionRow}>
+            <Pressable
+              accessibilityRole="button"
+              disabled={!participantEmailList.length || selectedAllParticipants}
+              onPress={selectAllParticipants}
+              style={({ pressed }) => [
+                styles.emailComposerAction,
+                selectedAllParticipants && styles.emailComposerActionActive,
+                (!participantEmailList.length || selectedAllParticipants) && styles.disabled,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Ionicons
+                name="people-outline"
+                size={14}
+                color={selectedAllParticipants ? theme.participant : theme.text}
+              />
+              <Text
+                style={[
+                  styles.emailComposerActionText,
+                  selectedAllParticipants && styles.emailComposerActionTextActive,
+                ]}
+              >
+                Select all
+              </Text>
+            </Pressable>
+            <Text style={styles.emailComposerCount}>{participantEmailList.length} joined</Text>
+          </View>
+        ) : null}
         {rewardForm.recipientEmails.length ? (
           <View style={styles.emailChipWrap}>
             {rewardForm.recipientEmails.map((email) => {
@@ -4666,8 +4883,8 @@ function WinnerSourceSelector({
   setRewardForm,
   winnerSubmissions,
 }: {
-  rewardForm: ReturnType<typeof makeEmptyRewardForm>;
-  setRewardForm: React.Dispatch<React.SetStateAction<ReturnType<typeof makeEmptyRewardForm>>>;
+  rewardForm: RewardForm;
+  setRewardForm: RewardFormSetter;
   winnerSubmissions: DashboardData["hostSubmissions"];
 }) {
   const selectedWinnerId = rewardForm.sourceSubmissionId || winnerSubmissions[0]?._id || "";
@@ -5115,6 +5332,8 @@ function AssignmentComposer({
 }
 
 function SubmissionReviewCard({
+  approveSubmissionDisabled,
+  approveSubmissionLoading,
   approveSubmissionPending,
   award,
   feedback,
@@ -5125,9 +5344,13 @@ function SubmissionReviewCard({
   onReturn,
   onSelectWinner,
   returnSubmissionPending,
+  selectWinnerDisabled,
+  selectWinnerLoading,
   selectWinnerPending,
   submission,
 }: {
+  approveSubmissionDisabled?: boolean;
+  approveSubmissionLoading?: boolean;
   approveSubmissionPending?: boolean;
   award?: string;
   feedback?: string;
@@ -5138,10 +5361,21 @@ function SubmissionReviewCard({
   onReturn?: () => void;
   onSelectWinner?: () => void;
   returnSubmissionPending?: boolean;
+  selectWinnerDisabled?: boolean;
+  selectWinnerLoading?: boolean;
   selectWinnerPending?: boolean;
   submission: HackSubmission;
 }) {
   const displayParticipantName = submission.submitterName?.trim() || submission.participantName;
+  const approveButtonDisabled =
+    Boolean(approveSubmissionDisabled ?? approveSubmissionPending) ||
+    Boolean(returnSubmissionPending);
+  const approveButtonLoading = approveSubmissionLoading ?? approveSubmissionPending;
+  const returnButtonDisabled =
+    Boolean(returnSubmissionPending) ||
+    Boolean(approveSubmissionDisabled ?? approveSubmissionPending);
+  const winnerButtonDisabled = selectWinnerDisabled ?? selectWinnerPending;
+  const winnerButtonLoading = selectWinnerLoading ?? selectWinnerPending;
 
   return (
     <View style={styles.reviewCard}>
@@ -5186,17 +5420,17 @@ function SubmissionReviewCard({
       {mode === "review" ? (
         <View style={styles.reviewActions}>
           <HackButton
-            disabled={returnSubmissionPending}
+            disabled={returnButtonDisabled}
             label="Return"
             loading={returnSubmissionPending}
             onPress={onReturn ?? (() => {})}
             tone="red"
           />
           <HackButton
-            disabled={approveSubmissionPending}
+            disabled={approveButtonDisabled}
             icon="checkmark-circle-outline"
             label="Verify Proof"
-            loading={approveSubmissionPending}
+            loading={approveButtonLoading}
             onPress={onApprove ?? (() => {})}
             tone="cyan"
           />
@@ -5205,10 +5439,10 @@ function SubmissionReviewCard({
 
       {mode === "winner" ? (
         <HackButton
-          disabled={selectWinnerPending}
+          disabled={winnerButtonDisabled}
           icon="trophy-outline"
           label="Announce Winner"
-          loading={selectWinnerPending}
+          loading={winnerButtonLoading}
           onPress={onSelectWinner ?? (() => {})}
           tone="gold"
         />
@@ -5584,9 +5818,17 @@ function HostTrack({
           tone="violet"
         />
 
-        <View style={styles.listStack}>
-          {hostedRooms.length ? (
-            hostedRooms.map((room) => (
+        {hostedRooms.length ? (
+          <ScrollView
+            contentContainerStyle={styles.hostRoomSwipeShelf}
+            decelerationRate="fast"
+            disableIntervalMomentum
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            snapToAlignment="start"
+            snapToInterval={ROOM_SWIPE_SNAP_INTERVAL}
+          >
+            {hostedRooms.map((room) => (
               <View key={room._id} style={styles.hostRoomCard}>
                 <RoomCard role="host" room={room} />
                 <View style={styles.inviteStrip}>
@@ -5604,11 +5846,11 @@ function HostTrack({
                   </Pressable>
                 </View>
               </View>
-            ))
-          ) : (
-            <EmptyState icon="shield-outline" text="Create a room to get a shareable invite code." />
-          )}
-        </View>
+            ))}
+          </ScrollView>
+        ) : (
+          <EmptyState icon="shield-outline" text="Create a room to get a shareable invite code." />
+        )}
       </Panel>
 
       <Panel
@@ -7405,6 +7647,44 @@ const styles = StyleSheet.create({
     gap: 7,
     padding: 8,
   },
+  emailComposerAction: {
+    alignItems: "center",
+    backgroundColor: theme.surface,
+    borderColor: theme.border,
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 5,
+    minHeight: 32,
+    paddingHorizontal: 9,
+  },
+  emailComposerActionActive: {
+    backgroundColor: theme.participantDark,
+    borderColor: theme.participantBorder,
+  },
+  emailComposerActionRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "space-between",
+  },
+  emailComposerActionText: {
+    color: theme.text,
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  emailComposerActionTextActive: {
+    color: theme.participant,
+  },
+  emailComposerCount: {
+    color: theme.faint,
+    flexShrink: 1,
+    fontFamily: Platform.select({ default: "monospace" }),
+    fontSize: 9,
+    fontWeight: "800",
+    textAlign: "right",
+    textTransform: "uppercase",
+  },
   emailComposerInput: {
     backgroundColor: "transparent",
     borderWidth: 0,
@@ -7658,6 +7938,11 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     padding: 12,
+    width: ROOM_SWIPE_CARD_WIDTH,
+  },
+  hostRoomSwipeShelf: {
+    gap: ROOM_SWIPE_GAP,
+    paddingBottom: 2,
   },
   input: {
     backgroundColor: theme.backgroundAlt,
@@ -8619,7 +8904,7 @@ const styles = StyleSheet.create({
     width: 70,
   },
   roomShelf: {
-    gap: 10,
+    gap: ROOM_SWIPE_GAP,
     paddingBottom: 2,
   },
   roomShelfHeader: {
@@ -8640,6 +8925,23 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "800",
     marginTop: 2,
+  },
+  roomSwipeDot: {
+    backgroundColor: theme.borderStrong,
+    borderRadius: 999,
+    height: 5,
+    width: 5,
+  },
+  roomSwipeDotActive: {
+    backgroundColor: theme.host,
+    width: 18,
+  },
+  roomSwipeDots: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 5,
+    justifyContent: "center",
+    minHeight: 10,
   },
   roomStatsGrid: {
     flexDirection: "row",
@@ -8755,7 +9057,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     minHeight: 126,
     overflow: "hidden",
-    width: SCREEN_WIDTH - 48,
+    width: ROOM_SWIPE_CARD_WIDTH,
   },
   selectableRoomCardActive: {
     backgroundColor: theme.hostDark,

@@ -4,6 +4,7 @@
     "composite": true,
     "outDir": "dist",
     "rootDir": "../..",
+    "types": ["bun", "node"],
     "paths": {
       "@/*": ["./src/*"]
     },
@@ -11,6 +12,7 @@
     "jsxImportSource": "hono/jsx"
   },
   "include": [
+    "api",
     "src",
     "../../packages/api/src",
     "../../packages/auth/src",

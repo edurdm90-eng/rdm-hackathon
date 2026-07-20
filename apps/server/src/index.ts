@@ -24,39 +24,8 @@ function resolveCorsOrigin(origin: string) {
   return null;
 }
 
-function getCorsOrigin(c: { req: { header: (name: string) => string | undefined } }) {
-  const origin = c.req.header("Origin");
-
-  if (!origin) {
-    return null;
-  }
-
-  return resolveCorsOrigin(origin);
-}
-
-function withCorsHeaders(c: { req: { header: (name: string) => string | undefined } }, response: Response) {
-  const corsOrigin = getCorsOrigin(c);
-
-  if (!corsOrigin) {
-    return response;
-  }
-
-  const headers = new Headers(response.headers);
-  headers.set("Access-Control-Allow-Origin", corsOrigin);
-  headers.set("Access-Control-Allow-Credentials", "true");
-  headers.set("Access-Control-Allow-Headers", "Content-Type,Authorization");
-  headers.set("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-
-  const vary = headers.get("Vary");
-  if (!vary?.toLowerCase().split(",").map((value) => value.trim()).includes("origin")) {
-    headers.set("Vary", vary ? `${vary}, Origin` : "Origin");
-  }
-
-  return new Response(response.body, {
-    headers,
-    status: response.status,
-    statusText: response.statusText,
-  });
+function absoluteServerUrl(path: string) {
+  return `${env.BETTER_AUTH_URL.replace(/\/$/, "")}${path}`;
 }
 
 app.use(logger());
@@ -70,10 +39,7 @@ app.use(
   }),
 );
 
-app.on(["POST", "GET"], "/api/auth/*", async (c) => {
-  const response = await auth.handler(c.req.raw);
-  return withCorsHeaders(c, response);
-});
+app.on(["POST", "GET"], "/api/auth/*", (c) => auth.handler(c.req.raw));
 
 app.get("/metadata/hack-rewards/:rewardId.json", async (c) => {
   const rewardId = c.req.param("rewardId");
@@ -123,7 +89,7 @@ app.get("/metadata/hack-rewards/:rewardId.json", async (c) => {
     description:
       reward.description ||
       `Winner NFT badge issued for ${reward.teamName ?? "an RDM Hack Room"}.`,
-    external_url: new URL(`/metadata/hack-rewards/${rewardId}.json`, env.BETTER_AUTH_URL).toString(),
+    external_url: absoluteServerUrl(`/metadata/hack-rewards/${rewardId}.json`),
     name: reward.title ?? "Winner NFT Badge",
   });
 });
