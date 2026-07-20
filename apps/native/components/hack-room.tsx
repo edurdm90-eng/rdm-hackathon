@@ -177,9 +177,24 @@ const minimumTaskDueOffsetMs = 60_000;
 const walletSyncRetryDelaysMs = [0, 800, 1_600, 3_200, 6_400, 10_000] as const;
 let cachedNativeSessionUser: SessionUser | null = null;
 const syncedWalletKeys = new Set<string>();
+const technicalUiErrorPattern =
+  /blockchain|bundler|entrypoint|gas|on-chain|paymaster|pimlico|prefund|privy|rpc|smart account|smart wallet|transaction hash|useroperation|wallet receipt/i;
 
 function walletProfileValue(value: string | null | undefined, fallback = "Not synced yet") {
   return value && value.trim().length > 0 ? value : fallback;
+}
+
+function userFacingActionError(error: unknown, fallback: string) {
+  if (!(error instanceof Error)) {
+    return fallback;
+  }
+
+  const message = error.message.trim();
+  if (!message || technicalUiErrorPattern.test(message)) {
+    return fallback;
+  }
+
+  return message;
 }
 
 function waitForWalletSyncRetry(delayMs: number) {
@@ -286,7 +301,7 @@ function useSponsoredHackathonTransactions() {
     const smartWalletAddress = (smartWalletClient.account?.address ?? "").toString();
 
     if (!smartWalletAddress) {
-      throw new Error("Privy smart wallet is not ready yet.");
+      throw new Error("Account setup is still finishing. Please try again shortly.");
     }
 
     await rememberPendingChainEvent({
@@ -872,7 +887,13 @@ function ProfileDashboard({ user }: { user: SessionUser }) {
   const networkCount = countNativeNetworkParticipants(hostedRooms, user);
   const role = dashboard.data?.viewerRole ?? "member";
   const embeddedWalletAddress = wallets?.embeddedWalletAddress ?? walletAddress;
-  const walletFallback = isCreatingWallet ? "Creating wallet..." : "Not synced yet";
+  const walletFallback = isCreatingWallet ? "Setting up account..." : "Not synced yet";
+  const accountSetupError = walletError
+    ? userFacingActionError(
+        new Error(walletError),
+        "Account setup is still finishing. Please try again.",
+      )
+    : null;
 
   const handleSignOut = async () => {
     setCachedNativeSessionUser(null);
@@ -931,7 +952,7 @@ function ProfileDashboard({ user }: { user: SessionUser }) {
 
         {dashboard.error ? <ErrorBanner message={dashboard.error.message} /> : null}
         {message ? <StatusBanner message={message.text} tone={message.tone} /> : null}
-        {walletError ? <ErrorBanner message={walletError} /> : null}
+        {accountSetupError ? <ErrorBanner message={accountSetupError} /> : null}
 
         <Panel eyebrow="Account" icon="person-circle-outline" title="Profile" tone="cyan">
           <View style={styles.profileDetails}>
@@ -940,22 +961,22 @@ function ProfileDashboard({ user }: { user: SessionUser }) {
             <ProfileRow label="User ID" value={user.id} />
             <ProfileRow label="Role" value={role} />
             <ProfileRow
-              label="Embedded wallet"
+              label="Login account"
               value={walletProfileValue(embeddedWalletAddress, walletFallback)}
             />
             <ProfileRow
-              label="Smart wallet"
+              label="Rewards account"
               value={walletProfileValue(wallets?.smartWalletAddress, walletFallback)}
             />
             <ProfileRow
-              label="On-chain address"
+              label="Rewards address"
               value={walletProfileValue(wallets?.onchainAddress, walletFallback)}
             />
           </View>
-          {walletError ? (
+          {accountSetupError ? (
             <HackButton
               icon="refresh-outline"
-              label="Retry Wallet"
+              label="Retry Setup"
               onPress={() => void retryCreateWallet()}
               tone="gold"
             />
@@ -1059,9 +1080,9 @@ function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
       setIsCreatingRoomOnchain(true);
 
       if (txHash) {
-        setMessage({ text: "Finishing room sync from confirmed on-chain transaction...", tone: "gold" });
+        setMessage({ text: "Room is being created, please wait.", tone: "gold" });
       } else {
-        setMessage({ text: "Confirming room on-chain with sponsored gas...", tone: "gold" });
+        setMessage({ text: "Room is being created, please wait.", tone: "gold" });
         txHash =
           (await sendContractCalls({
             calls: [makeCreateHackathonCall()],
@@ -1071,11 +1092,11 @@ function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
       }
 
       if (!txHash) {
-        throw new Error("Room blockchain transaction did not return a transaction hash.");
+        throw new Error("Room creation did not finish.");
       }
 
       setPendingRoomCreate({ pendingId, txHash });
-      setMessage({ text: "Creating room after chain confirmation...", tone: "violet" });
+      setMessage({ text: "Room is being created, please wait.", tone: "violet" });
       const room = await createRoom.mutateAsync({
         ...roomForm,
         txHash,
@@ -1085,12 +1106,11 @@ function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
       setPendingRoomCreate(null);
       setRoomForm(emptyRoomForm);
       setCreateRoomModalOpen(false);
-      setMessage({ text: `Created ${room.name} on-chain with invite ${room.inviteCode}`, tone: "gold" });
+      setMessage({ text: `Created ${room.name} with invite ${room.inviteCode}`, tone: "gold" });
       await invalidateDashboard();
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Unable to create the room on-chain.";
-      const retryMessage =
-        "Tap Create Room again to finish sync without sending another transaction.";
+      const errorMessage = userFacingActionError(error, "Unable to create the room.");
+      const retryMessage = "Tap Create Room again to finish setup.";
       setMessage({
         text: txHash ? `${errorMessage} ${retryMessage}` : errorMessage,
         tone: "red",
@@ -1325,9 +1345,10 @@ function HackRoomDetailDashboard({
 
   const approveSubmission = useMutation(
     trpc.hackRoom.completeSubmissionApproval.mutationOptions({
-      onError: (error) => setMessage({ text: error.message, tone: "red" }),
+      onError: (error) =>
+        setMessage({ text: userFacingActionError(error, "Unable to approve proof."), tone: "red" }),
       onSuccess: async () => {
-        setMessage({ text: "Proof verified and XRDM confirmed on-chain", tone: "gold" });
+        setMessage({ text: "Proof verified and XRDM added.", tone: "gold" });
         await invalidateDashboard();
       },
     }),
@@ -1335,9 +1356,10 @@ function HackRoomDetailDashboard({
 
   const selectWinner = useMutation(
     trpc.hackRoom.completeWinnerSelection.mutationOptions({
-      onError: (error) => setMessage({ text: error.message, tone: "red" }),
+      onError: (error) =>
+        setMessage({ text: userFacingActionError(error, "Unable to announce winner."), tone: "red" }),
       onSuccess: async () => {
-        setMessage({ text: "Winner announced and confirmed on-chain", tone: "gold" });
+        setMessage({ text: "Winner announced.", tone: "gold" });
         await invalidateDashboard();
       },
     }),
@@ -1355,21 +1377,24 @@ function HackRoomDetailDashboard({
 
   const prepareReward = useMutation(
     trpc.hackRoom.prepareReward.mutationOptions({
-      onError: (error) => setMessage({ text: error.message, tone: "red" }),
+      onError: (error) =>
+        setMessage({ text: userFacingActionError(error, "Unable to issue reward."), tone: "red" }),
     }),
   );
   const completeReward = useMutation(
     trpc.hackRoom.completeReward.mutationOptions({
-      onError: (error) => setMessage({ text: error.message, tone: "red" }),
+      onError: (error) =>
+        setMessage({ text: userFacingActionError(error, "Unable to issue reward."), tone: "red" }),
       onSuccess: async () => {
-        setMessage({ text: "Reward issued and confirmed on-chain", tone: "gold" });
+        setMessage({ text: "Reward issued.", tone: "gold" });
         await invalidateDashboard();
       },
     }),
   );
   const completeParticipantRegistration = useMutation(
     trpc.hackRoom.completeParticipantRegistration.mutationOptions({
-      onError: (error) => setMessage({ text: error.message, tone: "red" }),
+      onError: (error) =>
+        setMessage({ text: userFacingActionError(error, "Unable to prepare recipients."), tone: "red" }),
     }),
   );
   const issueRewardPending =
@@ -1537,10 +1562,10 @@ function HackRoomDetailDashboard({
     }
 
     if (!input.hackathonId) {
-      throw new Error("Room is not confirmed on-chain yet.");
+      throw new Error("Room setup is still finishing. Please try again shortly.");
     }
 
-    setMessage({ text: "Registering recipient wallets on-chain...", tone: "gold" });
+    setMessage({ text: "Preparing recipients...", tone: "gold" });
     const txHash = await sendContractCalls({
       calls: [
         makeRegisterParticipantsCall({
@@ -1578,7 +1603,7 @@ function HackRoomDetailDashboard({
     setPendingApprovalSubmissionId(submission._id);
     void (async () => {
       try {
-        setMessage({ text: "Preparing on-chain XRDM approval...", tone: "gold" });
+        setMessage({ text: "Verifying proof...", tone: "gold" });
         const plan = await queryClient.fetchQuery(
           trpc.hackRoom.prepareSubmissionApproval.queryOptions({
             submissionId: submission._id,
@@ -1593,7 +1618,7 @@ function HackRoomDetailDashboard({
 
         let txHash: string | undefined;
         if (plan.amount > 0 && plan.hackathonId && plan.recipientAddress) {
-          setMessage({ text: "Sending sponsored XRDM award...", tone: "gold" });
+          setMessage({ text: "Adding XRDM...", tone: "gold" });
           txHash =
             (await sendContractCalls({
               calls: [
@@ -1616,7 +1641,7 @@ function HackRoomDetailDashboard({
         await forgetPendingChainEvent(`submission:${submission._id}:approval:xrdm`);
       } catch (error) {
         setMessage({
-          text: error instanceof Error ? error.message : "Unable to approve on-chain.",
+          text: userFacingActionError(error, "Unable to approve proof."),
           tone: "red",
         });
       } finally {
@@ -1659,7 +1684,7 @@ function HackRoomDetailDashboard({
     setPendingWinnerSubmissionId(submission._id);
     void (async () => {
       try {
-        setMessage({ text: "Preparing winner blockchain confirmation...", tone: "gold" });
+        setMessage({ text: "Announcing winner...", tone: "gold" });
         const plan = await queryClient.fetchQuery(
           trpc.hackRoom.prepareWinnerSelection.queryOptions({
             awardXrdm: award,
@@ -1674,7 +1699,7 @@ function HackRoomDetailDashboard({
         });
 
         if (!plan.hackathonId || !plan.recipientAddress) {
-          throw new Error("Winner wallet is not ready for blockchain confirmation.");
+          throw new Error("Winner profile is not ready yet.");
         }
 
         const calls = [
@@ -1694,7 +1719,7 @@ function HackRoomDetailDashboard({
           );
         }
 
-        setMessage({ text: "Sending sponsored winner transaction...", tone: "gold" });
+        setMessage({ text: "Saving winner...", tone: "gold" });
         const txHash =
           (await sendContractCalls({
             calls,
@@ -1703,7 +1728,7 @@ function HackRoomDetailDashboard({
           })) ?? undefined;
 
         if (!txHash) {
-          throw new Error("Winner blockchain transaction did not return a transaction hash.");
+          throw new Error("Winner confirmation did not finish.");
         }
 
         await selectWinner.mutateAsync({
@@ -1716,7 +1741,7 @@ function HackRoomDetailDashboard({
         await forgetPendingChainEvent(`submission:${submission._id}:winner:chain`);
       } catch (error) {
         setMessage({
-          text: error instanceof Error ? error.message : "Unable to announce winner on-chain.",
+          text: userFacingActionError(error, "Unable to announce winner."),
           tone: "red",
         });
       } finally {
@@ -1792,7 +1817,7 @@ function HackRoomDetailDashboard({
     setPendingRewardKind(kind);
     void (async () => {
       try {
-        setMessage({ text: "Preparing reward blockchain transaction...", tone: "gold" });
+        setMessage({ text: "Issuing reward...", tone: "gold" });
         const prepared = await prepareReward.mutateAsync({
           awardXrdm,
           description: rewardForm.description,
@@ -1836,7 +1861,7 @@ function HackRoomDetailDashboard({
 
         let txHash: string | undefined;
         if (calls.length) {
-          setMessage({ text: "Sending sponsored reward transaction...", tone: "gold" });
+          setMessage({ text: "Saving reward...", tone: "gold" });
           txHash =
             (await sendContractCalls({
               calls,
@@ -1854,7 +1879,7 @@ function HackRoomDetailDashboard({
         setRewardForms((current) => ({ ...current, [kind]: makeEmptyRewardForm() }));
       } catch (error) {
         setMessage({
-          text: error instanceof Error ? error.message : "Unable to issue reward on-chain.",
+          text: userFacingActionError(error, "Unable to issue reward."),
           tone: "red",
         });
       } finally {
@@ -2106,7 +2131,7 @@ function RoomCommandCenter({
                 <View style={styles.compactBusyRow}>
                   <ActivityIndicator color={theme.award} />
                   <Text style={styles.mutedText}>
-                    Room is being created. Confirming on-chain and syncing details.
+                    Room is being created, please wait.
                   </Text>
                 </View>
               ) : null}
@@ -2122,6 +2147,8 @@ function RoomCommandCenter({
               </Field>
               <Field label="Room brief">
                 <HackTextInput
+                  caretHidden={createRoomPending}
+                  editable={!createRoomPending}
                   multiline
                   onChangeText={(value) =>
                     onRoomFormChange((current) => ({ ...current, description: value }))
