@@ -319,18 +319,6 @@ function HostSurface({
 
       {activeTab === "games" ? (
         <ActionScreen title="Games" >
-          <AssignmentComposer
-            assignmentMode={assignmentMode === "game" || assignmentMode === "challenge" ? assignmentMode : "challenge"}
-            createTaskPending={createTaskPending}
-            onAssignmentModeChange={onAssignmentModeChange}
-            onCreateTask={onCreateTask}
-            proofTypes={proofTypes}
-            room={room}
-            sendNotificationPending={sendNotificationPending}
-            setProofTypes={setProofTypes}
-            setTaskForm={setTaskForm}
-            taskForm={taskForm}
-          />
           <MiniGameArena onUseResult={() => undefined} />
         </ActionScreen>
       ) : null}

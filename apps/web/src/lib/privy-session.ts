@@ -4,10 +4,13 @@ const AUTH_STORAGE_KEY_PATTERNS = ["rdm-hack", "privy", "better-auth"];
 const AUTH_COOKIE_PATTERNS = ["better-auth", "rdm-hack", "privy"];
 
 export type AppPrivySessionUser = {
+  embeddedWalletAddress?: string;
   email: string;
   id: string;
   name: string;
+  onchainAddress?: string;
   privyUserId: string;
+  smartWalletAddress?: string;
   walletAddress?: string;
 };
 

@@ -53,7 +53,7 @@ function RoomEntryLink({
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
               <div className="truncate text-[13px] font-semibold text-[#EEE8DE]">{entry.room.name}</div>
-              <p className="mt-1 line-clamp-2 text-xs leading-[18px] text-[#9C9690]">
+              <p className="mt-1 line-clamp-2 text-xs leading-[18px] text-[#B8B0A7]">
                 {entry.room.description || `Hosted by ${entry.room.hostName}`}
               </p>
             </div>
@@ -61,7 +61,7 @@ function RoomEntryLink({
               {entry.role === "host" ? "Host" : "Participant"}
             </Badge>
           </div>
-          <div className="mt-1 font-mono text-[10px] text-[#626058]">
+          <div className="mt-1 font-mono text-[10px] text-[#A8A29A]">
             {entry.room.participants.length} participants - {entry.room.inviteCode}
           </div>
         </div>
@@ -119,31 +119,61 @@ function RoomSwitcher({
 }
 
 function RoomHero({
+  onCopyInvite,
+  onShareInvite,
   role,
   room,
   stats,
 }: {
+  onCopyInvite?: (room: HackRoom) => void;
+  onShareInvite?: (room: HackRoom) => void;
   role: Role;
   room?: HackRoom;
   stats: { participants: number; tasks: number; winners: number };
 }) {
+  const canUseInvite = Boolean(room && role === "host");
+
   return (
     <section className="mb-3 rounded-[11px] border border-[rgba(238,232,222,0.12)] bg-[#141618] px-[18px] py-4">
       <div className="mb-3 flex items-start justify-between gap-3">
         <div>
-          <div className="mb-1 font-mono text-[10px] uppercase tracking-[0.12em] text-[#626058]">
+          <div className="mb-1 font-mono text-[10px] uppercase tracking-[0.12em] text-[#A8A29A]">
             Inside Hack Room
           </div>
           <h1 className="text-[17px] font-extrabold leading-[21px] tracking-normal text-[#EEE8DE]">
             {room?.name ?? "Create or join a room"}
           </h1>
-          <p className="mt-1 text-xs leading-[18px] text-[#626058]">
+          <p className="mt-1 text-xs leading-[18px] text-[#B8B0A7]">
             {room?.description ||
               "Hosts create invite rooms, participants submit proof, and winners receive XRDM records."}
           </p>
         </div>
         <Badge tone={role === "host" ? "violet" : "cyan"}>{role}</Badge>
       </div>
+      {room && canUseInvite ? (
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-[9px] border border-[#1EEAB0] bg-[#061F18] px-3 py-2">
+          <div className="min-w-0">
+            <div className="font-mono text-[10px] uppercase tracking-[0.12em] text-[#7FFFD6]">
+              Invite Code
+            </div>
+            <div className="mt-0.5 font-mono text-[14px] font-extrabold text-[#EEE8DE]">
+              {room.inviteCode}
+            </div>
+          </div>
+          <div className="flex gap-2">
+            {onCopyInvite ? (
+              <IconButton label="Copy invite code" onClick={() => onCopyInvite(room)}>
+                <NativeIcon className="size-4" name="copy-outline" />
+              </IconButton>
+            ) : null}
+            {onShareInvite ? (
+              <IconButton label="Share invite" onClick={() => onShareInvite(room)}>
+                <NativeIcon className="size-4" name="share-outline" />
+              </IconButton>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
       <div className="grid grid-cols-3 gap-2">
         <StatBox label="Participants" value={stats.participants} />
         <StatBox label="Tasks" value={stats.tasks} />

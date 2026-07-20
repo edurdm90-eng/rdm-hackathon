@@ -584,6 +584,7 @@ function AssignmentComposer({
   const isNotification = assignmentMode === "notification";
   const isSpecial = assignmentMode === "special";
   const isGame = assignmentMode === "game";
+  const isChallenge = assignmentMode === "challenge";
   const effectiveProofTypes = isNotification ? [] : normalizeTaskProofTypes(assignmentMode, proofTypes);
   const descriptionLength = taskForm.description.trim().length;
   const dueAtError =
@@ -593,6 +594,28 @@ function AssignmentComposer({
   const minimumDescriptionLength = isNotification
     ? minNotificationMessageLength
     : minAssignmentDescriptionLength;
+  const composerTitle = isNotification
+    ? "Send Notification"
+    : isChallenge
+      ? "Create Spot Challenge"
+      : "Create Assignment";
+  const titleLabel = isNotification
+    ? "Notification Title"
+    : isGame
+      ? "Game Name"
+      : isChallenge
+        ? "Challenge Title"
+        : "Assignment Title";
+  const titlePlaceholder = isNotification
+    ? "Demo check-in"
+    : isChallenge
+      ? "15-minute bug sprint"
+      : "Build a working prototype";
+  const descriptionPlaceholder = isNotification
+    ? "Share a reminder, deadline update, or room-wide nudge."
+    : isChallenge
+      ? "Post a quick live prompt and ask participants for fast proof."
+      : "Submit a functional demo. GitHub and Drive proof are mandatory.";
   const canSubmit =
     room &&
     taskForm.title.trim().length >= 3 &&
@@ -607,7 +630,7 @@ function AssignmentComposer({
     <SectionCard
       badge={isSpecial ? "One participant" : isNotification ? "Room nudge" : "All Participants"}
       eyebrow="Organizer Track"
-      title={isNotification ? "Send Notification" : "Create Assignment"}
+      title={composerTitle}
     >
       <div className="mb-3 grid grid-cols-2 gap-[7px]">
         <TaskKindButton
@@ -648,11 +671,11 @@ function AssignmentComposer({
         }}
       >
         <div className="grid items-start gap-3 sm:grid-cols-2">
-          <Field label={isNotification ? "Notification Title" : isGame ? "Game Name" : "Assignment Title"}>
+          <Field label={titleLabel}>
             <Input
               className="h-10 rounded-[9px] border-[rgba(238,232,222,0.12)] bg-[#0D0F12] text-[13px] text-[#CCC6BA]"
               onChange={(event) => setTaskForm((current) => ({ ...current, title: event.target.value }))}
-              placeholder={isNotification ? "Demo check-in" : "Build a working prototype"}
+              placeholder={titlePlaceholder}
               value={taskForm.title}
             />
           </Field>
@@ -716,11 +739,7 @@ function AssignmentComposer({
         <Field label={isNotification ? "Message" : "Description"}>
           <TextArea
             onChange={(value) => setTaskForm((current) => ({ ...current, description: value }))}
-            placeholder={
-              isNotification
-                ? "Share a reminder, deadline update, or room-wide nudge."
-                : "Submit a functional demo. GitHub and Drive proof are mandatory."
-            }
+            placeholder={descriptionPlaceholder}
             value={taskForm.description}
           />
           <p
@@ -789,7 +808,7 @@ function AssignmentComposer({
           ) : (
             <NativeIcon className="size-4" name="send-outline" />
           )}
-          {isNotification ? "Send Notification" : "Create Assignment"}
+          {composerTitle}
         </Button>
       </form>
     </SectionCard>

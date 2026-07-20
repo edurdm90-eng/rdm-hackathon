@@ -11,6 +11,15 @@ type ContractCall = {
   value: bigint;
 };
 
+type UserOperationReceipt = {
+  receipt?: { transactionHash?: Hex };
+  transactionHash?: Hex;
+};
+
+type WaitForUserOperationReceipt = (args: { hash: Hex }) => Promise<UserOperationReceipt>;
+
+const transactionReceiptTimeoutMs = 180_000;
+
 const polygonAmoyChain = {
   blockExplorers: {
     default: {
@@ -36,10 +45,12 @@ const polygonAmoyChain = {
   testnet: true,
 } as const;
 
-const hackathonPublicClient = createPublicClient({
-  chain: polygonAmoyChain,
-  transport: http(polygonAmoyChain.rpcUrls.default.http[0]),
-});
+const hackathonReceiptClients = polygonAmoyChain.rpcUrls.default.http.map((rpcUrl) =>
+  createPublicClient({
+    chain: polygonAmoyChain,
+    transport: http(rpcUrl),
+  }),
+);
 
 function makeCreateHackathonCall(): ContractCall {
   return {
@@ -53,35 +64,78 @@ function makeCreateHackathonCall(): ContractCall {
 }
 
 async function resolveTransactionHash(input: { client: unknown; hash: Hex }) {
+  const startedAt = Date.now();
+  const logTiming = (stage: string) => {
+    console.info(`[chain-timing] resolve-transaction ${stage} ${Date.now() - startedAt}ms`);
+  };
   const maybeSmartClient = input.client as {
-    waitForUserOperationReceipt?: (args: { hash: Hex }) => Promise<{
-      receipt?: { transactionHash?: Hex };
-      transactionHash?: Hex;
-    }>;
+    waitForUserOperationReceipt?: WaitForUserOperationReceipt;
   };
 
-  if (maybeSmartClient.waitForUserOperationReceipt) {
-    try {
-      const userOperationReceipt = await maybeSmartClient.waitForUserOperationReceipt({
-        hash: input.hash,
-      });
-      const transactionHash =
-        userOperationReceipt.receipt?.transactionHash ?? userOperationReceipt.transactionHash;
+  const waitForDirectTransaction = async () => {
+    logTiming(`direct-receipt-start ${input.hash}`);
+    await firstResolved(
+      hackathonReceiptClients.map((client) => async () => {
+        await client.waitForTransactionReceipt({
+          hash: input.hash,
+          timeout: transactionReceiptTimeoutMs,
+        });
+      }),
+    );
+    logTiming(`direct-receipt-mined ${input.hash}`);
 
-      if (transactionHash) {
-        return transactionHash;
-      }
-    } catch {
-      // Some Privy clients already return the mined transaction hash.
-    }
+    return input.hash;
+  };
+
+  if (!maybeSmartClient.waitForUserOperationReceipt) {
+    return waitForDirectTransaction();
   }
 
-  await hackathonPublicClient.waitForTransactionReceipt({
-    hash: input.hash,
-    timeout: 60_000,
-  });
+  const waitForSmartWalletOperation = async () => {
+    logTiming(`user-operation-receipt-start ${input.hash}`);
+    const userOperationReceipt = await maybeSmartClient.waitForUserOperationReceipt?.({
+      hash: input.hash,
+    });
+    const transactionHash =
+      userOperationReceipt?.receipt?.transactionHash ?? userOperationReceipt?.transactionHash;
 
-  return input.hash;
+    if (!transactionHash) {
+      throw new Error("Smart wallet receipt did not include a transaction hash.");
+    }
+
+    logTiming(`user-operation-receipt-resolved ${transactionHash}`);
+    return transactionHash;
+  };
+
+  // Privy may return either a UserOperation hash or an already-submitted tx hash.
+  // Racing both receipt paths avoids the slow AA receipt wait when the tx hash is already usable.
+  return firstResolved([waitForDirectTransaction, waitForSmartWalletOperation]);
+}
+
+async function firstResolved<T>(tasks: Array<() => Promise<T>>) {
+  return new Promise<T>((resolve, reject) => {
+    const errors: Array<unknown> = [];
+    let pending = tasks.length;
+    let settled = false;
+
+    tasks.forEach((task) => {
+      void task()
+        .then((value) => {
+          if (!settled) {
+            settled = true;
+            resolve(value);
+          }
+        })
+        .catch((error) => {
+          errors.push(error);
+          pending -= 1;
+
+          if (pending === 0 && !settled) {
+            reject(errors[0] ?? new Error("Unable to resolve blockchain transaction hash."));
+          }
+        });
+    });
+  });
 }
 
 export function getHackRoomBlockchainErrorMessage(error: unknown) {

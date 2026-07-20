@@ -23,6 +23,7 @@ import {
   clearPrivySignOut,
   clearStoredPrivySession,
   isPrivySignOutPending,
+  readStoredPrivySession,
   setPrivyAccessToken,
   writeStoredPrivySession,
 } from "@/lib/privy-session";
@@ -56,6 +57,98 @@ function getUserName(user: NonNullable<ReturnType<typeof usePrivy>["user"]>) {
     user.email?.address?.split("@")[0] ??
     "Privy User"
   );
+}
+
+function readRecordString(value: unknown, keys: readonly string[]) {
+  if (typeof value !== "object" || value === null) {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+
+  for (const key of keys) {
+    const candidate = record[key];
+
+    if (typeof candidate === "string" && candidate.trim()) {
+      return candidate.trim();
+    }
+  }
+
+  return null;
+}
+
+function readWalletAddress(wallet: unknown) {
+  return readRecordString(wallet, ["address", "walletAddress"]);
+}
+
+function isEmbeddedWallet(wallet: unknown) {
+  if (typeof wallet !== "object" || wallet === null) {
+    return false;
+  }
+
+  const record = wallet as Record<string, unknown>;
+  const walletClientType = readRecordString(wallet, ["walletClientType", "clientType"])?.toLowerCase();
+  const connectorType = readRecordString(wallet, ["connectorType", "connector"])?.toLowerCase();
+  const walletClient = readRecordString(wallet, ["walletClient"])?.toLowerCase();
+
+  return (
+    walletClientType === "privy" ||
+    walletClientType === "embedded" ||
+    connectorType === "embedded" ||
+    connectorType === "privy" ||
+    walletClient === "privy" ||
+    record.imported === false
+  );
+}
+
+function resolveEmbeddedWalletAddress(wallets: unknown[]) {
+  const embeddedWallet = getEmbeddedConnectedWallet(
+    wallets as Parameters<typeof getEmbeddedConnectedWallet>[0],
+  );
+  const embeddedWalletAddress = readWalletAddress(embeddedWallet);
+
+  if (embeddedWalletAddress) {
+    return embeddedWalletAddress;
+  }
+
+  return wallets
+    .map((wallet) => (isEmbeddedWallet(wallet) ? readWalletAddress(wallet) : null))
+    .find(Boolean) ?? null;
+}
+
+function readSmartWalletAddress(client: unknown) {
+  if (typeof client !== "object" || client === null) {
+    return null;
+  }
+
+  const account = (client as { account?: unknown }).account;
+  return readRecordString(account, ["address"]);
+}
+
+function updateStoredWalletSession(addresses: {
+  embeddedWalletAddress?: string | null;
+  smartWalletAddress?: string | null;
+}) {
+  const session = readStoredPrivySession();
+
+  if (!session) {
+    return;
+  }
+
+  const embeddedWalletAddress = addresses.embeddedWalletAddress ?? session.user.embeddedWalletAddress;
+  const smartWalletAddress = addresses.smartWalletAddress ?? session.user.smartWalletAddress;
+  const displayWalletAddress = smartWalletAddress ?? embeddedWalletAddress ?? session.user.walletAddress;
+
+  writeStoredPrivySession({
+    ...session,
+    user: {
+      ...session.user,
+      embeddedWalletAddress: embeddedWalletAddress ?? undefined,
+      onchainAddress: smartWalletAddress ?? session.user.onchainAddress,
+      smartWalletAddress: smartWalletAddress ?? undefined,
+      walletAddress: displayWalletAddress ?? undefined,
+    },
+  });
 }
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string) {
@@ -101,8 +194,7 @@ function PrivySessionBridge({ children }: { children: ReactNode }) {
   const [walletError, setWalletError] = useState<string | null>(null);
   const isSigningOutRef = useRef(false);
   const signOutRunIdRef = useRef(0);
-  const embeddedWallet = getEmbeddedConnectedWallet(wallets);
-  const walletAddress = embeddedWallet?.address ?? null;
+  const walletAddress = resolveEmbeddedWalletAddress(wallets);
 
   function beginFreshLoginAttempt() {
     signOutRunIdRef.current += 1;
@@ -187,14 +279,21 @@ function PrivySessionBridge({ children }: { children: ReactNode }) {
         );
       }
 
+      if (!exchangeResult.data) {
+        throw new Error("Unable to create a Better Auth session from Privy.");
+      }
+
+      const serverUser = exchangeResult.data.user;
+
       writeStoredPrivySession({
         session: {
-          id: `privy_session_${currentUser.id}`,
+          id: `privy_session_${serverUser.id}`,
         },
         user: {
-          email: getUserEmail(currentUser),
-          id: currentUser.id,
-          name: getUserName(currentUser),
+          email: serverUser.email || getUserEmail(currentUser),
+          embeddedWalletAddress: walletAddress ?? undefined,
+          id: serverUser.id,
+          name: serverUser.name || getUserName(currentUser),
           privyUserId: currentUser.id,
           walletAddress: walletAddress ?? undefined,
         },
@@ -264,6 +363,7 @@ function PrivySessionBridge({ children }: { children: ReactNode }) {
         await syncWallets.mutateAsync({
           embeddedWalletAddress,
         });
+        updateStoredWalletSession({ embeddedWalletAddress });
         await queryClient.invalidateQueries({ queryKey: trpc.hackRoom.dashboard.queryKey() });
       }
 
@@ -289,7 +389,7 @@ function PrivySessionBridge({ children }: { children: ReactNode }) {
             continue;
           }
 
-          smartWalletAddress = (smartWalletClient.account?.address ?? "").toString();
+          smartWalletAddress = readSmartWalletAddress(smartWalletClient) ?? "";
         } catch {
           continue;
         }
@@ -308,6 +408,7 @@ function PrivySessionBridge({ children }: { children: ReactNode }) {
           embeddedWalletAddress,
           smartWalletAddress,
         });
+        updateStoredWalletSession({ embeddedWalletAddress, smartWalletAddress });
         await queryClient.invalidateQueries({ queryKey: trpc.hackRoom.dashboard.queryKey() });
         return;
       }
@@ -428,6 +529,7 @@ export function ClientWebPrivyProvider({ children }: { children: ReactNode }) {
           ethereum: {
             createOnLogin: "users-without-wallets",
           },
+          showWalletUIs: false,
         },
         loginMethods: ["email", "google"],
         supportedChains: [polygonAmoyChain],

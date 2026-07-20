@@ -79,9 +79,8 @@ export default function HackRoomPwa({
   const [awardBySubmission, setAwardBySubmission] = useState<Record<string, string>>({});
   const [rewardForm, setRewardForm] = useState(makeEmptyRewardForm);
   const [message, setMessage] = useState<{ text: string; tone: Tone } | null>(null);
-  const [isCreatingRoomOnchain, setIsCreatingRoomOnchain] = useState(false);
   const { createHackathonOnchain } = useHackRoomBlockchain();
-  const { isCreatingWallet, walletAddress, walletError } = usePrivyWallet();
+  const { walletAddress, walletError } = usePrivyWallet();
 
   const hostedRooms = dashboard.data?.hostedRooms ?? [];
   const joinedRooms = dashboard.data?.joinedRooms ?? [];
@@ -162,7 +161,11 @@ export default function HackRoomPwa({
     });
   }, [navigate, roomId, roomTab, selectedRoom]);
 
-
+  useEffect(() => {
+    if (roomTab === "spot-challenge" && assignmentMode !== "challenge") {
+      handleAssignmentModeChange("challenge");
+    }
+  }, [assignmentMode, roomTab]);
 
   useEffect(() => {
     if (!selectedTaskId || !roomTasks.some((task) => task._id === selectedTaskId)) {
@@ -180,7 +183,15 @@ export default function HackRoomPwa({
       onSuccess: async (room) => {
         setRoomForm(emptyRoomForm);
         setActiveRoomId(room._id);
-        showMessage(`Created ${room.name} with invite ${room.inviteCode}`, "violet");
+        showMessage(`Created ${room.name} with invite ${room.inviteCode}. Syncing on-chain...`, "violet");
+        await invalidateDashboard();
+      },
+    }),
+  );
+  const completeRoomOnchainCreate = useMutation(
+    trpc.hackRoom.completeRoomOnchainCreate.mutationOptions({
+      onSuccess: async (room) => {
+        showMessage(`${room.name} is confirmed on-chain.`, "gold");
         await invalidateDashboard();
       },
     }),
@@ -198,7 +209,7 @@ export default function HackRoomPwa({
     }),
   );
 
-  const createRoomPending = createRoom.isPending || isCreatingRoomOnchain || isCreatingWallet;
+  const createRoomPending = createRoom.isPending;
 
   async function handleCreateRoom() {
     if (!roomForm.name.trim() || createRoomPending) {
@@ -210,31 +221,32 @@ export default function HackRoomPwa({
       return;
     }
 
-    if (walletError) {
-      showMessage(walletError, "red");
-      return;
-    }
-
-    if (!walletAddress) {
-      showMessage("Privy wallet is still getting ready. Wait a moment and try again.", "gold");
-      return;
-    }
-
     try {
-      setIsCreatingRoomOnchain(true);
-      showMessage("Confirming room on-chain with Privy smart wallet...", "gold");
-      const txHash = await createHackathonOnchain();
-      showMessage("Creating room after chain confirmation...", "violet");
-      const room = await createRoom.mutateAsync({
-        ...roomForm,
-        txHash,
-      });
+      const room = await createRoom.mutateAsync(roomForm);
       setActiveRoomId(room._id);
+
+      if (walletError || !walletAddress) {
+        showMessage(`${room.name} is created. Wallet is not ready, so on-chain sync will need a retry later.`, "gold");
+        return;
+      }
+
+      void (async () => {
+        try {
+          showMessage(`${room.name} created. Syncing on-chain in background...`, "gold");
+          const txHash = await createHackathonOnchain();
+          showMessage("Transaction mined. Verifying event and saving room...", "violet");
+          await completeRoomOnchainCreate.mutateAsync({
+            roomId: room._id,
+            txHash,
+          });
+        } catch (error) {
+          const errorMessage = getFriendlyHackRoomErrorMessage(new Error(getHackRoomBlockchainErrorMessage(error)));
+          showMessage(`${room.name} is created, but on-chain sync failed: ${errorMessage}`, "red");
+        }
+      })();
     } catch (error) {
-      const errorMessage = getFriendlyHackRoomErrorMessage(new Error(getHackRoomBlockchainErrorMessage(error)));
+      const errorMessage = getFriendlyHackRoomErrorMessage(error);
       showMessage(errorMessage, "red");
-    } finally {
-      setIsCreatingRoomOnchain(false);
     }
   }
 
@@ -524,11 +536,21 @@ export default function HackRoomPwa({
   }
 
   async function copyInviteCode(room: HackRoom) {
+    if (room.onchainStatus !== "confirmed") {
+      showMessage("Room is created. Wait for on-chain sync before sharing the invite.", "gold");
+      return;
+    }
+
     await navigator.clipboard?.writeText(room.inviteCode);
     showMessage(`Copied ${room.inviteCode}`, "cyan");
   }
 
   async function shareInvite(room: HackRoom) {
+    if (room.onchainStatus !== "confirmed") {
+      showMessage("Room is created. Wait for on-chain sync before sharing the invite.", "gold");
+      return;
+    }
+
     const message = `Join ${room.name} in XRDM Hack Room with invite code ${room.inviteCode}`;
     if (navigator.share) {
       await navigator.share({ text: message, title: `${room.name} invite` });
@@ -575,6 +597,8 @@ export default function HackRoomPwa({
 
         {isStandaloneWallet ? null : (
           <RoomHero
+            onCopyInvite={role === "host" ? copyInviteCode : undefined}
+            onShareInvite={role === "host" ? shareInvite : undefined}
             role={role}
             room={selectedRoom}
             stats={{

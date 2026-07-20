@@ -570,6 +570,8 @@ function Avatar({ name, tone }: { name: string; tone: "cyan" | "violet" }) {
 
 function RoomRow({ onClick, role, room }: { onClick?: () => void; role: Role; room: HackRoom }) {
   const Component = onClick ? "button" : "div";
+  const isPendingOnchain = role === "host" && room.onchainStatus !== "confirmed";
+
   return (
     <Component
       className={`flex w-full items-start gap-3 rounded-[9px] border p-3 text-left transition ${
@@ -583,11 +585,12 @@ function RoomRow({ onClick, role, room }: { onClick?: () => void; role: Role; ro
       <Avatar name={room.name} tone={role === "host" ? "violet" : "cyan"} />
       <div className="min-w-0 flex-1">
         <div className="truncate text-[13px] font-semibold text-[#EEE8DE]">{room.name}</div>
-        <p className="mt-1 line-clamp-2 text-xs leading-[18px] text-[#9C9690]">
+        <p className="mt-1 line-clamp-2 text-xs leading-[18px] text-[#B8B0A7]">
           {room.description || `Hosted by ${room.hostName}`}
         </p>
-        <div className="mt-1 font-mono text-[10px] text-[#626058]">
+        <div className="mt-1 font-mono text-[10px] text-[#A8A29A]">
           {room.participants.length} participants - {room.inviteCode}
+          {isPendingOnchain ? <span className="text-[#F0C040]"> - Syncing on-chain</span> : null}
         </div>
       </div>
     </Component>

@@ -164,6 +164,27 @@ type PendingRoomCreate = {
   txHash: string;
 };
 
+type SponsoredTransactionStage = "sending" | "submitted" | "mined";
+
+function createSponsoredTransactionStatusHandler(
+  setMessage: (message: { text: string; tone: Tone }) => void,
+  minedText = "Transaction mined.",
+) {
+  return (stage: SponsoredTransactionStage) => {
+    if (stage === "sending") {
+      setMessage({ text: "Sending sponsored transaction...", tone: "gold" });
+    }
+
+    if (stage === "submitted") {
+      setMessage({ text: "Waiting for transaction mining...", tone: "gold" });
+    }
+
+    if (stage === "mined") {
+      setMessage({ text: minedText, tone: "cyan" });
+    }
+  };
+}
+
 const emptyTaskForm = {
   assignedToEmail: "",
   description: "",
@@ -273,12 +294,18 @@ function useSponsoredHackathonTransactions() {
 
   const sendContractCalls = async (input: {
     calls: Array<ContractCall>;
+    onStatus?: (stage: SponsoredTransactionStage, hash?: string) => void;
     pendingId: string;
     pendingKind: string;
   }) => {
     if (!input.calls.length) {
       return null;
     }
+
+    const startedAt = Date.now();
+    const logTiming = (stage: string) => {
+      console.info(`[chain-timing] ${input.pendingKind}:${input.pendingId} ${stage} ${Date.now() - startedAt}ms`);
+    };
 
     const smartWalletClient = await getClientForChain({
       chainId: polygonAmoyDeployment.chainId,
@@ -294,13 +321,20 @@ function useSponsoredHackathonTransactions() {
       kind: input.pendingKind,
     });
 
+    input.onStatus?.("sending");
+    logTiming("sending-sponsored-transaction");
     const operationHash = await smartWalletClient.sendTransaction({
       calls: input.calls,
     } as never);
+    input.onStatus?.("submitted", operationHash);
+    logTiming(`send-transaction-returned ${operationHash}`);
+
     const txHash = await resolveTransactionHash({
       client: smartWalletClient,
       hash: operationHash,
     });
+    input.onStatus?.("mined", txHash);
+    logTiming(`transaction-mined ${txHash}`);
 
     await rememberPendingChainEvent({
       id: input.pendingId,
@@ -1061,10 +1095,11 @@ function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
       if (txHash) {
         setMessage({ text: "Finishing room sync from confirmed on-chain transaction...", tone: "gold" });
       } else {
-        setMessage({ text: "Confirming room on-chain with sponsored gas...", tone: "gold" });
+        setMessage({ text: "Sending sponsored transaction...", tone: "gold" });
         txHash =
           (await sendContractCalls({
             calls: [makeCreateHackathonCall()],
+            onStatus: createSponsoredTransactionStatusHandler(setMessage),
             pendingId,
             pendingKind: "room_created",
           })) ?? undefined;
@@ -1075,11 +1110,16 @@ function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
       }
 
       setPendingRoomCreate({ pendingId, txHash });
-      setMessage({ text: "Creating room after chain confirmation...", tone: "violet" });
+      const verifyStartedAt = Date.now();
+      console.info(`[chain-timing] room_created:${pendingId} verifying-event-start`);
+      setMessage({ text: "Verifying event and saving room...", tone: "violet" });
       const room = await createRoom.mutateAsync({
         ...roomForm,
         txHash,
       });
+      console.info(
+        `[chain-timing] room_created:${pendingId} backend-verified-and-saved ${Date.now() - verifyStartedAt}ms`,
+      );
 
       await forgetPendingChainEvent(pendingId);
       setPendingRoomCreate(null);
@@ -1548,6 +1588,10 @@ function HackRoomDetailDashboard({
           participantAddresses: input.registration.map((entry) => entry.address),
         }),
       ],
+      onStatus: createSponsoredTransactionStatusHandler(
+        setMessage,
+        "Participant registration transaction mined.",
+      ),
       pendingId: `${input.pendingId}:register`,
       pendingKind: "participants_registered",
     });
@@ -1556,11 +1600,19 @@ function HackRoomDetailDashboard({
       return;
     }
 
+    const verifyStartedAt = Date.now();
+    console.info(`[chain-timing] participants_registered:${input.pendingId}:register verifying-event-start`);
+    setMessage({ text: "Verifying event and saving registration...", tone: "violet" });
     await completeParticipantRegistration.mutateAsync({
       participantIds: input.registration.map((entry) => entry.userId),
       roomId: input.roomId,
       txHash,
     });
+    console.info(
+      `[chain-timing] participants_registered:${input.pendingId}:register backend-verified-and-saved ${
+        Date.now() - verifyStartedAt
+      }ms`,
+    );
     await forgetPendingChainEvent(`${input.pendingId}:register`);
   };
 
@@ -1603,16 +1655,28 @@ function HackRoomDetailDashboard({
                   recipientAddresses: [plan.recipientAddress],
                 }),
               ],
+              onStatus: createSponsoredTransactionStatusHandler(
+                setMessage,
+                "XRDM award transaction mined.",
+              ),
               pendingId: `submission:${submission._id}:approval:xrdm`,
               pendingKind: "submission_xrdm_awarded",
             })) ?? undefined;
         }
 
+        const verifyStartedAt = Date.now();
+        console.info(`[chain-timing] submission_xrdm_awarded:submission:${submission._id}:approval verifying-event-start`);
+        setMessage({ text: "Verifying event and saving approval...", tone: "violet" });
         await approveSubmission.mutateAsync({
           hostFeedback: feedback,
           submissionId: submission._id,
           txHash,
         });
+        console.info(
+          `[chain-timing] submission_xrdm_awarded:submission:${submission._id}:approval backend-verified-and-saved ${
+            Date.now() - verifyStartedAt
+          }ms`,
+        );
         await forgetPendingChainEvent(`submission:${submission._id}:approval:xrdm`);
       } catch (error) {
         setMessage({
@@ -1698,6 +1762,10 @@ function HackRoomDetailDashboard({
         const txHash =
           (await sendContractCalls({
             calls,
+            onStatus: createSponsoredTransactionStatusHandler(
+              setMessage,
+              "Winner transaction mined.",
+            ),
             pendingId: `submission:${submission._id}:winner:chain`,
             pendingKind: "winner_noted",
           })) ?? undefined;
@@ -1706,6 +1774,9 @@ function HackRoomDetailDashboard({
           throw new Error("Winner blockchain transaction did not return a transaction hash.");
         }
 
+        const verifyStartedAt = Date.now();
+        console.info(`[chain-timing] winner_noted:submission:${submission._id}:winner verifying-event-start`);
+        setMessage({ text: "Verifying event and saving winner...", tone: "violet" });
         await selectWinner.mutateAsync({
           awardTxHash: award > 0 ? txHash : undefined,
           awardXrdm: award,
@@ -1713,6 +1784,11 @@ function HackRoomDetailDashboard({
           submissionId: submission._id,
           winnerTxHash: txHash,
         });
+        console.info(
+          `[chain-timing] winner_noted:submission:${submission._id}:winner backend-verified-and-saved ${
+            Date.now() - verifyStartedAt
+          }ms`,
+        );
         await forgetPendingChainEvent(`submission:${submission._id}:winner:chain`);
       } catch (error) {
         setMessage({
@@ -1840,16 +1916,28 @@ function HackRoomDetailDashboard({
           txHash =
             (await sendContractCalls({
               calls,
+              onStatus: createSponsoredTransactionStatusHandler(
+                setMessage,
+                "Reward transaction mined.",
+              ),
               pendingId: `reward:${prepared.reward._id}:chain`,
               pendingKind: kind,
             })) ?? undefined;
         }
 
+        const verifyStartedAt = Date.now();
+        console.info(`[chain-timing] ${kind}:reward:${prepared.reward._id} verifying-event-start`);
+        setMessage({ text: "Verifying event and saving reward...", tone: "violet" });
         await completeReward.mutateAsync({
           nftTxHash: prepared.onchain.requiresNft ? txHash : undefined,
           rewardId: prepared.reward._id,
           xrdmTxHash: prepared.onchain.requiresXrdm ? txHash : undefined,
         });
+        console.info(
+          `[chain-timing] ${kind}:reward:${prepared.reward._id} backend-verified-and-saved ${
+            Date.now() - verifyStartedAt
+          }ms`,
+        );
         await forgetPendingChainEvent(`reward:${prepared.reward._id}:chain`);
         setRewardForms((current) => ({ ...current, [kind]: makeEmptyRewardForm() }));
       } catch (error) {

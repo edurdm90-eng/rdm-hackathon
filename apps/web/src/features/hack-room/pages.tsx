@@ -56,6 +56,7 @@ export function HackRoomHomePwa({ user }: { user: SessionUser }) {
   const recentSubmissions = dashboard.data?.mySubmissions ?? [];
   const allRooms = useMemo(() => buildRoomEntries(hostedRooms, joinedRooms), [hostedRooms, joinedRooms]);
   const firstRoom = allRooms[0]?.room;
+  const hostRoom = hostedRooms[0] ?? firstRoom;
   const walletRoom = joinedRooms[0] ?? firstRoom;
 
   function openRoomOrShelf(room = firstRoom, tab: RoomTabSegment = "overview") {
@@ -115,21 +116,21 @@ export function HackRoomHomePwa({ user }: { user: SessionUser }) {
             icon: AssignmentsIcon,
             label: "Assignments",
             meta: "Due and past work",
-            onClick: () => navigate({ to: "/hack-room" }),
+            onClick: () => openRoomOrShelf(hostRoom, "assignments"),
             tone: "cyan",
           },
           {
             icon: ChallengeIcon,
             label: "Spot Challenge",
             meta: "Live room prompts",
-            onClick: () => navigate({ to: "/hack-room" }),
+            onClick: () => openRoomOrShelf(hostRoom, "spot-challenge"),
             tone: "orange",
           },
           {
             icon: GamesIcon,
             label: "Games",
             meta: "Play mini games",
-            onClick: () => navigate({ to: "/hack-room" }),
+            onClick: () => navigate({ to: "/games" }),
             tone: "lime",
           },
           {
@@ -172,7 +173,6 @@ export function HackRoomRoomsPwa({ user: _user }: { user: SessionUser }) {
   const [roomForm, setRoomForm] = useState(emptyRoomForm);
   const [inviteCode, setInviteCode] = useState("");
   const [message, setMessage] = useState<{ text: string; tone: Tone } | null>(null);
-  const [isCreatingRoomOnchain, setIsCreatingRoomOnchain] = useState(false);
   const { createHackathonOnchain } = useHackRoomBlockchain();
   const { isCreatingWallet, walletAddress, walletError } = usePrivyWallet();
 
@@ -193,7 +193,15 @@ export function HackRoomRoomsPwa({ user: _user }: { user: SessionUser }) {
       onError: (error) => setMessage({ text: getFriendlyHackRoomErrorMessage(error), tone: "red" }),
       onSuccess: async (room) => {
         setRoomForm(emptyRoomForm);
-        setMessage({ text: `Created ${room.name} with invite ${room.inviteCode}`, tone: "violet" });
+        setMessage({ text: `Created ${room.name} with invite ${room.inviteCode}. Syncing on-chain...`, tone: "violet" });
+        await invalidateDashboard();
+      },
+    }),
+  );
+  const completeRoomOnchainCreate = useMutation(
+    trpc.hackRoom.completeRoomOnchainCreate.mutationOptions({
+      onSuccess: async (room) => {
+        setMessage({ text: `${room.name} is confirmed on-chain.`, tone: "gold" });
         await invalidateDashboard();
       },
     }),
@@ -210,7 +218,7 @@ export function HackRoomRoomsPwa({ user: _user }: { user: SessionUser }) {
     }),
   );
 
-  const createRoomPending = createRoom.isPending || isCreatingRoomOnchain || isCreatingWallet;
+  const createRoomPending = createRoom.isPending;
 
   async function handleCreateRoom() {
     if (!roomForm.name.trim() || createRoomPending) {
@@ -225,34 +233,46 @@ export function HackRoomRoomsPwa({ user: _user }: { user: SessionUser }) {
       return;
     }
 
-    if (walletError) {
-      setMessage({ text: walletError, tone: "red" });
-      return;
-    }
-
-    if (!walletAddress) {
-      setMessage({ text: "Privy wallet is still getting ready. Wait a moment and try again.", tone: "gold" });
-      return;
-    }
-
     try {
-      setIsCreatingRoomOnchain(true);
-      setMessage({ text: "Confirming room on-chain with Privy smart wallet...", tone: "gold" });
-      const txHash = await createHackathonOnchain();
-      setMessage({ text: "Creating room after chain confirmation...", tone: "violet" });
-      await createRoom.mutateAsync({
-        ...roomForm,
-        txHash,
-      });
+      const room = await createRoom.mutateAsync(roomForm);
+
+      if (walletError || !walletAddress) {
+        setMessage({
+          text: `${room.name} is created. Wallet is not ready, so on-chain sync will need a retry later.`,
+          tone: "gold",
+        });
+        return;
+      }
+
+      void (async () => {
+        try {
+          setMessage({ text: `${room.name} created. Syncing on-chain in background...`, tone: "gold" });
+          const txHash = await createHackathonOnchain();
+          setMessage({ text: "Transaction mined. Verifying event and saving room...", tone: "violet" });
+          await completeRoomOnchainCreate.mutateAsync({
+            roomId: room._id,
+            txHash,
+          });
+        } catch (error) {
+          const errorMessage = getFriendlyHackRoomErrorMessage(new Error(getHackRoomBlockchainErrorMessage(error)));
+          setMessage({
+            text: `${room.name} is created, but on-chain sync failed: ${errorMessage}`,
+            tone: "red",
+          });
+        }
+      })();
     } catch (error) {
-      const errorMessage = getFriendlyHackRoomErrorMessage(new Error(getHackRoomBlockchainErrorMessage(error)));
+      const errorMessage = getFriendlyHackRoomErrorMessage(error);
       setMessage({ text: errorMessage, tone: "red" });
-    } finally {
-      setIsCreatingRoomOnchain(false);
     }
   }
 
   async function shareInvite(room: HackRoom) {
+    if (room.onchainStatus !== "confirmed") {
+      setMessage({ text: "Room is created. Wait for on-chain sync before sharing the invite.", tone: "gold" });
+      return;
+    }
+
     const text = `Join ${room.name} in XRDM Hack Room with invite code ${room.inviteCode}`;
     if (navigator.share) {
       await navigator.share({ text, title: `${room.name} invite` });
@@ -306,10 +326,23 @@ export function HackRoomRoomsPwa({ user: _user }: { user: SessionUser }) {
 export function HackRoomProfilePwa({ user }: { user: SessionUser }) {
   const navigate = useNavigate();
   const { logoutAndRedirect } = usePrivyAuth();
+  const {
+    isCreatingWallet,
+    walletAddress: liveWalletAddress,
+    walletError,
+  } = usePrivyWallet();
   const dashboard = useQuery(trpc.hackRoom.dashboard.queryOptions());
   const stats = dashboard.data?.stats;
+  const syncedWallets = dashboard.data?.wallets;
   const hostedRooms = dashboard.data?.hostedRooms ?? [];
   const networkCount = countUniqueNetworkParticipants(hostedRooms, user.id);
+  const embeddedWalletAddress =
+    user.embeddedWalletAddress ??
+    syncedWallets?.embeddedWalletAddress ??
+    liveWalletAddress ??
+    user.walletAddress;
+  const smartWalletAddress =
+    user.smartWalletAddress ?? user.onchainAddress ?? syncedWallets?.smartWalletAddress ?? syncedWallets?.onchainAddress;
 
   function handleSignOut() {
     void logoutAndRedirect();
@@ -333,12 +366,19 @@ export function HackRoomProfilePwa({ user }: { user: SessionUser }) {
       </section>
 
       {dashboard.error ? <StatusBanner message={dashboard.error.message} tone="red" /> : null}
+      {walletError ? <StatusBanner message={walletError} tone="red" /> : null}
+      {isCreatingWallet ? (
+        <StatusBanner message="Creating Privy wallet. Wait a moment..." tone="gold" />
+      ) : null}
 
       <SectionCard badge="Account" eyebrow="Profile" title="Account Details">
         <ProfileField label="Name" value={user.name} />
         <ProfileField label="Email" value={user.email} />
-        {user.walletAddress ? (
-          <ProfileField label="Wallet" value={shortWalletAddress(user.walletAddress)} tone="gold" />
+        {embeddedWalletAddress ? (
+          <ProfileField label="Embedded Wallet" value={shortWalletAddress(embeddedWalletAddress)} tone="gold" />
+        ) : null}
+        {smartWalletAddress ? (
+          <ProfileField label="Smart Wallet" value={shortWalletAddress(smartWalletAddress)} tone="cyan" />
         ) : null}
         <Button
           className="mt-3 h-10 w-full rounded-[10px] border-[#FF5A4A] bg-[#280A08] text-[#FF5A4A] hover:bg-[#280A08]/80"

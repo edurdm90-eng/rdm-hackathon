@@ -32,9 +32,12 @@ export type SubmissionStatus = DashboardData["mySubmissions"][number]["status"];
 export type GameType = "memory_match" | "breath_timer" | "quick_maths";
 export type Tone = "cyan" | "violet" | "gold" | "orange" | "red" | "lime" | "sky";
 export type SessionUser = {
+  embeddedWalletAddress?: string;
   email: string;
   id: string;
   name: string;
+  onchainAddress?: string;
+  smartWalletAddress?: string;
   walletAddress?: string;
 };
 export type ViewerRole = DashboardData["viewerRole"];
@@ -57,6 +60,7 @@ export type RoomTabSegment =
   | "overview"
   | "profile"
   | "submit"
+  | "spot-challenge"
   | "verify"
   | "wallet";
 
@@ -170,6 +174,7 @@ const hostTabsBySegment: Partial<Record<string, HostTab>> = {
   overview: "assign",
   profile: "profile",
   rewards: "rewards",
+  "spot-challenge": "assign",
   verify: "verify",
 };
 
