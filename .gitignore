@@ -56,3 +56,9 @@ temp
 reference
 
 .vercel
+
+
+# Agent skills
+.agents/
+skills.json
+skills-lock.json
