@@ -1190,7 +1190,9 @@ function HackRoomDetailDashboard({
   const [awardBySubmission, setAwardBySubmission] = useState<Record<string, string>>({});
   const [createdTaskCardId, setCreatedTaskCardId] = useState("");
   const [pendingRewardKind, setPendingRewardKind] = useState<RewardKind | null>(null);
+  const [pendingApprovalSubmissionId, setPendingApprovalSubmissionId] = useState("");
   const [pendingWinnerSubmissionId, setPendingWinnerSubmissionId] = useState("");
+  const approvalInFlightRef = useRef(false);
   const rewardIssueInFlightRef = useRef(false);
   const winnerSelectionInFlightRef = useRef(false);
 
@@ -1372,12 +1374,14 @@ function HackRoomDetailDashboard({
   );
   const issueRewardPending =
     Boolean(pendingRewardKind) || prepareReward.isPending || completeReward.isPending;
+  const approveSubmissionPending =
+    Boolean(pendingApprovalSubmissionId) || approveSubmission.isPending;
   const selectWinnerPending = Boolean(pendingWinnerSubmissionId) || selectWinner.isPending;
 
   const isBusy =
     createTask.isPending ||
     submitProof.isPending ||
-    approveSubmission.isPending ||
+    approveSubmissionPending ||
     selectWinnerPending ||
     returnSubmission.isPending ||
     issueRewardPending ||
@@ -1561,11 +1565,17 @@ function HackRoomDetailDashboard({
   };
 
   const handleApproveSubmission = (submission: HackSubmission) => {
+    if (approvalInFlightRef.current || approveSubmissionPending) {
+      return;
+    }
+
     const feedback =
       feedbackBySubmission[submission._id] ||
       submission.hostFeedback ||
       "Verified. Clear proof and solid contribution.";
 
+    approvalInFlightRef.current = true;
+    setPendingApprovalSubmissionId(submission._id);
     void (async () => {
       try {
         setMessage({ text: "Preparing on-chain XRDM approval...", tone: "gold" });
@@ -1609,6 +1619,9 @@ function HackRoomDetailDashboard({
           text: error instanceof Error ? error.message : "Unable to approve on-chain.",
           tone: "red",
         });
+      } finally {
+        approvalInFlightRef.current = false;
+        setPendingApprovalSubmissionId("");
       }
     })();
   };
@@ -1901,7 +1914,7 @@ function HackRoomDetailDashboard({
             activeRoomTab={activeRoomTab}
             assignmentMode={assignmentMode}
             approvedSubmissions={approvedHostSubmissions}
-            approveSubmissionPending={approveSubmission.isPending}
+            approveSubmissionPending={approveSubmissionPending}
             awardBySubmission={awardBySubmission}
             createdTaskCardId={createdTaskCardId}
             createTaskPending={createTask.isPending}
@@ -1921,6 +1934,7 @@ function HackRoomDetailDashboard({
             onSelectWinner={handleSelectWinner}
             onShareRoom={handleShareCode}
             onSubmitProof={handleSubmitProof}
+            pendingApprovalSubmissionId={pendingApprovalSubmissionId}
             pendingSubmissions={pendingHostSubmissions}
             proofTypes={proofTypes}
             returnSubmissionPending={returnSubmission.isPending}
@@ -2052,7 +2066,11 @@ function RoomCommandCenter({
       {canCreateRoom ? (
         <Modal
           animationType="fade"
-          onRequestClose={() => onSetCreateRoomModalOpen(false)}
+          onRequestClose={() => {
+            if (!createRoomPending) {
+              onSetCreateRoomModalOpen(false);
+            }
+          }}
           transparent
           visible={createRoomModalOpen}
         >
@@ -2070,14 +2088,28 @@ function RoomCommandCenter({
                 <Pressable
                   accessibilityLabel="Close create room"
                   accessibilityRole="button"
+                  disabled={createRoomPending}
                   onPress={() => onSetCreateRoomModalOpen(false)}
-                  style={({ pressed }) => [styles.modalCloseButton, pressed && styles.pressed]}
+                  style={({ pressed }) => [
+                    styles.modalCloseButton,
+                    createRoomPending && styles.disabled,
+                    pressed && !createRoomPending && styles.pressed,
+                  ]}
                 >
                   <Ionicons name="close-outline" size={22} color={theme.text} />
                 </Pressable>
               </View>
 
               <StatusPill label="Host owns room" tone="violet" />
+
+              {createRoomPending ? (
+                <View style={styles.compactBusyRow}>
+                  <ActivityIndicator color={theme.award} />
+                  <Text style={styles.mutedText}>
+                    Room is being created. Confirming on-chain and syncing details.
+                  </Text>
+                </View>
+              ) : null}
 
               <Field label="Room name">
                 <HackTextInput
@@ -2109,7 +2141,7 @@ function RoomCommandCenter({
                 <HackButton
                   disabled={!roomForm.name.trim() || createRoomPending}
                   icon="add-outline"
-                  label="Create Room"
+                  label={createRoomPending ? "Creating Room" : "Create Room"}
                   loading={createRoomPending}
                   onPress={onCreateRoom}
                   tone="violet"
@@ -2295,6 +2327,7 @@ function RoomWorkspace({
   onSelectWinner,
   onShareRoom,
   onSubmitProof,
+  pendingApprovalSubmissionId,
   pendingRewardKind,
   pendingSubmissions,
   pendingWinnerSubmissionId,
@@ -2349,6 +2382,7 @@ function RoomWorkspace({
   onSelectWinner: (submission: HackSubmission) => void;
   onShareRoom: (room: HackRoom) => void;
   onSubmitProof: () => void;
+  pendingApprovalSubmissionId: string;
   pendingRewardKind: RewardKind | null;
   pendingSubmissions: DashboardData["hostSubmissions"];
   pendingWinnerSubmissionId: string;
@@ -2435,6 +2469,7 @@ function RoomWorkspace({
           onSendRoomNotification={onSendRoomNotification}
           onSelectWinner={onSelectWinner}
           onShareRoom={onShareRoom}
+          pendingApprovalSubmissionId={pendingApprovalSubmissionId}
           pendingRewardKind={pendingRewardKind}
           pendingSubmissions={pendingSubmissions}
           pendingWinnerSubmissionId={pendingWinnerSubmissionId}
@@ -2500,6 +2535,7 @@ function HostRoomWorkspace({
   onSendRoomNotification,
   onSelectWinner,
   onShareRoom,
+  pendingApprovalSubmissionId,
   pendingRewardKind,
   pendingSubmissions,
   pendingWinnerSubmissionId,
@@ -2543,6 +2579,7 @@ function HostRoomWorkspace({
   onSendRoomNotification: () => void;
   onSelectWinner: (submission: HackSubmission) => void;
   onShareRoom: (room: HackRoom) => void;
+  pendingApprovalSubmissionId: string;
   pendingRewardKind: RewardKind | null;
   pendingSubmissions: DashboardData["hostSubmissions"];
   pendingWinnerSubmissionId: string;
@@ -2769,28 +2806,32 @@ function HostRoomWorkspace({
         >
           <View style={styles.listStack}>
             {pendingSubmissions.length ? (
-              pendingSubmissions.map((submission) => (
-                <SubmissionReviewCard
-                  approveSubmissionPending={approveSubmissionPending}
-                  feedback={
-                    feedbackBySubmission[submission._id] ??
-                    submission.hostFeedback ??
-                    "Verified. Clear proof and solid contribution."
-                  }
-                  key={submission._id}
-                  mode="review"
-                  onApprove={() => onApproveSubmission(submission)}
-                  onFeedbackChange={(value) =>
-                    setFeedbackBySubmission((current) => ({
-                      ...current,
-                      [submission._id]: value,
-                    }))
-                  }
-                  onReturn={() => onReturnSubmission(submission)}
-                  returnSubmissionPending={returnSubmissionPending}
-                  submission={submission}
-                />
-              ))
+              pendingSubmissions.map((submission) => {
+                const approvalButtonLoading = pendingApprovalSubmissionId === submission._id;
+                return (
+                  <SubmissionReviewCard
+                    approveSubmissionDisabled={approveSubmissionPending}
+                    approveSubmissionLoading={approvalButtonLoading}
+                    feedback={
+                      feedbackBySubmission[submission._id] ??
+                      submission.hostFeedback ??
+                      "Verified. Clear proof and solid contribution."
+                    }
+                    key={submission._id}
+                    mode="review"
+                    onApprove={() => onApproveSubmission(submission)}
+                    onFeedbackChange={(value) =>
+                      setFeedbackBySubmission((current) => ({
+                        ...current,
+                        [submission._id]: value,
+                      }))
+                    }
+                    onReturn={() => onReturnSubmission(submission)}
+                    returnSubmissionPending={returnSubmissionPending}
+                    submission={submission}
+                  />
+                );
+              })
             ) : (
               <EmptyState
                 icon="ribbon-outline"
@@ -5291,6 +5332,8 @@ function AssignmentComposer({
 }
 
 function SubmissionReviewCard({
+  approveSubmissionDisabled,
+  approveSubmissionLoading,
   approveSubmissionPending,
   award,
   feedback,
@@ -5306,6 +5349,8 @@ function SubmissionReviewCard({
   selectWinnerPending,
   submission,
 }: {
+  approveSubmissionDisabled?: boolean;
+  approveSubmissionLoading?: boolean;
   approveSubmissionPending?: boolean;
   award?: string;
   feedback?: string;
@@ -5322,6 +5367,13 @@ function SubmissionReviewCard({
   submission: HackSubmission;
 }) {
   const displayParticipantName = submission.submitterName?.trim() || submission.participantName;
+  const approveButtonDisabled =
+    Boolean(approveSubmissionDisabled ?? approveSubmissionPending) ||
+    Boolean(returnSubmissionPending);
+  const approveButtonLoading = approveSubmissionLoading ?? approveSubmissionPending;
+  const returnButtonDisabled =
+    Boolean(returnSubmissionPending) ||
+    Boolean(approveSubmissionDisabled ?? approveSubmissionPending);
   const winnerButtonDisabled = selectWinnerDisabled ?? selectWinnerPending;
   const winnerButtonLoading = selectWinnerLoading ?? selectWinnerPending;
 
@@ -5368,17 +5420,17 @@ function SubmissionReviewCard({
       {mode === "review" ? (
         <View style={styles.reviewActions}>
           <HackButton
-            disabled={returnSubmissionPending}
+            disabled={returnButtonDisabled}
             label="Return"
             loading={returnSubmissionPending}
             onPress={onReturn ?? (() => {})}
             tone="red"
           />
           <HackButton
-            disabled={approveSubmissionPending}
+            disabled={approveButtonDisabled}
             icon="checkmark-circle-outline"
             label="Verify Proof"
-            loading={approveSubmissionPending}
+            loading={approveButtonLoading}
             onPress={onApprove ?? (() => {})}
             tone="cyan"
           />
