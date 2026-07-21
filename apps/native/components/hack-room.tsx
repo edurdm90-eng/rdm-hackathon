@@ -4793,6 +4793,9 @@ function RewardRecipientEmailComposer({
   const selectedAllParticipants =
     participantEmailList.length > 0 &&
     participantEmailList.every((email) => rewardForm.recipientEmails.includes(email));
+  const visibleRecipientEmails = selectedAllParticipants
+    ? rewardForm.recipientEmails.filter((email) => !participantEmails.has(email))
+    : rewardForm.recipientEmails;
 
   const addDraftEmails = () => {
     setRewardForm((current) => {
@@ -4837,6 +4840,14 @@ function RewardRecipientEmailComposer({
     }));
   };
 
+  const clearRecipientEmails = () => {
+    setRewardForm((current) => ({
+      ...current,
+      recipientEmailDraft: "",
+      recipientEmails: [],
+    }));
+  };
+
   const selectAllParticipants = () => {
     setRewardForm((current) => ({
       ...current,
@@ -4878,9 +4889,34 @@ function RewardRecipientEmailComposer({
             <Text style={styles.emailComposerCount}>{participantEmailList.length} joined</Text>
           </View>
         ) : null}
-        {rewardForm.recipientEmails.length ? (
+        {selectedAllParticipants ? (
+          <View style={styles.emailSelectionSummary}>
+            <View style={styles.emailSelectionSummaryIcon}>
+              <Ionicons name="checkmark-done-outline" size={18} color={theme.participant} />
+            </View>
+            <View style={styles.emailSelectionSummaryCopy}>
+              <Text style={styles.emailSelectionSummaryTitle}>
+                All {participantEmailList.length} participants selected
+              </Text>
+              <Text style={styles.emailSelectionSummaryText}>
+                Certificates will be issued to everyone who joined.
+              </Text>
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              onPress={clearRecipientEmails}
+              style={({ pressed }) => [
+                styles.emailSelectionSummaryClear,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Text style={styles.emailSelectionSummaryClearText}>Clear</Text>
+            </Pressable>
+          </View>
+        ) : null}
+        {visibleRecipientEmails.length ? (
           <View style={styles.emailChipWrap}>
-            {rewardForm.recipientEmails.map((email) => {
+            {visibleRecipientEmails.map((email) => {
               const knownParticipant = participantEmails.has(email);
               return (
                 <View
@@ -7761,6 +7797,57 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexDirection: "row",
     gap: 8,
+  },
+  emailSelectionSummary: {
+    alignItems: "center",
+    backgroundColor: theme.participantDark,
+    borderColor: theme.participantBorder,
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 9,
+    padding: 9,
+  },
+  emailSelectionSummaryClear: {
+    alignItems: "center",
+    backgroundColor: theme.backgroundAlt,
+    borderColor: theme.participantBorder,
+    borderRadius: 7,
+    borderWidth: 1,
+    justifyContent: "center",
+    minHeight: 30,
+    paddingHorizontal: 10,
+  },
+  emailSelectionSummaryClearText: {
+    color: theme.participant,
+    fontSize: 10,
+    fontWeight: "900",
+  },
+  emailSelectionSummaryCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  emailSelectionSummaryIcon: {
+    alignItems: "center",
+    backgroundColor: theme.backgroundAlt,
+    borderColor: theme.participantBorder,
+    borderRadius: 999,
+    borderWidth: 1,
+    height: 34,
+    justifyContent: "center",
+    width: 34,
+  },
+  emailSelectionSummaryText: {
+    color: theme.dim,
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 2,
+  },
+  emailSelectionSummaryTitle: {
+    color: theme.participant,
+    fontSize: 12,
+    fontWeight: "900",
+    letterSpacing: 0,
   },
   eyebrow: {
     color: theme.participant,
