@@ -11,13 +11,10 @@ import { useNavigation, useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Dimensions,
   Image,
   KeyboardAvoidingView,
   Linking,
   Modal,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
   Platform,
   Pressable,
   ScrollView,
@@ -49,10 +46,7 @@ import {
 import { queryClient, trpc } from "@/utils/trpc";
 
 const rdmLogo = require("@/assets/logo/rdm-logo.png");
-const SCREEN_WIDTH = Dimensions.get("window").width;
-const ROOM_SWIPE_GAP = 10;
-const ROOM_SWIPE_CARD_WIDTH = Math.max(248, SCREEN_WIDTH - 48);
-const ROOM_SWIPE_SNAP_INTERVAL = ROOM_SWIPE_CARD_WIDTH + ROOM_SWIPE_GAP;
+const ROOM_LIST_GAP = 10;
 
 type RouterOutputs = inferRouterOutputs<AppRouter>;
 type DashboardData = RouterOutputs["hackRoom"]["dashboard"];
@@ -2238,21 +2232,6 @@ function RoomShelf({
   onSelectRoom: (roomId: string) => void;
   onShareRoom: (room: HackRoom) => void;
 }) {
-  const [activeRoomIndex, setActiveRoomIndex] = useState(0);
-
-  useEffect(() => {
-    if (activeRoomIndex >= allRooms.length) {
-      setActiveRoomIndex(Math.max(allRooms.length - 1, 0));
-    }
-  }, [activeRoomIndex, allRooms.length]);
-
-  const handleRoomMomentumEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const nextIndex = Math.round(
-      event.nativeEvent.contentOffset.x / ROOM_SWIPE_SNAP_INTERVAL,
-    );
-    setActiveRoomIndex(Math.min(Math.max(nextIndex, 0), allRooms.length - 1));
-  };
-
   return (
     <View style={styles.roomShelfSection}>
       <View style={styles.roomShelfHeaderOutside}>
@@ -2263,17 +2242,8 @@ function RoomShelf({
         <CounterLabel label={`${allRooms.length} active`} />
       </View>
       {allRooms.length ? (
-        <ScrollView
-          contentContainerStyle={styles.roomShelf}
-          decelerationRate="fast"
-          disableIntervalMomentum
-          horizontal
-          onMomentumScrollEnd={handleRoomMomentumEnd}
-          showsHorizontalScrollIndicator={false}
-          snapToAlignment="start"
-          snapToInterval={ROOM_SWIPE_SNAP_INTERVAL}
-        >
-          {allRooms.map(({ role, room }, index) => (
+        <View style={styles.roomShelf}>
+          {allRooms.map(({ role, room }) => (
             <SelectableRoomCard
               key={room._id}
               onCopyInvite={() => onCopyInvite(room)}
@@ -2281,28 +2251,12 @@ function RoomShelf({
               onShare={() => onShareRoom(room)}
               role={role}
               room={room}
-              selected={index === activeRoomIndex}
-            />
-          ))}
-        </ScrollView>
-      ) : (
-        <EmptyState icon="flash-outline" text="Created and joined rooms will appear here." />
-      )}
-      {allRooms.length > 1 ? (
-        <View style={styles.roomSwipeDots}>
-          {allRooms.map(({ room }, index) => (
-            <View
-              accessibilityElementsHidden
-              importantForAccessibility="no"
-              key={room._id}
-              style={[
-                styles.roomSwipeDot,
-                index === activeRoomIndex && styles.roomSwipeDotActive,
-              ]}
             />
           ))}
         </View>
-      ) : null}
+      ) : (
+        <EmptyState icon="flash-outline" text="Created and joined rooms will appear here." />
+      )}
     </View>
   );
 }
@@ -2313,18 +2267,16 @@ function SelectableRoomCard({
   onShare,
   role,
   room,
-  selected,
 }: {
   onCopyInvite: () => void;
   onPress: () => void;
   onShare: () => void;
   role: Role;
   room: HackRoom;
-  selected: boolean;
 }) {
   const tone = role === "host" ? "violet" : "cyan";
   return (
-    <View style={[styles.selectableRoomCard, selected && styles.selectableRoomCardActive]}>
+    <View style={styles.selectableRoomCard}>
       <Pressable
         accessibilityRole="button"
         onPress={onPress}
@@ -5890,15 +5842,7 @@ function HostTrack({
         />
 
         {hostedRooms.length ? (
-          <ScrollView
-            contentContainerStyle={styles.hostRoomSwipeShelf}
-            decelerationRate="fast"
-            disableIntervalMomentum
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            snapToAlignment="start"
-            snapToInterval={ROOM_SWIPE_SNAP_INTERVAL}
-          >
+          <View style={styles.hostRoomList}>
             {hostedRooms.map((room) => (
               <View key={room._id} style={styles.hostRoomCard}>
                 <RoomCard role="host" room={room} />
@@ -5918,7 +5862,7 @@ function HostTrack({
                 </View>
               </View>
             ))}
-          </ScrollView>
+          </View>
         ) : (
           <EmptyState icon="shield-outline" text="Create a room to get a shareable invite code." />
         )}
@@ -8026,10 +7970,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     padding: 12,
-    width: ROOM_SWIPE_CARD_WIDTH,
+    width: "100%",
   },
-  hostRoomSwipeShelf: {
-    gap: ROOM_SWIPE_GAP,
+  hostRoomList: {
+    gap: ROOM_LIST_GAP,
     paddingBottom: 2,
   },
   input: {
@@ -8998,7 +8942,7 @@ const styles = StyleSheet.create({
     width: 70,
   },
   roomShelf: {
-    gap: ROOM_SWIPE_GAP,
+    gap: ROOM_LIST_GAP,
     paddingBottom: 2,
   },
   roomShelfHeader: {
@@ -9019,23 +8963,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "800",
     marginTop: 2,
-  },
-  roomSwipeDot: {
-    backgroundColor: theme.borderStrong,
-    borderRadius: 999,
-    height: 5,
-    width: 5,
-  },
-  roomSwipeDotActive: {
-    backgroundColor: theme.host,
-    width: 18,
-  },
-  roomSwipeDots: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 5,
-    justifyContent: "center",
-    minHeight: 10,
   },
   roomStatsGrid: {
     flexDirection: "row",
@@ -9151,11 +9078,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     minHeight: 126,
     overflow: "hidden",
-    width: ROOM_SWIPE_CARD_WIDTH,
-  },
-  selectableRoomCardActive: {
-    backgroundColor: theme.hostDark,
-    borderColor: theme.hostBorder,
+    width: "100%",
   },
   selectableRoomContent: {
     padding: 10,
