@@ -142,7 +142,9 @@ export function HackRoomHomePwa({ user }: { user: SessionUser }) {
       <SectionCard badge={`${allRooms.length} active`} eyebrow="Overview" title="Hack Room Snapshot">
         <div className="grid gap-2">
           {allRooms.length ? (
-            allRooms.slice(0, 4).map((entry) => <RoomEntryLink entry={entry} key={entry.room._id} />)
+            allRooms
+              .slice(0, 4)
+              .map((entry) => <RoomEntryLink entry={entry} key={entry.room._id} showMeta={false} />)
           ) : (
             <EmptyState icon={<NativeIcon name="home-outline" />} text="Create or join a hack room from Rooms to start seeing activity here." />
           )}

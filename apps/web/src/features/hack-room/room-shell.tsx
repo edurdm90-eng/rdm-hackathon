@@ -37,9 +37,11 @@ function AppBottomNav({ active }: { active: "home" | "profile" | "rooms" }) {
 function RoomEntryLink({
   entry,
   onShare,
+  showMeta = true,
 }: {
   entry: RoomEntry;
   onShare?: (room: HackRoom) => void;
+  showMeta?: boolean;
 }) {
   return (
     <div className="flex items-stretch gap-2 rounded-[9px] border border-[rgba(238,232,222,0.12)] bg-[#0D0F12] p-3">
@@ -61,9 +63,11 @@ function RoomEntryLink({
               {entry.role === "host" ? "Host" : "Participant"}
             </Badge>
           </div>
-          <div className="mt-1 font-mono text-[10px] text-[#A8A29A]">
-            {entry.room.participants.length} participants - {entry.room.inviteCode}
-          </div>
+          {showMeta ? (
+            <div className="mt-1 font-mono text-[10px] text-[#A8A29A]">
+              {entry.room.participants.length} participants - {entry.room.inviteCode}
+            </div>
+          ) : null}
         </div>
       </Link>
       {onShare ? (
