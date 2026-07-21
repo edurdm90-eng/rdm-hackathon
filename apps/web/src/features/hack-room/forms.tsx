@@ -180,12 +180,16 @@ function splitDueAtValue(value: string) {
 }
 
 function mergeDueAtValue(currentValue: string, next: Partial<{ date: string; time: string }>) {
-  const minimum = splitDueAtValue(getMinimumDueAtInputValue());
   const current = splitDueAtValue(currentValue);
-  const date = next.date ?? current.date ?? minimum.date;
-  const time = next.time ?? current.time ?? minimum.time;
+  const date = next.date ?? current.date;
+  const time = next.time ?? current.time;
 
   return `${date}T${time}`;
+}
+
+function hasCompleteDueAtValue(value: string) {
+  const dueAt = splitDueAtValue(value);
+  return !!dueAt.date && !!dueAt.time;
 }
 
 function parseDateOnlyValue(value: string) {
@@ -326,9 +330,11 @@ function clampTimePart(value: number, max: number) {
 }
 
 function TimePicker({
+  onDone,
   onSelect,
   selectedTime,
 }: {
+  onDone: () => void;
   onSelect: (time: string) => void;
   selectedTime: string;
 }) {
@@ -389,7 +395,10 @@ function TimePicker({
 
       <Button
         className="mt-2 h-8 w-full rounded-[8px] bg-[#1EEAB0] text-xs text-[#03120C] hover:bg-[#1EEAB0]/85"
-        onClick={() => onSelect(to24HourTime(selectedHour, selectedMinute || "00", selectedPeriod))}
+        onClick={() => {
+          onSelect(to24HourTime(selectedHour, selectedMinute || "00", selectedPeriod));
+          onDone();
+        }}
         type="button"
       >
         Done
@@ -544,9 +553,9 @@ function DueAtField({
         ) : null}
         {timeOpen ? (
           <TimePicker
+            onDone={() => setTimeOpen(false)}
             onSelect={(time) => {
               onChange(mergeDueAtValue(value, { time }));
-              setTimeOpen(false);
             }}
             selectedTime={dueAt.time}
           />
@@ -588,8 +597,12 @@ function AssignmentComposer({
   const effectiveProofTypes = isNotification ? [] : normalizeTaskProofTypes(assignmentMode, proofTypes);
   const descriptionLength = taskForm.description.trim().length;
   const dueAtError =
-    !isNotification && taskForm.dueAt.trim() && !isFutureDueAt(taskForm.dueAt)
-      ? "Choose a future due date and time."
+    !isNotification && taskForm.dueAt.trim()
+      ? !hasCompleteDueAtValue(taskForm.dueAt)
+        ? "Choose both due date and time."
+        : !isFutureDueAt(taskForm.dueAt)
+          ? "Choose a future due date and time."
+          : ""
       : "";
   const minimumDescriptionLength = isNotification
     ? minNotificationMessageLength
@@ -620,7 +633,7 @@ function AssignmentComposer({
     room &&
     taskForm.title.trim().length >= 3 &&
     descriptionLength >= minimumDescriptionLength &&
-    (isNotification || taskForm.dueAt.trim()) &&
+    (isNotification || hasCompleteDueAtValue(taskForm.dueAt)) &&
     !dueAtError &&
     (!isSpecial || taskForm.assignedToEmail.trim()) &&
     !createTaskPending &&
