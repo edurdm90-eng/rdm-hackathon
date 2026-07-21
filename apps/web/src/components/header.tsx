@@ -2,13 +2,16 @@ import { Button } from "@rdm-hack/ui/components/button";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { toast } from "sonner";
 
 import { authClient } from "@/lib/auth-client";
 import { NativeIcon } from "@/lib/native-icons";
 import { trpc } from "@/utils/trpc";
 
 export default function Header() {
+  const [notificationMessage, setNotificationMessage] = useState<{
+    text: string;
+    tone: "cyan" | "violet";
+  } | null>(null);
   const { data: session } = authClient.useSession();
   const user = session?.user;
   const dashboard = useQuery({
@@ -20,7 +23,10 @@ export default function Header() {
   const notifications = dashboard.data?.notifications ?? [];
 
   function showNotifications() {
-    toast(notificationBannerMessage(notifications));
+    setNotificationMessage({
+      text: notificationBannerMessage(notifications),
+      tone: notifications.length ? "violet" : "cyan",
+    });
   }
 
   return (
@@ -77,7 +83,38 @@ export default function Header() {
           )}
         </div>
       </div>
+      {notificationMessage ? (
+        <HeaderStatusBanner
+          message={notificationMessage.text}
+          tone={notificationMessage.tone}
+        />
+      ) : null}
     </header>
+  );
+}
+
+function HeaderStatusBanner({
+  message,
+  tone,
+}: {
+  message: string;
+  tone: "cyan" | "violet";
+}) {
+  const toneClass =
+    tone === "violet"
+      ? "border-[#4A1A90] bg-[#160A2A] text-[#A060FF]"
+      : "border-[#0B8060] bg-[#061F18] text-[#1EEAB0]";
+
+  return (
+    <div className="mx-auto w-full max-w-[560px] px-4 pb-3 sm:px-0">
+      <div className={`flex items-start gap-2 rounded-[10px] border px-3 py-2 text-xs leading-[18px] ${toneClass}`}>
+        <NativeIcon
+          className="mt-0.5 size-4 shrink-0"
+          name={tone === "violet" ? "notifications-outline" : "checkmark-circle-outline"}
+        />
+        <span>{message}</span>
+      </div>
+    </div>
   );
 }
 

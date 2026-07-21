@@ -56,7 +56,7 @@ function RootComponent() {
           {showHeader ? <Header /> : null}
           <Outlet />
         </div>
-        <Toaster position="top-center" richColors />
+        <Toaster position="top-right" richColors />
       </ThemeProvider>
     </>
   );
