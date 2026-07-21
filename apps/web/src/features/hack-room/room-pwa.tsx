@@ -2,7 +2,6 @@ import { Button } from "@rdm-hack/ui/components/button";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { toast } from "sonner";
 
 import { usePrivyWallet } from "@/components/privy-provider";
 import { NativeIcon } from "@/lib/native-icons";
@@ -376,11 +375,6 @@ export default function HackRoomPwa({
   function showMessage(text: string, tone: Tone) {
     const friendlyText = friendlyMutationMessage(text);
     setMessage({ text: friendlyText, tone });
-    if (tone === "red") {
-      toast.error(friendlyText);
-    } else {
-      toast.success(friendlyText);
-    }
   }
 
   function handleAssignmentModeChange(nextMode: AssignmentMode) {
