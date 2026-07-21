@@ -38,14 +38,6 @@ const ChallengeIcon = createNativeIcon("flash-outline");
 const GamesIcon = createNativeIcon("game-controller-outline");
 const WalletIcon = createNativeIcon("diamond-outline");
 
-function shortWalletAddress(address?: string) {
-  if (!address) {
-    return "";
-  }
-
-  return address.length > 12 ? `${address.slice(0, 6)}...${address.slice(-4)}` : address;
-}
-
 export function HackRoomHomePwa({ user }: { user: SessionUser }) {
   const navigate = useNavigate();
   const dashboard = useQuery({
@@ -334,27 +326,15 @@ export function HackRoomRoomsPwa({ user: _user }: { user: SessionUser }) {
 export function HackRoomProfilePwa({ user }: { user: SessionUser }) {
   const navigate = useNavigate();
   const { logoutAndRedirect } = usePrivyAuth();
-  const {
-    isCreatingWallet,
-    walletAddress: liveWalletAddress,
-    walletError,
-  } = usePrivyWallet();
+  const { isCreatingWallet, walletError } = usePrivyWallet();
   const dashboard = useQuery({
     ...trpc.hackRoom.dashboard.queryOptions(),
     refetchInterval: 10_000,
     refetchIntervalInBackground: false,
   });
   const stats = dashboard.data?.stats;
-  const syncedWallets = dashboard.data?.wallets;
   const hostedRooms = dashboard.data?.hostedRooms ?? [];
   const networkCount = countUniqueNetworkParticipants(hostedRooms, user.id);
-  const embeddedWalletAddress =
-    user.embeddedWalletAddress ??
-    syncedWallets?.embeddedWalletAddress ??
-    liveWalletAddress ??
-    user.walletAddress;
-  const smartWalletAddress =
-    user.smartWalletAddress ?? user.onchainAddress ?? syncedWallets?.smartWalletAddress ?? syncedWallets?.onchainAddress;
 
   function handleSignOut() {
     void logoutAndRedirect();
@@ -386,12 +366,6 @@ export function HackRoomProfilePwa({ user }: { user: SessionUser }) {
       <SectionCard badge="Account" eyebrow="Profile" title="Account Details">
         <ProfileField label="Name" value={user.name} />
         <ProfileField label="Email" value={user.email} />
-        {embeddedWalletAddress ? (
-          <ProfileField label="Embedded Wallet" value={shortWalletAddress(embeddedWalletAddress)} tone="gold" />
-        ) : null}
-        {smartWalletAddress ? (
-          <ProfileField label="Smart Wallet" value={shortWalletAddress(smartWalletAddress)} tone="cyan" />
-        ) : null}
         <Button
           className="mt-3 h-10 w-full rounded-[10px] border-[#FF5A4A] bg-[#280A08] text-[#FF5A4A] hover:bg-[#280A08]/80"
           onClick={handleSignOut}
