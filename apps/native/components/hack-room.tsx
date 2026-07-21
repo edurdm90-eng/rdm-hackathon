@@ -1538,6 +1538,18 @@ function HackRoomDetailDashboard({
       return;
     }
 
+    const invalidProofItem = proofItems.find(
+      (item) => isLinkProofType(item.type) && !isHttpsProofUrl(item.value),
+    );
+
+    if (invalidProofItem) {
+      setMessage({
+        text: `${proofTypeLabel(invalidProofItem.type)} proof must start with https://`,
+        tone: "red",
+      });
+      return;
+    }
+
     submitProof.mutate({
       submissionDescription,
       submitterName,
@@ -7024,6 +7036,23 @@ function buildProofItemsForTask(
     type: proofType,
     value: (submitForm.proofItems[proofType] || (index === 0 ? submitForm.proofUrl : "")).trim(),
   }));
+}
+
+function isLinkProofType(proofType: ProofType) {
+  return proofType !== "game_score";
+}
+
+function isHttpsProofUrl(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("https://")) {
+    return false;
+  }
+
+  try {
+    return new URL(trimmed).protocol === "https:";
+  } catch {
+    return false;
+  }
 }
 
 function hasRequiredProofItems(task: HackTask, submitForm: typeof emptySubmitForm) {

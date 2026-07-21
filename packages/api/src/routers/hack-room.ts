@@ -45,6 +45,23 @@ const proofItemSchema = z.object({
   value: z.string().trim().min(3).max(500),
 });
 
+function isLinkProofType(proofType: z.infer<typeof proofTypeSchema>) {
+  return proofType !== "game_score";
+}
+
+function isHttpsProofUrl(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("https://")) {
+    return false;
+  }
+
+  try {
+    return new URL(trimmed).protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 type OnchainStatus = "not_created" | "pending" | "confirmed" | "failed";
 type ChainEventKind =
   | "room_created"
@@ -1423,6 +1440,17 @@ export const hackRoomRouter = router({
         throw new TRPCError({
           code: "BAD_REQUEST",
           message: "Submit at least one proof link",
+        });
+      }
+
+      const invalidProofItem = proofItems.find(
+        (item) => isLinkProofType(item.type) && !isHttpsProofUrl(item.value),
+      );
+
+      if (invalidProofItem) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `${invalidProofItem.type} proof must start with https://`,
         });
       }
 
