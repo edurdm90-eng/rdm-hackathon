@@ -11,13 +11,10 @@ import { useNavigation, useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Dimensions,
   Image,
   KeyboardAvoidingView,
   Linking,
   Modal,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
   Platform,
   Pressable,
   ScrollView,
@@ -49,10 +46,7 @@ import {
 import { queryClient, trpc } from "@/utils/trpc";
 
 const rdmLogo = require("@/assets/logo/rdm-logo.png");
-const SCREEN_WIDTH = Dimensions.get("window").width;
-const ROOM_SWIPE_GAP = 10;
-const ROOM_SWIPE_CARD_WIDTH = Math.max(248, SCREEN_WIDTH - 48);
-const ROOM_SWIPE_SNAP_INTERVAL = ROOM_SWIPE_CARD_WIDTH + ROOM_SWIPE_GAP;
+const ROOM_LIST_GAP = 10;
 
 type RouterOutputs = inferRouterOutputs<AppRouter>;
 type DashboardData = RouterOutputs["hackRoom"]["dashboard"];
@@ -164,27 +158,6 @@ type PendingRoomCreate = {
   txHash: string;
 };
 
-type SponsoredTransactionStage = "sending" | "submitted" | "mined";
-
-function createSponsoredTransactionStatusHandler(
-  setMessage: (message: { text: string; tone: Tone }) => void,
-  minedText = "Transaction mined.",
-) {
-  return (stage: SponsoredTransactionStage) => {
-    if (stage === "sending") {
-      setMessage({ text: "Sending sponsored transaction...", tone: "gold" });
-    }
-
-    if (stage === "submitted") {
-      setMessage({ text: "Waiting for transaction mining...", tone: "gold" });
-    }
-
-    if (stage === "mined") {
-      setMessage({ text: minedText, tone: "cyan" });
-    }
-  };
-}
-
 const emptyTaskForm = {
   assignedToEmail: "",
   description: "",
@@ -198,9 +171,29 @@ const minimumTaskDueOffsetMs = 60_000;
 const walletSyncRetryDelaysMs = [0, 800, 1_600, 3_200, 6_400, 10_000] as const;
 let cachedNativeSessionUser: SessionUser | null = null;
 const syncedWalletKeys = new Set<string>();
+const technicalUiErrorPattern =
+  /blockchain|bundler|entrypoint|gas|on-chain|paymaster|pimlico|prefund|privy|rpc|smart account|smart wallet|transaction hash|useroperation|wallet receipt/i;
+let cachedAuthGatewayState = {
+  code: "",
+  email: "",
+  hasSentCode: false,
+};
 
 function walletProfileValue(value: string | null | undefined, fallback = "Not synced yet") {
   return value && value.trim().length > 0 ? value : fallback;
+}
+
+function userFacingActionError(error: unknown, fallback: string) {
+  if (!(error instanceof Error)) {
+    return fallback;
+  }
+
+  const message = error.message.trim();
+  if (!message || technicalUiErrorPattern.test(message)) {
+    return fallback;
+  }
+
+  return message;
 }
 
 function waitForWalletSyncRetry(delayMs: number) {
@@ -211,6 +204,14 @@ function waitForWalletSyncRetry(delayMs: number) {
 
 function setCachedNativeSessionUser(user: SessionUser | null) {
   cachedNativeSessionUser = user;
+}
+
+function resetCachedAuthGatewayState() {
+  cachedAuthGatewayState = {
+    code: "",
+    email: "",
+    hasSentCode: false,
+  };
 }
 
 function useSponsoredWalletSync(user: SessionUser | null) {
@@ -294,7 +295,6 @@ function useSponsoredHackathonTransactions() {
 
   const sendContractCalls = async (input: {
     calls: Array<ContractCall>;
-    onStatus?: (stage: SponsoredTransactionStage, hash?: string) => void;
     pendingId: string;
     pendingKind: string;
   }) => {
@@ -302,18 +302,13 @@ function useSponsoredHackathonTransactions() {
       return null;
     }
 
-    const startedAt = Date.now();
-    const logTiming = (stage: string) => {
-      console.info(`[chain-timing] ${input.pendingKind}:${input.pendingId} ${stage} ${Date.now() - startedAt}ms`);
-    };
-
     const smartWalletClient = await getClientForChain({
       chainId: polygonAmoyDeployment.chainId,
     });
     const smartWalletAddress = (smartWalletClient.account?.address ?? "").toString();
 
     if (!smartWalletAddress) {
-      throw new Error("Privy smart wallet is not ready yet.");
+      throw new Error("Account setup is still finishing. Please try again shortly.");
     }
 
     await rememberPendingChainEvent({
@@ -321,20 +316,13 @@ function useSponsoredHackathonTransactions() {
       kind: input.pendingKind,
     });
 
-    input.onStatus?.("sending");
-    logTiming("sending-sponsored-transaction");
     const operationHash = await smartWalletClient.sendTransaction({
       calls: input.calls,
     } as never);
-    input.onStatus?.("submitted", operationHash);
-    logTiming(`send-transaction-returned ${operationHash}`);
-
     const txHash = await resolveTransactionHash({
       client: smartWalletClient,
       hash: operationHash,
     });
-    input.onStatus?.("mined", txHash);
-    logTiming(`transaction-mined ${txHash}`);
 
     await rememberPendingChainEvent({
       id: input.pendingId,
@@ -436,12 +424,7 @@ export function AuthenticatedTabs({ children }: { children: React.ReactNode }) {
   useSponsoredWalletSync(sessionUser);
 
   if (isPending && !sessionUser) {
-    return (
-      <View style={styles.loadingScreen}>
-        <ActivityIndicator color={theme.participant} />
-        <Text style={styles.loadingText}>Opening Hack Room...</Text>
-      </View>
-    );
+    return <FullScreenLoader message="Opening your workspace..." />;
   }
 
   if (!sessionUser) {
@@ -496,12 +479,7 @@ function AuthenticatedRoute({
   useSponsoredWalletSync(sessionUser);
 
   if (isPending && !sessionUser) {
-    return (
-      <View style={styles.loadingScreen}>
-        <ActivityIndicator color={theme.participant} />
-        <Text style={styles.loadingText}>Opening Hack Room...</Text>
-      </View>
-    );
+    return <FullScreenLoader message="Opening your workspace..." />;
   }
 
   if (!sessionUser) {
@@ -511,16 +489,39 @@ function AuthenticatedRoute({
   return children(sessionUser);
 }
 
+function FullScreenLoader({ message }: { message: string }) {
+  return (
+    <View style={styles.loadingScreen}>
+      <Image
+        accessibilityIgnoresInvertColors
+        resizeMode="contain"
+        source={rdmLogo}
+        style={styles.loadingLogo}
+      />
+      <ActivityIndicator color={theme.participant} size="large" />
+      <Text style={styles.loadingText}>{message}</Text>
+    </View>
+  );
+}
+
 function AuthGateway() {
   const { isReady, logout, user } = usePrivy();
   const { sendCode, loginWithCode } = useLoginWithEmail();
   const { clearLastError, isSyncing, lastError, retrySync } = useNativePrivyBridge();
-  const [email, setEmail] = useState("");
-  const [code, setCode] = useState("");
-  const [hasSentCode, setHasSentCode] = useState(false);
+  const [email, setEmail] = useState(cachedAuthGatewayState.email);
+  const [code, setCode] = useState(cachedAuthGatewayState.code);
+  const [hasSentCode, setHasSentCode] = useState(cachedAuthGatewayState.hasSentCode);
   const [formError, setFormError] = useState<string | null>(null);
   const [isSendingCode, setIsSendingCode] = useState(false);
   const [isVerifyingCode, setIsVerifyingCode] = useState(false);
+
+  useEffect(() => {
+    cachedAuthGatewayState = {
+      code,
+      email,
+      hasSentCode,
+    };
+  }, [code, email, hasSentCode]);
 
   const resetError = () => {
     if (formError) {
@@ -545,6 +546,7 @@ function AuthGateway() {
 
     try {
       await sendCode({ email: parsed.data.email });
+      setEmail(parsed.data.email);
       setHasSentCode(true);
     } catch (error) {
       setFormError(error instanceof Error ? error.message : "Unable to send an email code.");
@@ -583,6 +585,7 @@ function AuthGateway() {
     setFormError(null);
     clearLastError();
     setCachedNativeSessionUser(null);
+    resetCachedAuthGatewayState();
 
     const results = await Promise.allSettled([authClient.signOut(), logout()]);
     const failedReset = results.find((result) => result.status === "rejected");
@@ -731,6 +734,8 @@ function HomeDashboard({ user }: { user: SessionUser }) {
   const router = useRouter();
   const dashboard = useQuery(trpc.hackRoom.dashboard.queryOptions());
   const [message, setMessage] = useState<{ text: string; tone: Tone } | null>(null);
+  const isInitialDashboardLoading = dashboard.isLoading && !dashboard.data;
+  const isBackgroundDashboardSyncing = dashboard.isFetching && Boolean(dashboard.data);
   const stats = dashboard.data?.stats;
   const hostedRooms = dashboard.data?.hostedRooms ?? [];
   const joinedRooms = dashboard.data?.joinedRooms ?? [];
@@ -756,6 +761,10 @@ function HomeDashboard({ user }: { user: SessionUser }) {
       params: { roomId: walletRoom._id, tab: "wallet" },
     });
   };
+
+  if (isInitialDashboardLoading) {
+    return <FullScreenLoader message="Loading your workspace..." />;
+  }
 
   return (
     <View style={styles.screen}>
@@ -796,7 +805,7 @@ function HomeDashboard({ user }: { user: SessionUser }) {
               <Text style={styles.profileName}>{user.name}</Text>
               <Text style={styles.profileEmail}>{user.email}</Text>
             </View>
-            {dashboard.isLoading ? <ActivityIndicator color={theme.award} /> : null}
+            {isBackgroundDashboardSyncing ? <ActivityIndicator color={theme.award} /> : null}
           </View>
 
           <View style={styles.metricsGrid}>
@@ -899,17 +908,28 @@ function ProfileDashboard({ user }: { user: SessionUser }) {
   const { logout } = usePrivy();
   const { isCreatingWallet, retryCreateWallet, walletAddress, walletError } = useNativePrivyBridge();
   const [message, setMessage] = useState<{ text: string; tone: Tone } | null>(null);
+  const isInitialDashboardLoading = dashboard.isLoading && !dashboard.data;
+  const isBackgroundDashboardSyncing = dashboard.isFetching && Boolean(dashboard.data);
   const stats = dashboard.data?.stats;
   const wallets = dashboard.data?.wallets;
   const hostedRooms = dashboard.data?.hostedRooms ?? [];
   const notifications = dashboard.data?.notifications ?? [];
   const networkCount = countNativeNetworkParticipants(hostedRooms, user);
   const role = dashboard.data?.viewerRole ?? "member";
+  const showNetworkMetric = false;
+  const showTechnicalProfileDetails = false;
   const embeddedWalletAddress = wallets?.embeddedWalletAddress ?? walletAddress;
-  const walletFallback = isCreatingWallet ? "Creating wallet..." : "Not synced yet";
+  const walletFallback = isCreatingWallet ? "Setting up account..." : "Not synced yet";
+  const accountSetupError = walletError
+    ? userFacingActionError(
+        new Error(walletError),
+        "Account setup is still finishing. Please try again.",
+      )
+    : null;
 
   const handleSignOut = async () => {
     setCachedNativeSessionUser(null);
+    resetCachedAuthGatewayState();
     await Promise.allSettled([authClient.signOut(), logout()]);
     await queryClient.invalidateQueries();
   };
@@ -920,6 +940,10 @@ function ProfileDashboard({ user }: { user: SessionUser }) {
       tone: notifications.length ? "violet" : "cyan",
     });
   };
+
+  if (isInitialDashboardLoading) {
+    return <FullScreenLoader message="Loading your profile..." />;
+  }
 
   return (
     <View style={styles.screen}>
@@ -939,6 +963,7 @@ function ProfileDashboard({ user }: { user: SessionUser }) {
               <Text style={styles.dashboardHeadline}>{user.name}</Text>
               <Text style={styles.profileEmail}>{user.email}</Text>
             </View>
+            {isBackgroundDashboardSyncing ? <ActivityIndicator color={theme.award} /> : null}
           </View>
 
           <View style={styles.metricsGrid}>
@@ -954,42 +979,48 @@ function ProfileDashboard({ user }: { user: SessionUser }) {
               tone="gold"
               value={stats?.winners ?? 0}
             />
-            <MetricCard
-              icon="people-outline"
-              label="Network"
-              tone="violet"
-              value={networkCount}
-            />
+            {showNetworkMetric ? (
+              <MetricCard
+                icon="people-outline"
+                label="Network"
+                tone="violet"
+                value={networkCount}
+              />
+            ) : null}
           </View>
         </View>
 
         {dashboard.error ? <ErrorBanner message={dashboard.error.message} /> : null}
         {message ? <StatusBanner message={message.text} tone={message.tone} /> : null}
-        {walletError ? <ErrorBanner message={walletError} /> : null}
+        {accountSetupError ? <ErrorBanner message={accountSetupError} /> : null}
 
         <Panel eyebrow="Account" icon="person-circle-outline" title="Profile" tone="cyan">
           <View style={styles.profileDetails}>
             <ProfileRow label="Name" value={user.name} />
             <ProfileRow label="Email" value={user.email} />
-            <ProfileRow label="User ID" value={user.id} />
             <ProfileRow label="Role" value={role} />
-            <ProfileRow
-              label="Embedded wallet"
-              value={walletProfileValue(embeddedWalletAddress, walletFallback)}
-            />
-            <ProfileRow
-              label="Smart wallet"
-              value={walletProfileValue(wallets?.smartWalletAddress, walletFallback)}
-            />
-            <ProfileRow
-              label="On-chain address"
-              value={walletProfileValue(wallets?.onchainAddress, walletFallback)}
-            />
+            {showTechnicalProfileDetails ? (
+              <>
+                <ProfileRow label="User ID" value={user.id} />
+                <ProfileRow
+                  label="Login account"
+                  value={walletProfileValue(embeddedWalletAddress, walletFallback)}
+                />
+                <ProfileRow
+                  label="Rewards account"
+                  value={walletProfileValue(wallets?.smartWalletAddress, walletFallback)}
+                />
+                <ProfileRow
+                  label="Rewards address"
+                  value={walletProfileValue(wallets?.onchainAddress, walletFallback)}
+                />
+              </>
+            ) : null}
           </View>
-          {walletError ? (
+          {accountSetupError ? (
             <HackButton
               icon="refresh-outline"
-              label="Retry Wallet"
+              label="Retry Setup"
               onPress={() => void retryCreateWallet()}
               tone="gold"
             />
@@ -1011,6 +1042,8 @@ function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
   const [isCreatingRoomOnchain, setIsCreatingRoomOnchain] = useState(false);
   const [pendingRoomCreate, setPendingRoomCreate] = useState<PendingRoomCreate | null>(null);
   const [message, setMessage] = useState<{ text: string; tone: Tone } | null>(null);
+  const isInitialDashboardLoading = dashboard.isLoading && !dashboard.data;
+  const isBackgroundDashboardSyncing = dashboard.isFetching && Boolean(dashboard.data);
 
   const hostedRooms = dashboard.data?.hostedRooms ?? [];
   const joinedRooms = dashboard.data?.joinedRooms ?? [];
@@ -1054,7 +1087,8 @@ function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
   const isBusy =
     createRoom.isPending ||
     isCreatingRoomOnchain ||
-    joinRoom.isPending;
+    joinRoom.isPending ||
+    isBackgroundDashboardSyncing;
 
   const handleNotifications = () => {
     setMessage({
@@ -1093,44 +1127,37 @@ function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
       setIsCreatingRoomOnchain(true);
 
       if (txHash) {
-        setMessage({ text: "Finishing room sync from confirmed on-chain transaction...", tone: "gold" });
+        setMessage({ text: "Room is being created, please wait.", tone: "gold" });
       } else {
-        setMessage({ text: "Sending sponsored transaction...", tone: "gold" });
+        setMessage({ text: "Room is being created, please wait.", tone: "gold" });
         txHash =
           (await sendContractCalls({
             calls: [makeCreateHackathonCall()],
-            onStatus: createSponsoredTransactionStatusHandler(setMessage),
             pendingId,
             pendingKind: "room_created",
           })) ?? undefined;
       }
 
       if (!txHash) {
-        throw new Error("Room blockchain transaction did not return a transaction hash.");
+        throw new Error("Room creation did not finish.");
       }
 
       setPendingRoomCreate({ pendingId, txHash });
-      const verifyStartedAt = Date.now();
-      console.info(`[chain-timing] room_created:${pendingId} verifying-event-start`);
-      setMessage({ text: "Verifying event and saving room...", tone: "violet" });
+      setMessage({ text: "Room is being created, please wait.", tone: "violet" });
       const room = await createRoom.mutateAsync({
         ...roomForm,
         txHash,
       });
-      console.info(
-        `[chain-timing] room_created:${pendingId} backend-verified-and-saved ${Date.now() - verifyStartedAt}ms`,
-      );
 
       await forgetPendingChainEvent(pendingId);
       setPendingRoomCreate(null);
       setRoomForm(emptyRoomForm);
       setCreateRoomModalOpen(false);
-      setMessage({ text: `Created ${room.name} on-chain with invite ${room.inviteCode}`, tone: "gold" });
+      setMessage({ text: `Created ${room.name} with invite ${room.inviteCode}`, tone: "gold" });
       await invalidateDashboard();
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Unable to create the room on-chain.";
-      const retryMessage =
-        "Tap Create Room again to finish sync without sending another transaction.";
+      const errorMessage = userFacingActionError(error, "Unable to create the room.");
+      const retryMessage = "Tap Create Room again to finish setup.";
       setMessage({
         text: txHash ? `${errorMessage} ${retryMessage}` : errorMessage,
         tone: "red",
@@ -1140,6 +1167,10 @@ function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
       setIsCreatingRoomOnchain(false);
     }
   };
+
+  if (isInitialDashboardLoading) {
+    return <FullScreenLoader message="Loading your hack rooms..." />;
+  }
 
   return (
     <View style={styles.screen}>
@@ -1235,6 +1266,8 @@ function HackRoomDetailDashboard({
   const approvalInFlightRef = useRef(false);
   const rewardIssueInFlightRef = useRef(false);
   const winnerSelectionInFlightRef = useRef(false);
+  const isInitialDashboardLoading = dashboard.isLoading && !dashboard.data;
+  const isBackgroundDashboardSyncing = dashboard.isFetching && Boolean(dashboard.data);
 
   const hostedRooms = dashboard.data?.hostedRooms ?? [];
   const joinedRooms = dashboard.data?.joinedRooms ?? [];
@@ -1365,9 +1398,10 @@ function HackRoomDetailDashboard({
 
   const approveSubmission = useMutation(
     trpc.hackRoom.completeSubmissionApproval.mutationOptions({
-      onError: (error) => setMessage({ text: error.message, tone: "red" }),
+      onError: (error) =>
+        setMessage({ text: userFacingActionError(error, "Unable to approve proof."), tone: "red" }),
       onSuccess: async () => {
-        setMessage({ text: "Proof verified and XRDM confirmed on-chain", tone: "gold" });
+        setMessage({ text: "Proof verified and XRDM added.", tone: "gold" });
         await invalidateDashboard();
       },
     }),
@@ -1375,9 +1409,10 @@ function HackRoomDetailDashboard({
 
   const selectWinner = useMutation(
     trpc.hackRoom.completeWinnerSelection.mutationOptions({
-      onError: (error) => setMessage({ text: error.message, tone: "red" }),
+      onError: (error) =>
+        setMessage({ text: userFacingActionError(error, "Unable to announce winner."), tone: "red" }),
       onSuccess: async () => {
-        setMessage({ text: "Winner announced and confirmed on-chain", tone: "gold" });
+        setMessage({ text: "Winner announced.", tone: "gold" });
         await invalidateDashboard();
       },
     }),
@@ -1395,21 +1430,24 @@ function HackRoomDetailDashboard({
 
   const prepareReward = useMutation(
     trpc.hackRoom.prepareReward.mutationOptions({
-      onError: (error) => setMessage({ text: error.message, tone: "red" }),
+      onError: (error) =>
+        setMessage({ text: userFacingActionError(error, "Unable to issue reward."), tone: "red" }),
     }),
   );
   const completeReward = useMutation(
     trpc.hackRoom.completeReward.mutationOptions({
-      onError: (error) => setMessage({ text: error.message, tone: "red" }),
+      onError: (error) =>
+        setMessage({ text: userFacingActionError(error, "Unable to issue reward."), tone: "red" }),
       onSuccess: async () => {
-        setMessage({ text: "Reward issued and confirmed on-chain", tone: "gold" });
+        setMessage({ text: "Reward issued.", tone: "gold" });
         await invalidateDashboard();
       },
     }),
   );
   const completeParticipantRegistration = useMutation(
     trpc.hackRoom.completeParticipantRegistration.mutationOptions({
-      onError: (error) => setMessage({ text: error.message, tone: "red" }),
+      onError: (error) =>
+        setMessage({ text: userFacingActionError(error, "Unable to prepare recipients."), tone: "red" }),
     }),
   );
   const issueRewardPending =
@@ -1426,7 +1464,8 @@ function HackRoomDetailDashboard({
     returnSubmission.isPending ||
     issueRewardPending ||
     completeParticipantRegistration.isPending ||
-    sendRoomNotification.isPending;
+    sendRoomNotification.isPending ||
+    isBackgroundDashboardSyncing;
 
   useEffect(() => {
     if (initialParticipantTab) {
@@ -1553,6 +1592,18 @@ function HackRoomDetailDashboard({
       return;
     }
 
+    const invalidProofItem = proofItems.find(
+      (item) => isLinkProofType(item.type) && !isHttpsProofUrl(item.value),
+    );
+
+    if (invalidProofItem) {
+      setMessage({
+        text: `${proofTypeLabel(invalidProofItem.type)} proof must start with https://`,
+        tone: "red",
+      });
+      return;
+    }
+
     submitProof.mutate({
       submissionDescription,
       submitterName,
@@ -1577,10 +1628,10 @@ function HackRoomDetailDashboard({
     }
 
     if (!input.hackathonId) {
-      throw new Error("Room is not confirmed on-chain yet.");
+      throw new Error("Room setup is still finishing. Please try again shortly.");
     }
 
-    setMessage({ text: "Registering recipient wallets on-chain...", tone: "gold" });
+    setMessage({ text: "Preparing recipients...", tone: "gold" });
     const txHash = await sendContractCalls({
       calls: [
         makeRegisterParticipantsCall({
@@ -1588,10 +1639,6 @@ function HackRoomDetailDashboard({
           participantAddresses: input.registration.map((entry) => entry.address),
         }),
       ],
-      onStatus: createSponsoredTransactionStatusHandler(
-        setMessage,
-        "Participant registration transaction mined.",
-      ),
       pendingId: `${input.pendingId}:register`,
       pendingKind: "participants_registered",
     });
@@ -1600,19 +1647,11 @@ function HackRoomDetailDashboard({
       return;
     }
 
-    const verifyStartedAt = Date.now();
-    console.info(`[chain-timing] participants_registered:${input.pendingId}:register verifying-event-start`);
-    setMessage({ text: "Verifying event and saving registration...", tone: "violet" });
     await completeParticipantRegistration.mutateAsync({
       participantIds: input.registration.map((entry) => entry.userId),
       roomId: input.roomId,
       txHash,
     });
-    console.info(
-      `[chain-timing] participants_registered:${input.pendingId}:register backend-verified-and-saved ${
-        Date.now() - verifyStartedAt
-      }ms`,
-    );
     await forgetPendingChainEvent(`${input.pendingId}:register`);
   };
 
@@ -1630,7 +1669,7 @@ function HackRoomDetailDashboard({
     setPendingApprovalSubmissionId(submission._id);
     void (async () => {
       try {
-        setMessage({ text: "Preparing on-chain XRDM approval...", tone: "gold" });
+        setMessage({ text: "Verifying proof...", tone: "gold" });
         const plan = await queryClient.fetchQuery(
           trpc.hackRoom.prepareSubmissionApproval.queryOptions({
             submissionId: submission._id,
@@ -1645,7 +1684,7 @@ function HackRoomDetailDashboard({
 
         let txHash: string | undefined;
         if (plan.amount > 0 && plan.hackathonId && plan.recipientAddress) {
-          setMessage({ text: "Sending sponsored XRDM award...", tone: "gold" });
+          setMessage({ text: "Adding XRDM...", tone: "gold" });
           txHash =
             (await sendContractCalls({
               calls: [
@@ -1655,32 +1694,20 @@ function HackRoomDetailDashboard({
                   recipientAddresses: [plan.recipientAddress],
                 }),
               ],
-              onStatus: createSponsoredTransactionStatusHandler(
-                setMessage,
-                "XRDM award transaction mined.",
-              ),
               pendingId: `submission:${submission._id}:approval:xrdm`,
               pendingKind: "submission_xrdm_awarded",
             })) ?? undefined;
         }
 
-        const verifyStartedAt = Date.now();
-        console.info(`[chain-timing] submission_xrdm_awarded:submission:${submission._id}:approval verifying-event-start`);
-        setMessage({ text: "Verifying event and saving approval...", tone: "violet" });
         await approveSubmission.mutateAsync({
           hostFeedback: feedback,
           submissionId: submission._id,
           txHash,
         });
-        console.info(
-          `[chain-timing] submission_xrdm_awarded:submission:${submission._id}:approval backend-verified-and-saved ${
-            Date.now() - verifyStartedAt
-          }ms`,
-        );
         await forgetPendingChainEvent(`submission:${submission._id}:approval:xrdm`);
       } catch (error) {
         setMessage({
-          text: error instanceof Error ? error.message : "Unable to approve on-chain.",
+          text: userFacingActionError(error, "Unable to approve proof."),
           tone: "red",
         });
       } finally {
@@ -1723,7 +1750,7 @@ function HackRoomDetailDashboard({
     setPendingWinnerSubmissionId(submission._id);
     void (async () => {
       try {
-        setMessage({ text: "Preparing winner blockchain confirmation...", tone: "gold" });
+        setMessage({ text: "Announcing winner...", tone: "gold" });
         const plan = await queryClient.fetchQuery(
           trpc.hackRoom.prepareWinnerSelection.queryOptions({
             awardXrdm: award,
@@ -1738,7 +1765,7 @@ function HackRoomDetailDashboard({
         });
 
         if (!plan.hackathonId || !plan.recipientAddress) {
-          throw new Error("Winner wallet is not ready for blockchain confirmation.");
+          throw new Error("Winner profile is not ready yet.");
         }
 
         const calls = [
@@ -1758,25 +1785,18 @@ function HackRoomDetailDashboard({
           );
         }
 
-        setMessage({ text: "Sending sponsored winner transaction...", tone: "gold" });
+        setMessage({ text: "Saving winner...", tone: "gold" });
         const txHash =
           (await sendContractCalls({
             calls,
-            onStatus: createSponsoredTransactionStatusHandler(
-              setMessage,
-              "Winner transaction mined.",
-            ),
             pendingId: `submission:${submission._id}:winner:chain`,
             pendingKind: "winner_noted",
           })) ?? undefined;
 
         if (!txHash) {
-          throw new Error("Winner blockchain transaction did not return a transaction hash.");
+          throw new Error("Winner confirmation did not finish.");
         }
 
-        const verifyStartedAt = Date.now();
-        console.info(`[chain-timing] winner_noted:submission:${submission._id}:winner verifying-event-start`);
-        setMessage({ text: "Verifying event and saving winner...", tone: "violet" });
         await selectWinner.mutateAsync({
           awardTxHash: award > 0 ? txHash : undefined,
           awardXrdm: award,
@@ -1784,15 +1804,10 @@ function HackRoomDetailDashboard({
           submissionId: submission._id,
           winnerTxHash: txHash,
         });
-        console.info(
-          `[chain-timing] winner_noted:submission:${submission._id}:winner backend-verified-and-saved ${
-            Date.now() - verifyStartedAt
-          }ms`,
-        );
         await forgetPendingChainEvent(`submission:${submission._id}:winner:chain`);
       } catch (error) {
         setMessage({
-          text: error instanceof Error ? error.message : "Unable to announce winner on-chain.",
+          text: userFacingActionError(error, "Unable to announce winner."),
           tone: "red",
         });
       } finally {
@@ -1868,7 +1883,7 @@ function HackRoomDetailDashboard({
     setPendingRewardKind(kind);
     void (async () => {
       try {
-        setMessage({ text: "Preparing reward blockchain transaction...", tone: "gold" });
+        setMessage({ text: "Issuing reward...", tone: "gold" });
         const prepared = await prepareReward.mutateAsync({
           awardXrdm,
           description: rewardForm.description,
@@ -1912,37 +1927,25 @@ function HackRoomDetailDashboard({
 
         let txHash: string | undefined;
         if (calls.length) {
-          setMessage({ text: "Sending sponsored reward transaction...", tone: "gold" });
+          setMessage({ text: "Saving reward...", tone: "gold" });
           txHash =
             (await sendContractCalls({
               calls,
-              onStatus: createSponsoredTransactionStatusHandler(
-                setMessage,
-                "Reward transaction mined.",
-              ),
               pendingId: `reward:${prepared.reward._id}:chain`,
               pendingKind: kind,
             })) ?? undefined;
         }
 
-        const verifyStartedAt = Date.now();
-        console.info(`[chain-timing] ${kind}:reward:${prepared.reward._id} verifying-event-start`);
-        setMessage({ text: "Verifying event and saving reward...", tone: "violet" });
         await completeReward.mutateAsync({
           nftTxHash: prepared.onchain.requiresNft ? txHash : undefined,
           rewardId: prepared.reward._id,
           xrdmTxHash: prepared.onchain.requiresXrdm ? txHash : undefined,
         });
-        console.info(
-          `[chain-timing] ${kind}:reward:${prepared.reward._id} backend-verified-and-saved ${
-            Date.now() - verifyStartedAt
-          }ms`,
-        );
         await forgetPendingChainEvent(`reward:${prepared.reward._id}:chain`);
         setRewardForms((current) => ({ ...current, [kind]: makeEmptyRewardForm() }));
       } catch (error) {
         setMessage({
-          text: error instanceof Error ? error.message : "Unable to issue reward on-chain.",
+          text: userFacingActionError(error, "Unable to issue reward."),
           tone: "red",
         });
       } finally {
@@ -1951,6 +1954,10 @@ function HackRoomDetailDashboard({
       }
     })();
   };
+
+  if (isInitialDashboardLoading) {
+    return <FullScreenLoader message="Loading this room..." />;
+  }
 
   return (
     <View style={styles.screen}>
@@ -2194,7 +2201,7 @@ function RoomCommandCenter({
                 <View style={styles.compactBusyRow}>
                   <ActivityIndicator color={theme.award} />
                   <Text style={styles.mutedText}>
-                    Room is being created. Confirming on-chain and syncing details.
+                    Room is being created, please wait.
                   </Text>
                 </View>
               ) : null}
@@ -2210,6 +2217,8 @@ function RoomCommandCenter({
               </Field>
               <Field label="Room brief">
                 <HackTextInput
+                  caretHidden={createRoomPending}
+                  editable={!createRoomPending}
                   multiline
                   onChangeText={(value) =>
                     onRoomFormChange((current) => ({ ...current, description: value }))
@@ -2255,21 +2264,6 @@ function RoomShelf({
   onSelectRoom: (roomId: string) => void;
   onShareRoom: (room: HackRoom) => void;
 }) {
-  const [activeRoomIndex, setActiveRoomIndex] = useState(0);
-
-  useEffect(() => {
-    if (activeRoomIndex >= allRooms.length) {
-      setActiveRoomIndex(Math.max(allRooms.length - 1, 0));
-    }
-  }, [activeRoomIndex, allRooms.length]);
-
-  const handleRoomMomentumEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const nextIndex = Math.round(
-      event.nativeEvent.contentOffset.x / ROOM_SWIPE_SNAP_INTERVAL,
-    );
-    setActiveRoomIndex(Math.min(Math.max(nextIndex, 0), allRooms.length - 1));
-  };
-
   return (
     <View style={styles.roomShelfSection}>
       <View style={styles.roomShelfHeaderOutside}>
@@ -2280,17 +2274,8 @@ function RoomShelf({
         <CounterLabel label={`${allRooms.length} active`} />
       </View>
       {allRooms.length ? (
-        <ScrollView
-          contentContainerStyle={styles.roomShelf}
-          decelerationRate="fast"
-          disableIntervalMomentum
-          horizontal
-          onMomentumScrollEnd={handleRoomMomentumEnd}
-          showsHorizontalScrollIndicator={false}
-          snapToAlignment="start"
-          snapToInterval={ROOM_SWIPE_SNAP_INTERVAL}
-        >
-          {allRooms.map(({ role, room }, index) => (
+        <View style={styles.roomShelf}>
+          {allRooms.map(({ role, room }) => (
             <SelectableRoomCard
               key={room._id}
               onCopyInvite={() => onCopyInvite(room)}
@@ -2298,28 +2283,12 @@ function RoomShelf({
               onShare={() => onShareRoom(room)}
               role={role}
               room={room}
-              selected={index === activeRoomIndex}
-            />
-          ))}
-        </ScrollView>
-      ) : (
-        <EmptyState icon="flash-outline" text="Created and joined rooms will appear here." />
-      )}
-      {allRooms.length > 1 ? (
-        <View style={styles.roomSwipeDots}>
-          {allRooms.map(({ room }, index) => (
-            <View
-              accessibilityElementsHidden
-              importantForAccessibility="no"
-              key={room._id}
-              style={[
-                styles.roomSwipeDot,
-                index === activeRoomIndex && styles.roomSwipeDotActive,
-              ]}
             />
           ))}
         </View>
-      ) : null}
+      ) : (
+        <EmptyState icon="flash-outline" text="Created and joined rooms will appear here." />
+      )}
     </View>
   );
 }
@@ -2330,18 +2299,16 @@ function SelectableRoomCard({
   onShare,
   role,
   room,
-  selected,
 }: {
   onCopyInvite: () => void;
   onPress: () => void;
   onShare: () => void;
   role: Role;
   room: HackRoom;
-  selected: boolean;
 }) {
   const tone = role === "host" ? "violet" : "cyan";
   return (
-    <View style={[styles.selectableRoomCard, selected && styles.selectableRoomCardActive]}>
+    <View style={styles.selectableRoomCard}>
       <Pressable
         accessibilityRole="button"
         onPress={onPress}
@@ -4826,6 +4793,9 @@ function RewardRecipientEmailComposer({
   const selectedAllParticipants =
     participantEmailList.length > 0 &&
     participantEmailList.every((email) => rewardForm.recipientEmails.includes(email));
+  const visibleRecipientEmails = selectedAllParticipants
+    ? rewardForm.recipientEmails.filter((email) => !participantEmails.has(email))
+    : rewardForm.recipientEmails;
 
   const addDraftEmails = () => {
     setRewardForm((current) => {
@@ -4870,6 +4840,14 @@ function RewardRecipientEmailComposer({
     }));
   };
 
+  const clearRecipientEmails = () => {
+    setRewardForm((current) => ({
+      ...current,
+      recipientEmailDraft: "",
+      recipientEmails: [],
+    }));
+  };
+
   const selectAllParticipants = () => {
     setRewardForm((current) => ({
       ...current,
@@ -4911,9 +4889,34 @@ function RewardRecipientEmailComposer({
             <Text style={styles.emailComposerCount}>{participantEmailList.length} joined</Text>
           </View>
         ) : null}
-        {rewardForm.recipientEmails.length ? (
+        {selectedAllParticipants ? (
+          <View style={styles.emailSelectionSummary}>
+            <View style={styles.emailSelectionSummaryIcon}>
+              <Ionicons name="checkmark-done-outline" size={18} color={theme.participant} />
+            </View>
+            <View style={styles.emailSelectionSummaryCopy}>
+              <Text style={styles.emailSelectionSummaryTitle}>
+                All {participantEmailList.length} participants selected
+              </Text>
+              <Text style={styles.emailSelectionSummaryText}>
+                Certificates will be issued to everyone who joined.
+              </Text>
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              onPress={clearRecipientEmails}
+              style={({ pressed }) => [
+                styles.emailSelectionSummaryClear,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Text style={styles.emailSelectionSummaryClearText}>Clear</Text>
+            </Pressable>
+          </View>
+        ) : null}
+        {visibleRecipientEmails.length ? (
           <View style={styles.emailChipWrap}>
-            {rewardForm.recipientEmails.map((email) => {
+            {visibleRecipientEmails.map((email) => {
               const knownParticipant = participantEmails.has(email);
               return (
                 <View
@@ -5907,15 +5910,7 @@ function HostTrack({
         />
 
         {hostedRooms.length ? (
-          <ScrollView
-            contentContainerStyle={styles.hostRoomSwipeShelf}
-            decelerationRate="fast"
-            disableIntervalMomentum
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            snapToAlignment="start"
-            snapToInterval={ROOM_SWIPE_SNAP_INTERVAL}
-          >
+          <View style={styles.hostRoomList}>
             {hostedRooms.map((room) => (
               <View key={room._id} style={styles.hostRoomCard}>
                 <RoomCard role="host" room={room} />
@@ -5935,7 +5930,7 @@ function HostTrack({
                 </View>
               </View>
             ))}
-          </ScrollView>
+          </View>
         ) : (
           <EmptyState icon="shield-outline" text="Create a room to get a shareable invite code." />
         )}
@@ -7087,6 +7082,23 @@ function buildProofItemsForTask(
   }));
 }
 
+function isLinkProofType(proofType: ProofType) {
+  return proofType !== "game_score";
+}
+
+function isHttpsProofUrl(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("https://")) {
+    return false;
+  }
+
+  try {
+    return new URL(trimmed).protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 function hasRequiredProofItems(task: HackTask, submitForm: typeof emptySubmitForm) {
   return buildProofItemsForTask(task, submitForm).every((proofItem) => proofItem.value.trim());
 }
@@ -7786,6 +7798,57 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
   },
+  emailSelectionSummary: {
+    alignItems: "center",
+    backgroundColor: theme.participantDark,
+    borderColor: theme.participantBorder,
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 9,
+    padding: 9,
+  },
+  emailSelectionSummaryClear: {
+    alignItems: "center",
+    backgroundColor: theme.backgroundAlt,
+    borderColor: theme.participantBorder,
+    borderRadius: 7,
+    borderWidth: 1,
+    justifyContent: "center",
+    minHeight: 30,
+    paddingHorizontal: 10,
+  },
+  emailSelectionSummaryClearText: {
+    color: theme.participant,
+    fontSize: 10,
+    fontWeight: "900",
+  },
+  emailSelectionSummaryCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  emailSelectionSummaryIcon: {
+    alignItems: "center",
+    backgroundColor: theme.backgroundAlt,
+    borderColor: theme.participantBorder,
+    borderRadius: 999,
+    borderWidth: 1,
+    height: 34,
+    justifyContent: "center",
+    width: 34,
+  },
+  emailSelectionSummaryText: {
+    color: theme.dim,
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 2,
+  },
+  emailSelectionSummaryTitle: {
+    color: theme.participant,
+    fontSize: 12,
+    fontWeight: "900",
+    letterSpacing: 0,
+  },
   eyebrow: {
     color: theme.participant,
     fontFamily: Platform.select({ default: "monospace" }),
@@ -8026,10 +8089,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     padding: 12,
-    width: ROOM_SWIPE_CARD_WIDTH,
+    width: "100%",
   },
-  hostRoomSwipeShelf: {
-    gap: ROOM_SWIPE_GAP,
+  hostRoomList: {
+    gap: ROOM_LIST_GAP,
     paddingBottom: 2,
   },
   input: {
@@ -8347,16 +8410,22 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 12,
   },
+  loadingLogo: {
+    height: 54,
+    width: 140,
+  },
   loadingScreen: {
     alignItems: "center",
     backgroundColor: theme.background,
     flex: 1,
     gap: 12,
     justifyContent: "center",
+    padding: 24,
   },
   loadingText: {
     color: theme.muted,
     fontSize: 13,
+    textAlign: "center",
   },
   metricCard: {
     borderRadius: 10,
@@ -8992,7 +9061,7 @@ const styles = StyleSheet.create({
     width: 70,
   },
   roomShelf: {
-    gap: ROOM_SWIPE_GAP,
+    gap: ROOM_LIST_GAP,
     paddingBottom: 2,
   },
   roomShelfHeader: {
@@ -9013,23 +9082,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "800",
     marginTop: 2,
-  },
-  roomSwipeDot: {
-    backgroundColor: theme.borderStrong,
-    borderRadius: 999,
-    height: 5,
-    width: 5,
-  },
-  roomSwipeDotActive: {
-    backgroundColor: theme.host,
-    width: 18,
-  },
-  roomSwipeDots: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 5,
-    justifyContent: "center",
-    minHeight: 10,
   },
   roomStatsGrid: {
     flexDirection: "row",
@@ -9145,11 +9197,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     minHeight: 126,
     overflow: "hidden",
-    width: ROOM_SWIPE_CARD_WIDTH,
-  },
-  selectableRoomCardActive: {
-    backgroundColor: theme.hostDark,
-    borderColor: theme.hostBorder,
+    width: "100%",
   },
   selectableRoomContent: {
     padding: 10,
