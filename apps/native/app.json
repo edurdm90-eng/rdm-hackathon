@@ -8,6 +8,7 @@
     "scheme": "rdm-hack",
     "userInterfaceStyle": "automatic",
     "ios": {
+      "bundleIdentifier": "com.rdm.education",
       "supportsTablet": true
     },
     "android": {
