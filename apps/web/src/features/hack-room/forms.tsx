@@ -446,11 +446,13 @@ function TimeStepper({
 
 function DueAtField({
   error,
+  label,
   onPickerOpenChange,
   onChange,
   value,
 }: {
   error: string;
+  label: string;
   onPickerOpenChange?: (open: boolean) => void;
   onChange: (value: string) => void;
   value: string;
@@ -501,7 +503,7 @@ function DueAtField({
   }, [hasOpenPicker]);
 
   return (
-    <Field label="Due Date and Time">
+    <Field label={label}>
       <div className="relative" ref={containerRef}>
         <div className="flex min-h-10 items-center gap-2 rounded-[9px] border border-[rgba(238,232,222,0.12)] bg-[#061F18] p-1.5">
           <div className="grid min-w-0 flex-1 grid-cols-2 gap-1.5">
@@ -607,28 +609,69 @@ function AssignmentComposer({
   const minimumDescriptionLength = isNotification
     ? minNotificationMessageLength
     : minAssignmentDescriptionLength;
-  const composerTitle = isNotification
-    ? "Send Notification"
-    : isChallenge
-      ? "Create Spot Challenge"
-      : "Create Assignment";
+  const composerTitle = "Create Assignment";
   const titleLabel = isNotification
-    ? "Notification Title"
+    ? "Notification title"
     : isGame
-      ? "Game Name"
+      ? "Game name"
       : isChallenge
-        ? "Challenge Title"
-        : "Assignment Title";
+        ? "Challenge name"
+        : "Assignment title";
   const titlePlaceholder = isNotification
-    ? "Demo check-in"
+    ? "Final submission reminder"
+    : isGame
+      ? "Bug bash arena"
+      : isChallenge
+        ? "10-minute UX fix sprint"
+        : isSpecial
+          ? "Private API integration follow-up"
+          : "Build a working prototype";
+  const dateLabel = isGame
+    ? "Game date and time"
     : isChallenge
-      ? "15-minute bug sprint"
-      : "Build a working prototype";
+      ? "Challenge date and time"
+      : isSpecial
+        ? "Special task due date and time"
+        : "Due date and time";
+  const descriptionLabel = isNotification
+    ? "Message"
+    : isChallenge || isGame
+      ? "Rules / brief"
+      : "Description";
   const descriptionPlaceholder = isNotification
-    ? "Share a reminder, deadline update, or room-wide nudge."
+    ? "Nudge everyone with the next step, reminder, or deadline."
+    : isGame
+      ? "Tell members what score, attempt, or result the host will verify."
     : isChallenge
-      ? "Post a quick live prompt and ask participants for fast proof."
-      : "Submit a functional demo. GitHub and Drive proof are mandatory.";
+        ? "Describe the fun challenge, who can join, and how winners will be picked."
+        : isSpecial
+          ? "Give this member a focused follow-up task and explain the expected proof."
+          : "Submit a functional demo. GitHub and Drive proof are mandatory.";
+  const proofLabel = isGame
+    ? "Game proof"
+    : assignmentMode === "task"
+      ? "Expected proof"
+      : isSpecial
+        ? "Special task proof"
+        : "Challenge proof";
+  const buttonLabel = isNotification
+    ? "Send Notification"
+    : isGame
+      ? "Create Game Card"
+      : isChallenge
+        ? "Create Spot Challenge"
+        : isSpecial
+          ? "Create Special Task"
+          : "Publish Regular Task";
+  const ButtonIcon = isNotification
+    ? "notifications-outline"
+    : isGame
+      ? "game-controller-outline"
+      : isChallenge
+        ? "flash-outline"
+        : isSpecial
+          ? "star-outline"
+          : "send-outline";
   const canSubmit =
     room &&
     taskForm.title.trim().length >= 3 &&
@@ -641,7 +684,7 @@ function AssignmentComposer({
 
   return (
     <SectionCard
-      badge={isSpecial ? "One participant" : isNotification ? "Room nudge" : "All Participants"}
+      badge={isSpecial ? "One member" : isNotification ? "Room nudge" : "All members"}
       eyebrow="Organizer Track"
       title={composerTitle}
     >
@@ -695,6 +738,7 @@ function AssignmentComposer({
           {!isNotification ? (
             <DueAtField
               error={dueAtError}
+              label={dateLabel}
               onPickerOpenChange={setDueAtPickerOpen}
               onChange={(value) => setTaskForm((current) => ({ ...current, dueAt: value }))}
               value={taskForm.dueAt}
@@ -711,13 +755,13 @@ function AssignmentComposer({
         </div>
 
         {isSpecial ? (
-          <Field label="Participant Email">
+          <Field label="Registered member email">
             <Input
               className="h-10 rounded-[9px] border-[#FF8820] bg-[#241000] text-[13px] text-[#FF8820]"
               onChange={(event) =>
                 setTaskForm((current) => ({ ...current, assignedToEmail: event.target.value }))
               }
-              placeholder="student@example.com"
+              placeholder="member@company.com"
               value={taskForm.assignedToEmail}
             />
           </Field>
@@ -749,7 +793,7 @@ function AssignmentComposer({
           </Field>
         ) : null}
 
-        <Field label={isNotification ? "Message" : "Description"}>
+        <Field label={descriptionLabel}>
           <TextArea
             onChange={(value) => setTaskForm((current) => ({ ...current, description: value }))}
             placeholder={descriptionPlaceholder}
@@ -768,7 +812,7 @@ function AssignmentComposer({
 
         {!isNotification ? (
           <div className="grid gap-3 sm:grid-cols-[1fr_110px]">
-            <Field label="Expected Proof">
+            <Field label={proofLabel}>
               <div className="flex flex-wrap gap-2">
                 {proofTypeOptions
                   .filter((option) => (isGame ? option.value === "game_score" : option.value !== "game_score"))
@@ -816,12 +860,8 @@ function AssignmentComposer({
           disabled={!canSubmit}
           type="submit"
         >
-          {isNotification ? (
-            <NativeIcon className="size-4" name="notifications-outline" />
-          ) : (
-            <NativeIcon className="size-4" name="send-outline" />
-          )}
-          {composerTitle}
+          <NativeIcon className="size-4" name={ButtonIcon} />
+          {buttonLabel}
         </Button>
       </form>
     </SectionCard>

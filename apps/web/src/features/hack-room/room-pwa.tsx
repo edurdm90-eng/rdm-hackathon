@@ -386,16 +386,19 @@ export default function HackRoomPwa({
     setAssignmentMode(nextMode);
     if (nextMode === "task") {
       setProofTypes(defaultRegularProofTypes);
-      setTaskForm((current) => ({ ...current, rewardXrdm: current.rewardXrdm || "20" }));
+      setTaskForm({ ...emptyTaskForm, rewardXrdm: "20" });
     } else if (nextMode === "challenge") {
       setProofTypes(defaultSpotProofTypes);
-      setTaskForm((current) => ({ ...current, rewardXrdm: current.rewardXrdm || "20" }));
+      setTaskForm({ ...emptyTaskForm, rewardXrdm: "10" });
     } else if (nextMode === "game") {
       setProofTypes(defaultGameProofTypes);
-      setTaskForm((current) => ({ ...current, rewardXrdm: current.rewardXrdm || "20" }));
+      setTaskForm({ ...emptyTaskForm, rewardXrdm: "10" });
     } else if (nextMode === "special") {
       setProofTypes(defaultSpecialProofTypes);
-      setTaskForm((current) => ({ ...current, rewardXrdm: current.rewardXrdm || "20" }));
+      setTaskForm({ ...emptyTaskForm, rewardXrdm: "15" });
+    } else {
+      setProofTypes(defaultSpotProofTypes);
+      setTaskForm({ ...emptyTaskForm, rewardXrdm: "10" });
     }
   }
 
