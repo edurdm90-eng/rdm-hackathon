@@ -30,3 +30,11 @@ body {
   text-rendering: auto;
   text-transform: none;
 }
+
+[data-sonner-toaster] {
+  bottom: auto !important;
+  left: 50% !important;
+  right: auto !important;
+  top: max(12px, env(safe-area-inset-top)) !important;
+  transform: translateX(-50%) !important;
+}
