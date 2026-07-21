@@ -8,8 +8,11 @@
     "scheme": "rdm-hack",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "bundleIdentifier": "com.rdm.education",
-      "supportsTablet": true
+      "bundleIdentifier": "com.rdmhack.app",
+      "supportsTablet": true,
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -51,6 +54,12 @@
         "projectId": "f9873508-58f9-4aeb-8800-d8b2acc7f78b"
       }
     },
-    "owner": "yashdiwan"
+    "owner": "yashdiwan",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/f9873508-58f9-4aeb-8800-d8b2acc7f78b"
+    }
   }
 }
