@@ -893,6 +893,8 @@ function ProfileDashboard({ user }: { user: SessionUser }) {
   const notifications = dashboard.data?.notifications ?? [];
   const networkCount = countNativeNetworkParticipants(hostedRooms, user);
   const role = dashboard.data?.viewerRole ?? "member";
+  const showNetworkMetric = false;
+  const showTechnicalProfileDetails = false;
   const embeddedWalletAddress = wallets?.embeddedWalletAddress ?? walletAddress;
   const walletFallback = isCreatingWallet ? "Setting up account..." : "Not synced yet";
   const accountSetupError = walletError
@@ -953,12 +955,14 @@ function ProfileDashboard({ user }: { user: SessionUser }) {
               tone="gold"
               value={stats?.winners ?? 0}
             />
-            <MetricCard
-              icon="people-outline"
-              label="Network"
-              tone="violet"
-              value={networkCount}
-            />
+            {showNetworkMetric ? (
+              <MetricCard
+                icon="people-outline"
+                label="Network"
+                tone="violet"
+                value={networkCount}
+              />
+            ) : null}
           </View>
         </View>
 
@@ -970,20 +974,24 @@ function ProfileDashboard({ user }: { user: SessionUser }) {
           <View style={styles.profileDetails}>
             <ProfileRow label="Name" value={user.name} />
             <ProfileRow label="Email" value={user.email} />
-            <ProfileRow label="User ID" value={user.id} />
             <ProfileRow label="Role" value={role} />
-            <ProfileRow
-              label="Login account"
-              value={walletProfileValue(embeddedWalletAddress, walletFallback)}
-            />
-            <ProfileRow
-              label="Rewards account"
-              value={walletProfileValue(wallets?.smartWalletAddress, walletFallback)}
-            />
-            <ProfileRow
-              label="Rewards address"
-              value={walletProfileValue(wallets?.onchainAddress, walletFallback)}
-            />
+            {showTechnicalProfileDetails ? (
+              <>
+                <ProfileRow label="User ID" value={user.id} />
+                <ProfileRow
+                  label="Login account"
+                  value={walletProfileValue(embeddedWalletAddress, walletFallback)}
+                />
+                <ProfileRow
+                  label="Rewards account"
+                  value={walletProfileValue(wallets?.smartWalletAddress, walletFallback)}
+                />
+                <ProfileRow
+                  label="Rewards address"
+                  value={walletProfileValue(wallets?.onchainAddress, walletFallback)}
+                />
+              </>
+            ) : null}
           </View>
           {accountSetupError ? (
             <HackButton

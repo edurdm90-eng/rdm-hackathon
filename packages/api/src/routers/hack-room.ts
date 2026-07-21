@@ -1031,7 +1031,7 @@ export const hackRoomRouter = router({
         participants: hostedRooms.reduce((total, room) => total + room.participants.length, 0),
         pendingSubmissions: hostSubmissions.filter((submission) => submission.status === "submitted")
           .length,
-        winners: hostSubmissions.filter((submission) => submission.status === "winner").length,
+        winners: mySubmissions.filter((submission) => submission.status === "winner").length,
       },
     };
   }),
