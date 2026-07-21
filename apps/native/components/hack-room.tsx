@@ -417,12 +417,7 @@ export function AuthenticatedTabs({ children }: { children: React.ReactNode }) {
   useSponsoredWalletSync(sessionUser);
 
   if (isPending && !sessionUser) {
-    return (
-      <View style={styles.loadingScreen}>
-        <ActivityIndicator color={theme.participant} />
-        <Text style={styles.loadingText}>Opening Hack Room...</Text>
-      </View>
-    );
+    return <FullScreenLoader message="Opening your workspace..." />;
   }
 
   if (!sessionUser) {
@@ -477,12 +472,7 @@ function AuthenticatedRoute({
   useSponsoredWalletSync(sessionUser);
 
   if (isPending && !sessionUser) {
-    return (
-      <View style={styles.loadingScreen}>
-        <ActivityIndicator color={theme.participant} />
-        <Text style={styles.loadingText}>Opening Hack Room...</Text>
-      </View>
-    );
+    return <FullScreenLoader message="Opening your workspace..." />;
   }
 
   if (!sessionUser) {
@@ -490,6 +480,21 @@ function AuthenticatedRoute({
   }
 
   return children(sessionUser);
+}
+
+function FullScreenLoader({ message }: { message: string }) {
+  return (
+    <View style={styles.loadingScreen}>
+      <Image
+        accessibilityIgnoresInvertColors
+        resizeMode="contain"
+        source={rdmLogo}
+        style={styles.loadingLogo}
+      />
+      <ActivityIndicator color={theme.participant} size="large" />
+      <Text style={styles.loadingText}>{message}</Text>
+    </View>
+  );
 }
 
 function AuthGateway() {
@@ -712,6 +717,8 @@ function HomeDashboard({ user }: { user: SessionUser }) {
   const router = useRouter();
   const dashboard = useQuery(trpc.hackRoom.dashboard.queryOptions());
   const [message, setMessage] = useState<{ text: string; tone: Tone } | null>(null);
+  const isInitialDashboardLoading = dashboard.isLoading && !dashboard.data;
+  const isBackgroundDashboardSyncing = dashboard.isFetching && Boolean(dashboard.data);
   const stats = dashboard.data?.stats;
   const hostedRooms = dashboard.data?.hostedRooms ?? [];
   const joinedRooms = dashboard.data?.joinedRooms ?? [];
@@ -737,6 +744,10 @@ function HomeDashboard({ user }: { user: SessionUser }) {
       params: { roomId: walletRoom._id, tab: "wallet" },
     });
   };
+
+  if (isInitialDashboardLoading) {
+    return <FullScreenLoader message="Loading your workspace..." />;
+  }
 
   return (
     <View style={styles.screen}>
@@ -777,7 +788,7 @@ function HomeDashboard({ user }: { user: SessionUser }) {
               <Text style={styles.profileName}>{user.name}</Text>
               <Text style={styles.profileEmail}>{user.email}</Text>
             </View>
-            {dashboard.isLoading ? <ActivityIndicator color={theme.award} /> : null}
+            {isBackgroundDashboardSyncing ? <ActivityIndicator color={theme.award} /> : null}
           </View>
 
           <View style={styles.metricsGrid}>
@@ -880,6 +891,8 @@ function ProfileDashboard({ user }: { user: SessionUser }) {
   const { logout } = usePrivy();
   const { isCreatingWallet, retryCreateWallet, walletAddress, walletError } = useNativePrivyBridge();
   const [message, setMessage] = useState<{ text: string; tone: Tone } | null>(null);
+  const isInitialDashboardLoading = dashboard.isLoading && !dashboard.data;
+  const isBackgroundDashboardSyncing = dashboard.isFetching && Boolean(dashboard.data);
   const stats = dashboard.data?.stats;
   const wallets = dashboard.data?.wallets;
   const hostedRooms = dashboard.data?.hostedRooms ?? [];
@@ -908,6 +921,10 @@ function ProfileDashboard({ user }: { user: SessionUser }) {
     });
   };
 
+  if (isInitialDashboardLoading) {
+    return <FullScreenLoader message="Loading your profile..." />;
+  }
+
   return (
     <View style={styles.screen}>
       <AppHeader
@@ -926,6 +943,7 @@ function ProfileDashboard({ user }: { user: SessionUser }) {
               <Text style={styles.dashboardHeadline}>{user.name}</Text>
               <Text style={styles.profileEmail}>{user.email}</Text>
             </View>
+            {isBackgroundDashboardSyncing ? <ActivityIndicator color={theme.award} /> : null}
           </View>
 
           <View style={styles.metricsGrid}>
@@ -998,6 +1016,8 @@ function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
   const [isCreatingRoomOnchain, setIsCreatingRoomOnchain] = useState(false);
   const [pendingRoomCreate, setPendingRoomCreate] = useState<PendingRoomCreate | null>(null);
   const [message, setMessage] = useState<{ text: string; tone: Tone } | null>(null);
+  const isInitialDashboardLoading = dashboard.isLoading && !dashboard.data;
+  const isBackgroundDashboardSyncing = dashboard.isFetching && Boolean(dashboard.data);
 
   const hostedRooms = dashboard.data?.hostedRooms ?? [];
   const joinedRooms = dashboard.data?.joinedRooms ?? [];
@@ -1041,7 +1061,8 @@ function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
   const isBusy =
     createRoom.isPending ||
     isCreatingRoomOnchain ||
-    joinRoom.isPending;
+    joinRoom.isPending ||
+    isBackgroundDashboardSyncing;
 
   const handleNotifications = () => {
     setMessage({
@@ -1120,6 +1141,10 @@ function HackRoomDashboard({ user: _user }: { user: SessionUser }) {
       setIsCreatingRoomOnchain(false);
     }
   };
+
+  if (isInitialDashboardLoading) {
+    return <FullScreenLoader message="Loading your hack rooms..." />;
+  }
 
   return (
     <View style={styles.screen}>
@@ -1215,6 +1240,8 @@ function HackRoomDetailDashboard({
   const approvalInFlightRef = useRef(false);
   const rewardIssueInFlightRef = useRef(false);
   const winnerSelectionInFlightRef = useRef(false);
+  const isInitialDashboardLoading = dashboard.isLoading && !dashboard.data;
+  const isBackgroundDashboardSyncing = dashboard.isFetching && Boolean(dashboard.data);
 
   const hostedRooms = dashboard.data?.hostedRooms ?? [];
   const joinedRooms = dashboard.data?.joinedRooms ?? [];
@@ -1411,7 +1438,8 @@ function HackRoomDetailDashboard({
     returnSubmission.isPending ||
     issueRewardPending ||
     completeParticipantRegistration.isPending ||
-    sendRoomNotification.isPending;
+    sendRoomNotification.isPending ||
+    isBackgroundDashboardSyncing;
 
   useEffect(() => {
     if (initialParticipantTab) {
@@ -1900,6 +1928,10 @@ function HackRoomDetailDashboard({
       }
     })();
   };
+
+  if (isInitialDashboardLoading) {
+    return <FullScreenLoader message="Loading this room..." />;
+  }
 
   return (
     <View style={styles.screen}>
@@ -8315,16 +8347,22 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 12,
   },
+  loadingLogo: {
+    height: 54,
+    width: 140,
+  },
   loadingScreen: {
     alignItems: "center",
     backgroundColor: theme.background,
     flex: 1,
     gap: 12,
     justifyContent: "center",
+    padding: 24,
   },
   loadingText: {
     color: theme.muted,
     fontSize: 13,
+    textAlign: "center",
   },
   metricCard: {
     borderRadius: 10,
