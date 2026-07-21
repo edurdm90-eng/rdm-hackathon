@@ -86,7 +86,7 @@ export function getFriendlyHackRoomErrorMessage(error: unknown) {
   const message = error instanceof Error ? error.message : "Something went wrong. Please try again.";
 
   if (message.includes("Only users with the host role")) {
-    return "Only host accounts can create hack rooms. Ask the server/admin owner to make this account a host.";
+    return "Only organizers can create hack rooms. Ask an admin to update your account role.";
   }
 
   if (message.includes("Sync the host smart wallet")) {

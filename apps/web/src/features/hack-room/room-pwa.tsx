@@ -105,7 +105,7 @@ export default function HackRoomPwa({
   const allRooms = useMemo(() => buildRoomEntries(hostedRooms, joinedRooms), [hostedRooms, joinedRooms]);
   const canCreateRoom = dashboard.data?.viewerRole === "host";
   const createRoomBlockMessage = dashboard.data && !canCreateRoom
-    ? "Only host accounts can create hack rooms. Ask the server/admin owner to make this account a host."
+    ? "Only organizers can create hack rooms. Ask an admin to update your account role."
     : null;
 
   const activeSelectionId = roomId || activeRoomId;
@@ -230,7 +230,7 @@ export default function HackRoomPwa({
     }
 
     if (!canCreateRoom) {
-      showMessage(createRoomBlockMessage ?? "Only host accounts can create hack rooms.", "red");
+      showMessage(createRoomBlockMessage ?? "Only organizers can create hack rooms.", "red");
       return;
     }
 
