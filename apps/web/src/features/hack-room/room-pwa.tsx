@@ -37,6 +37,7 @@ import {
   isFutureDueAt,
   hostTabSegments,
   isEmailLike,
+  kindLabel,
   makeEmptyRewardForm,
   makeEmptySubmitForm,
   matchesRoomRouteParam,
@@ -265,11 +266,11 @@ export default function HackRoomPwa({
   const createTask = useMutation(
     trpc.hackRoom.createTask.mutationOptions({
       onError: (error) => showMessage(error.message, "red"),
-      onSuccess: async () => {
+      onSuccess: async (task) => {
         setTaskForm(emptyTaskForm);
         setAssignmentMode("task");
         setProofTypes(defaultRegularProofTypes);
-        showMessage("Room assignment published", "violet");
+        showMessage(`${kindLabel(task.kind ?? "task")} card created`, "violet");
         await invalidateDashboard();
       },
     }),
@@ -281,7 +282,7 @@ export default function HackRoomPwa({
       onSuccess: async () => {
         setTaskForm(emptyTaskForm);
         setAssignmentMode("task");
-        showMessage("Notification sent to room participants", "violet");
+        showMessage("Notification nudged to all room members", "violet");
         await invalidateDashboard();
       },
     }),
