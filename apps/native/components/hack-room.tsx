@@ -173,6 +173,11 @@ let cachedNativeSessionUser: SessionUser | null = null;
 const syncedWalletKeys = new Set<string>();
 const technicalUiErrorPattern =
   /blockchain|bundler|entrypoint|gas|on-chain|paymaster|pimlico|prefund|privy|rpc|smart account|smart wallet|transaction hash|useroperation|wallet receipt/i;
+let cachedAuthGatewayState = {
+  code: "",
+  email: "",
+  hasSentCode: false,
+};
 
 function walletProfileValue(value: string | null | undefined, fallback = "Not synced yet") {
   return value && value.trim().length > 0 ? value : fallback;
@@ -199,6 +204,14 @@ function waitForWalletSyncRetry(delayMs: number) {
 
 function setCachedNativeSessionUser(user: SessionUser | null) {
   cachedNativeSessionUser = user;
+}
+
+function resetCachedAuthGatewayState() {
+  cachedAuthGatewayState = {
+    code: "",
+    email: "",
+    hasSentCode: false,
+  };
 }
 
 function useSponsoredWalletSync(user: SessionUser | null) {
@@ -495,12 +508,20 @@ function AuthGateway() {
   const { isReady, logout, user } = usePrivy();
   const { sendCode, loginWithCode } = useLoginWithEmail();
   const { clearLastError, isSyncing, lastError, retrySync } = useNativePrivyBridge();
-  const [email, setEmail] = useState("");
-  const [code, setCode] = useState("");
-  const [hasSentCode, setHasSentCode] = useState(false);
+  const [email, setEmail] = useState(cachedAuthGatewayState.email);
+  const [code, setCode] = useState(cachedAuthGatewayState.code);
+  const [hasSentCode, setHasSentCode] = useState(cachedAuthGatewayState.hasSentCode);
   const [formError, setFormError] = useState<string | null>(null);
   const [isSendingCode, setIsSendingCode] = useState(false);
   const [isVerifyingCode, setIsVerifyingCode] = useState(false);
+
+  useEffect(() => {
+    cachedAuthGatewayState = {
+      code,
+      email,
+      hasSentCode,
+    };
+  }, [code, email, hasSentCode]);
 
   const resetError = () => {
     if (formError) {
@@ -525,6 +546,7 @@ function AuthGateway() {
 
     try {
       await sendCode({ email: parsed.data.email });
+      setEmail(parsed.data.email);
       setHasSentCode(true);
     } catch (error) {
       setFormError(error instanceof Error ? error.message : "Unable to send an email code.");
@@ -563,6 +585,7 @@ function AuthGateway() {
     setFormError(null);
     clearLastError();
     setCachedNativeSessionUser(null);
+    resetCachedAuthGatewayState();
 
     const results = await Promise.allSettled([authClient.signOut(), logout()]);
     const failedReset = results.find((result) => result.status === "rejected");
@@ -906,6 +929,7 @@ function ProfileDashboard({ user }: { user: SessionUser }) {
 
   const handleSignOut = async () => {
     setCachedNativeSessionUser(null);
+    resetCachedAuthGatewayState();
     await Promise.allSettled([authClient.signOut(), logout()]);
     await queryClient.invalidateQueries();
   };
