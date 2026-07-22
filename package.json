@@ -39,7 +39,8 @@
     "db:role:set": "bun run --cwd packages/db role:set",
     "dev:native": "turbo -F native dev",
     "dev:web": "turbo -F web dev",
-    "dev:server": "turbo -F server dev"
+    "dev:server": "turbo -F server dev",
+    "host": "bun run --cwd packages/db host:grant"
   },
   "dependencies": {
     "@rdm-hack/env": "workspace:*",

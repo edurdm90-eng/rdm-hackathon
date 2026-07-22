@@ -74,6 +74,32 @@ function getArgValue(name: string) {
   return undefined;
 }
 
+function getPositionalArgs() {
+  const positionalArgs: Array<string> = [];
+  const optionsWithValues = new Set(["--email", "--private-key"]);
+
+  for (let index = 2; index < process.argv.length; index += 1) {
+    const arg = process.argv[index];
+    if (!arg || arg === "--") {
+      continue;
+    }
+
+    if (arg.startsWith("--")) {
+      if (arg.includes("=")) {
+        continue;
+      }
+      if (optionsWithValues.has(arg)) {
+        index += 1;
+      }
+      continue;
+    }
+
+    positionalArgs.push(arg);
+  }
+
+  return positionalArgs;
+}
+
 function hasFlag(name: string) {
   return process.argv.includes(name);
 }
@@ -82,6 +108,8 @@ function printUsage() {
   console.log(`Grant a user host access offchain and onchain.
 
 Usage:
+  bun run host person@example.com
+  bun run host person@example.com --dry-run
   bun run host:grant -- --email person@example.com
   bun run host:grant -- --email person@example.com --dry-run
 
@@ -281,13 +309,13 @@ async function grantHostByEmail() {
 
   loadEnvFiles();
 
-  const email = normalizeEmail(getArgValue("--email"));
+  const email = normalizeEmail(
+    getArgValue("--email") ?? getPositionalArgs()[0],
+  );
   const dryRun = hasFlag("--dry-run");
 
   if (!email) {
-    throw new Error(
-      "Missing --email. Example: bun run host:grant -- --email person@example.com",
-    );
+    throw new Error("Missing email. Example: bun run host person@example.com");
   }
 
   const user = await findUserByEmail(email);
