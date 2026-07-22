@@ -1,6 +1,6 @@
 const IS_LOCAL_DEV = ["localhost", "127.0.0.1"].includes(self.location.hostname);
-const CACHE_NAME = "rdm-hack-room-v5";
-const APP_SHELL = ["/login", "/dashboard", "/hack-room", "/profile", "/manifest.webmanifest", "/icons/rdm-logo.png"];
+const CACHE_NAME = "rdm-hack-room-v6";
+const APP_SHELL = ["/login", "/manifest.webmanifest", "/icons/rdm-logo.png"];
 
 function clearAllCaches() {
   return caches.keys().then((keys) => Promise.all(keys.map((key) => caches.delete(key))));

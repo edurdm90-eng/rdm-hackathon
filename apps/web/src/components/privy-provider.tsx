@@ -16,6 +16,7 @@ type PrivyAuthContextValue = {
   authenticated: boolean;
   configurationError: string | null;
   emailLoginStatus: string;
+  isLoginRestrictionError: boolean;
   isSyncingSession: boolean;
   loginWithEmailCode: (code: string) => Promise<void>;
   login: (options?: PrivyLoginOptions) => Promise<void>;
@@ -36,6 +37,7 @@ const defaultPrivyAuthValue: PrivyAuthContextValue = {
   authenticated: false,
   configurationError: null,
   emailLoginStatus: "initial",
+  isLoginRestrictionError: false,
   isSyncingSession: false,
   loginWithEmailCode: async () => {},
   login: async () => {},

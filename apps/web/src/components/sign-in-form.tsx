@@ -9,8 +9,6 @@ import { toast } from "sonner";
 
 import { usePrivyAuth } from "@/components/privy-provider";
 
-import Loader from "./loader";
-
 export default function SignInForm() {
   const navigate = useNavigate({
     from: "/",
@@ -19,6 +17,7 @@ export default function SignInForm() {
     authenticated,
     configurationError,
     emailLoginStatus,
+    isLoginRestrictionError,
     isSyncingSession,
     loginWithEmailCode,
     ready,
@@ -28,6 +27,9 @@ export default function SignInForm() {
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [shouldRedirectAfterOtp, setShouldRedirectAfterOtp] = useState(false);
+  const isAwaitingOtp =
+    !isLoginRestrictionError &&
+    (emailLoginStatus === "awaiting-code-input" || emailLoginStatus === "error");
 
   useEffect(() => {
     if (!authenticated || !shouldRedirectAfterOtp) {
@@ -40,6 +42,15 @@ export default function SignInForm() {
     });
     toast.success("Privy sign in successful");
   }, [authenticated, navigate, shouldRedirectAfterOtp]);
+
+  useEffect(() => {
+    if (!isLoginRestrictionError) {
+      return;
+    }
+
+    setCode("");
+    setShouldRedirectAfterOtp(false);
+  }, [isLoginRestrictionError]);
 
   async function handleSendCode() {
     const trimmedEmail = email.trim().toLowerCase();
@@ -79,10 +90,6 @@ export default function SignInForm() {
     setShouldRedirectAfterOtp(true);
   }
 
-  if (!ready) {
-    return <Loader />;
-  }
-
   return (
     <main className="flex min-h-full items-center justify-center bg-[#0A0C0F] px-4 py-6 text-[#EEE8DE]">
       <div className="flex w-full max-w-[420px] flex-col items-center">
@@ -101,7 +108,7 @@ export default function SignInForm() {
               className="grid gap-3"
               onSubmit={(event) => {
                 event.preventDefault();
-                if (emailLoginStatus === "awaiting-code-input" || emailLoginStatus === "error") {
+                if (isAwaitingOtp) {
                   void handleVerifyCode();
                   return;
                 }
@@ -113,7 +120,7 @@ export default function SignInForm() {
                 <div className="rounded-[9px] border border-[#1EEAB0] bg-[#061F18] px-3 py-3 text-sm font-semibold text-[#1EEAB0]">
                   Finishing sign in...
                 </div>
-              ) : emailLoginStatus === "awaiting-code-input" || emailLoginStatus === "error" ? (
+              ) : isAwaitingOtp ? (
                 <div className="grid gap-1.5">
                   <Label
                     className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#626058]"
@@ -167,6 +174,7 @@ export default function SignInForm() {
               <Button
                 className="mt-1 h-[42px] w-full rounded-[9px] bg-[#1EEAB0] text-[13px] font-bold text-[#03120C] hover:bg-[#1EEAB0]/85"
                 disabled={
+                  !ready ||
                   isSyncingSession ||
                   emailLoginStatus === "sending-code" ||
                   emailLoginStatus === "submitting-code"
@@ -174,13 +182,15 @@ export default function SignInForm() {
                 type="submit"
               >
                 <LogIn className="size-4" />
-                {isSyncingSession
+                {!ready
+                  ? "Preparing login..."
+                  : isSyncingSession
                   ? "Finishing..."
                   : emailLoginStatus === "sending-code"
                   ? "Sending OTP..."
                   : emailLoginStatus === "submitting-code"
                     ? "Verifying..."
-                    : emailLoginStatus === "awaiting-code-input" || emailLoginStatus === "error"
+                    : isAwaitingOtp
                       ? "Verify OTP"
                       : "Send OTP"}
               </Button>

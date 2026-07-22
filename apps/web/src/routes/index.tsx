@@ -1,21 +1,13 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 
-import { authClient } from "@/lib/auth-client";
+import { readProtectedPrivySession } from "@/lib/privy-session";
 
 export const Route = createFileRoute("/")({
-  beforeLoad: async () => {
-    const session = await getSession();
+  beforeLoad: () => {
+    const session = readProtectedPrivySession();
 
     throw redirect({
-      to: session.data ? "/dashboard" : "/login",
+      to: session ? "/dashboard" : "/login",
     });
   },
 });
-
-async function getSession() {
-  try {
-    return await authClient.getSession();
-  } catch {
-    return { data: null };
-  }
-}

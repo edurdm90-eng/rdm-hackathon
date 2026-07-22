@@ -11,7 +11,6 @@ import { RoomCommandCenter } from "./forms";
 import { getHackRoomBlockchainErrorMessage, useHackRoomBlockchain } from "./blockchain";
 import {
   buildRoomEntries,
-  countUniqueNetworkParticipants,
   emptyRoomForm,
   firstName,
   getFriendlyHackRoomErrorMessage,
@@ -328,15 +327,14 @@ export function HackRoomRoomsPwa({ user: _user }: { user: SessionUser }) {
 export function HackRoomProfilePwa({ user }: { user: SessionUser }) {
   const navigate = useNavigate();
   const { logoutAndRedirect } = usePrivyAuth();
-  const { isCreatingWallet, walletError } = usePrivyWallet();
+  const { walletError } = usePrivyWallet();
   const dashboard = useQuery({
     ...trpc.hackRoom.dashboard.queryOptions(),
     refetchInterval: 10_000,
     refetchIntervalInBackground: false,
   });
   const stats = dashboard.data?.stats;
-  const hostedRooms = dashboard.data?.hostedRooms ?? [];
-  const networkCount = countUniqueNetworkParticipants(hostedRooms, user.id);
+  const role = dashboard.data?.viewerRole ?? "member";
 
   function handleSignOut() {
     void logoutAndRedirect();
@@ -352,22 +350,19 @@ export function HackRoomProfilePwa({ user }: { user: SessionUser }) {
             <p className="truncate text-xs text-[#626058]">{user.email}</p>
           </div>
         </div>
-        <div className="mt-4 grid grid-cols-3 gap-2">
+        <div className="mt-4 grid grid-cols-2 gap-2">
           <StatBox label="Rooms" value={(stats?.activeRooms ?? 0) + (stats?.joinedRooms ?? 0)} />
           <StatBox label="Wins" value={stats?.winners ?? 0} tone="gold" />
-          <StatBox label="Network" value={networkCount} tone="violet" />
         </div>
       </section>
 
       {dashboard.error ? <StatusBanner message={dashboard.error.message} tone="red" /> : null}
       {walletError ? <StatusBanner message={walletError} tone="red" /> : null}
-      {isCreatingWallet ? (
-        <StatusBanner message="Creating Privy wallet. Wait a moment..." tone="gold" />
-      ) : null}
 
       <SectionCard badge="Account" eyebrow="Profile" title="Account Details">
         <ProfileField label="Name" value={user.name} />
         <ProfileField label="Email" value={user.email} />
+        <ProfileField label="Role" value={role} />
         <Button
           className="mt-3 h-10 w-full rounded-[10px] border-[#FF5A4A] bg-[#280A08] text-[#FF5A4A] hover:bg-[#280A08]/80"
           onClick={handleSignOut}

@@ -7,6 +7,10 @@ import {
   useWallets,
 } from "@privy-io/react-auth";
 import { SmartWalletsProvider, useSmartWallets } from "@privy-io/react-auth/smart-wallets";
+import {
+  LOGIN_RESTRICTION_BLOCK_CODE,
+  LOGIN_RESTRICTION_BLOCK_MESSAGE,
+} from "@rdm-hack/auth/client";
 import { useMutation } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
@@ -167,6 +171,49 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: s
   }
 }
 
+type PrivyExchangeError = {
+  code?: string;
+  message?: string;
+  status?: number;
+  statusText?: string;
+};
+
+function isLoginRestrictionExchangeError(error: PrivyExchangeError | null) {
+  if (!error) {
+    return false;
+  }
+
+  return (
+    error.code === LOGIN_RESTRICTION_BLOCK_CODE ||
+    error.message === LOGIN_RESTRICTION_BLOCK_MESSAGE ||
+    error.status === 403
+  );
+}
+
+function resolveExchangeError(error: PrivyExchangeError | null) {
+  if (!error) {
+    return {
+      isLoginRestrictionError: false,
+      message: "Unable to create a Better Auth session from Privy.",
+    };
+  }
+
+  if (isLoginRestrictionExchangeError(error)) {
+    return {
+      isLoginRestrictionError: true,
+      message: LOGIN_RESTRICTION_BLOCK_MESSAGE,
+    };
+  }
+
+  return {
+    isLoginRestrictionError: false,
+    message:
+      error.message ??
+      error.statusText ??
+      "Unable to create a Better Auth session from Privy.",
+  };
+}
+
 function PrivySessionBridge({ children }: { children: ReactNode }) {
   const { authenticated, getAccessToken, login, logout: privyLogout, ready, user } = usePrivy();
   const {
@@ -192,6 +239,7 @@ function PrivySessionBridge({ children }: { children: ReactNode }) {
   const [sessionSyncError, setSessionSyncError] = useState<string | null>(null);
   const [isCreatingWallet, setIsCreatingWallet] = useState(false);
   const [walletError, setWalletError] = useState<string | null>(null);
+  const preserveLoginRestrictionErrorRef = useRef(false);
   const isSigningOutRef = useRef(false);
   const signOutRunIdRef = useRef(0);
   const walletAddress = resolveEmbeddedWalletAddress(wallets);
@@ -199,6 +247,7 @@ function PrivySessionBridge({ children }: { children: ReactNode }) {
   function beginFreshLoginAttempt() {
     signOutRunIdRef.current += 1;
     isSigningOutRef.current = false;
+    preserveLoginRestrictionErrorRef.current = false;
     clearPrivySignOut();
   }
 
@@ -222,14 +271,16 @@ function PrivySessionBridge({ children }: { children: ReactNode }) {
       setHasSyncedSession(false);
       setIsSyncingSession(false);
       setSessionSyncError(null);
-      clearBrowserAuthStorageForSignOut();
       if (authenticated) {
         void Promise.allSettled([
-          withTimeout(Promise.resolve(privyLogout()), 5_000, "Privy logout timed out."),
-          withTimeout(Promise.resolve(authClient.signOut()), 5_000, "Server logout timed out."),
+          withTimeout(Promise.resolve(privyLogout()), 15_000, "Privy logout timed out."),
+          withTimeout(Promise.resolve(authClient.signOut()), 15_000, "Server logout timed out."),
         ]).finally(() => {
+          clearBrowserAuthStorageForSignOut();
           finishSignOutCleanup(signOutRunId);
         });
+      } else {
+        clearBrowserAuthStorageForSignOut();
       }
       return;
     }
@@ -238,7 +289,9 @@ function PrivySessionBridge({ children }: { children: ReactNode }) {
       isSigningOutRef.current = false;
       setHasSyncedSession(false);
       setIsSyncingSession(false);
-      setSessionSyncError(null);
+      if (!preserveLoginRestrictionErrorRef.current) {
+        setSessionSyncError(null);
+      }
       clearStoredPrivySession();
       void queryClient.invalidateQueries();
       return;
@@ -248,12 +301,16 @@ function PrivySessionBridge({ children }: { children: ReactNode }) {
     let active = true;
 
     async function syncPrivySession() {
+      if (isPrivySignOutPending()) {
+        return;
+      }
+
       setHasSyncedSession(false);
       setIsSyncingSession(true);
       setSessionSyncError(null);
       const token = await getAccessToken();
 
-      if (!active) {
+      if (!active || isPrivySignOutPending()) {
         return;
       }
 
@@ -272,15 +329,30 @@ function PrivySessionBridge({ children }: { children: ReactNode }) {
       );
 
       if (exchangeResult.error) {
-        throw new Error(
-          exchangeResult.error.message ??
-            exchangeResult.error.statusText ??
-            "Unable to create a Better Auth session from Privy.",
-        );
+        const resolvedError = resolveExchangeError(exchangeResult.error);
+
+        if (resolvedError.isLoginRestrictionError) {
+          preserveLoginRestrictionErrorRef.current = true;
+          setHasSyncedSession(false);
+          setSessionSyncError(resolvedError.message);
+          toast.error(resolvedError.message);
+          clearStoredPrivySession();
+          setPrivyAccessToken(null);
+          await withTimeout(Promise.resolve(privyLogout()), 5_000, "Privy logout timed out.").catch(
+            () => {},
+          );
+          return;
+        }
+
+        throw new Error(resolvedError.message);
       }
 
       if (!exchangeResult.data) {
         throw new Error("Unable to create a Better Auth session from Privy.");
+      }
+
+      if (isPrivySignOutPending()) {
+        return;
       }
 
       const serverUser = exchangeResult.data.user;
@@ -299,6 +371,7 @@ function PrivySessionBridge({ children }: { children: ReactNode }) {
         },
       });
       setHasSyncedSession(true);
+      preserveLoginRestrictionErrorRef.current = false;
       setSessionSyncError(null);
       await queryClient.invalidateQueries();
     }
@@ -436,9 +509,11 @@ function PrivySessionBridge({ children }: { children: ReactNode }) {
       authenticated: authenticated && hasSyncedSession,
       configurationError: null,
       emailLoginStatus: emailLoginState.status,
+      isLoginRestrictionError: sessionSyncError === LOGIN_RESTRICTION_BLOCK_MESSAGE,
       isSyncingSession: authenticated && isSyncingSession,
       loginWithEmailCode: async (code: string) => {
         beginFreshLoginAttempt();
+        setSessionSyncError(null);
         await loginWithCode({ code });
       },
       login: async (options?: PrivyLoginOptions) => {
@@ -449,6 +524,7 @@ function PrivySessionBridge({ children }: { children: ReactNode }) {
         const signOutRunId = signOutRunIdRef.current + 1;
         signOutRunIdRef.current = signOutRunId;
         isSigningOutRef.current = true;
+        preserveLoginRestrictionErrorRef.current = false;
         setHasSyncedSession(false);
         setIsSyncingSession(false);
         setSessionSyncError(null);
@@ -457,26 +533,28 @@ function PrivySessionBridge({ children }: { children: ReactNode }) {
         await queryClient.cancelQueries().catch(() => {});
         queryClient.clear();
         await Promise.allSettled([
-          withTimeout(Promise.resolve(privyLogout()), 5_000, "Privy logout timed out."),
-          withTimeout(Promise.resolve(authClient.signOut()), 5_000, "Server logout timed out."),
+          withTimeout(Promise.resolve(privyLogout()), 15_000, "Privy logout timed out."),
+          withTimeout(Promise.resolve(authClient.signOut()), 15_000, "Server logout timed out."),
         ]);
+        clearBrowserAuthStorageForSignOut();
         finishSignOutCleanup(signOutRunId);
       },
       logoutAndRedirect: async () => {
         const signOutRunId = signOutRunIdRef.current + 1;
         signOutRunIdRef.current = signOutRunId;
         isSigningOutRef.current = true;
+        preserveLoginRestrictionErrorRef.current = false;
         setHasSyncedSession(false);
         setIsSyncingSession(false);
         setSessionSyncError(null);
         syncedWalletKeys.clear();
         beginPrivySignOut();
         clearBrowserAuthStorageForSignOut();
-        await queryClient.cancelQueries().catch(() => {});
+        void queryClient.cancelQueries().catch(() => {});
         queryClient.clear();
         void Promise.allSettled([
-          withTimeout(Promise.resolve(privyLogout()), 5_000, "Privy logout timed out."),
-          withTimeout(Promise.resolve(authClient.signOut()), 5_000, "Server logout timed out."),
+          withTimeout(Promise.resolve(privyLogout()), 15_000, "Privy logout timed out."),
+          withTimeout(Promise.resolve(authClient.signOut()), 15_000, "Server logout timed out."),
         ]).finally(() => {
           finishSignOutCleanup(signOutRunId);
         });
@@ -485,6 +563,7 @@ function PrivySessionBridge({ children }: { children: ReactNode }) {
       ready,
       sendEmailCode: async (email: string) => {
         beginFreshLoginAttempt();
+        setSessionSyncError(null);
         await sendCode({ email });
       },
       sessionSyncError,
