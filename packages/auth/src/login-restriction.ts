@@ -1,9 +1,10 @@
 import { isUserRole, type UserRole } from "./roles.js";
-
-export const LOGIN_RESTRICTION_SETTINGS_KEY = "login_restriction";
-export const LOGIN_RESTRICTION_BLOCK_CODE = "LOGIN_EMAIL_NOT_ALLOWLISTED";
-export const LOGIN_RESTRICTION_BLOCK_MESSAGE =
-  "Not a registered email, contact Admin";
+export {
+  LOGIN_RESTRICTION_BLOCK_CODE,
+  LOGIN_RESTRICTION_BLOCK_MESSAGE,
+  LOGIN_RESTRICTION_SETTINGS_KEY,
+} from "./login-restriction-constants.js";
+import { LOGIN_RESTRICTION_SETTINGS_KEY } from "./login-restriction-constants.js";
 
 type LoginRestrictionSettingsRecord = {
   isrestriction?: unknown;

@@ -57,4 +57,4 @@ export type {
 export {
   LOGIN_RESTRICTION_BLOCK_CODE,
   LOGIN_RESTRICTION_BLOCK_MESSAGE,
-} from "./login-restriction.js";
+} from "./login-restriction-constants";
