@@ -288,7 +288,7 @@ function AuthenticatedRoute({
 }
 
 function AuthGateway() {
-  const { isReady, logout, user } = usePrivy();
+  const { isReady, user } = usePrivy();
   const { sendCode, loginWithCode } = useLoginWithEmail();
   const { clearLastError, isSyncing, lastError, retrySync } =
     useNativePrivyBridge();
@@ -374,26 +374,6 @@ function AuthGateway() {
       );
     } finally {
       setIsVerifyingCode(false);
-    }
-  };
-
-  const handleUseDifferentEmail = async () => {
-    setCode("");
-    setHasSentCode(false);
-    setFormError(null);
-    clearLastError();
-    setCachedNativeSessionUser(null);
-    resetCachedAuthGatewayState();
-
-    const results = await Promise.allSettled([authClient.signOut(), logout()]);
-    const failedReset = results.find((result) => result.status === "rejected");
-
-    if (failedReset) {
-      setFormError(
-        failedReset.reason instanceof Error
-          ? failedReset.reason.message
-          : "Unable to reset sign-in.",
-      );
     }
   };
 
@@ -521,13 +501,9 @@ function AuthGateway() {
                   tone="violet"
                 />
               ) : null}
-              <HackButton
-                disabled={isBusy}
-                icon="swap-horizontal-outline"
-                label="Use Different Email"
-                onPress={handleUseDifferentEmail}
-                tone="red"
-              />
+              <Text style={styles.authVerifiedAccountText}>
+                register with your verified account
+              </Text>
             </View>
           ) : null}
         </View>

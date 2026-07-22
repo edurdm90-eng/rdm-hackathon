@@ -91,6 +91,15 @@ export const styles = StyleSheet.create({
   authSecondaryActions: {
     gap: 8,
   },
+  authVerifiedAccountText: {
+    color: theme.faint,
+    fontFamily: Platform.select({ default: "monospace" }),
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.8,
+    lineHeight: 16,
+    textAlign: "center",
+  },
   authLogo: {
     height: 58,
     width: 106,
