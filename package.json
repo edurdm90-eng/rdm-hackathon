@@ -32,6 +32,7 @@
   "type": "module",
   "scripts": {
     "dev": "turbo dev",
+    "allow:bulk": "bun run --cwd packages/db allow:bulk",
     "build": "turbo build",
     "check-types": "turbo check-types",
     "db:host:grant": "bun run --cwd packages/db host:grant",
@@ -40,7 +41,8 @@
     "dev:native": "turbo -F native dev",
     "dev:web": "turbo -F web dev",
     "dev:server": "turbo -F server dev",
-    "host": "bun run --cwd packages/db host:grant"
+    "host": "bun run --cwd packages/db host:grant",
+    "restriction": "bun run --cwd packages/db restriction"
   },
   "dependencies": {
     "@rdm-hack/env": "workspace:*",

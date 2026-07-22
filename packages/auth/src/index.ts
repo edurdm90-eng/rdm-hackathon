@@ -48,7 +48,7 @@ export function createAuth() {
       "http://127.0.0.1:8081",
     ],
     emailAndPassword: {
-      enabled: true,
+      enabled: false,
     },
     secret: env.BETTER_AUTH_SECRET,
     baseURL: env.BETTER_AUTH_URL,

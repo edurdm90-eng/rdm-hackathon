@@ -1,4 +1,7 @@
-import type { PrivyExchangeInput, PrivyExchangeResponse } from "./privy-bridge.js";
+import type {
+  PrivyExchangeInput,
+  PrivyExchangeResponse,
+} from "./privy-bridge.js";
 
 type BetterFetchResult<T> = {
   data: T | null;
@@ -26,10 +29,13 @@ export function privyClient() {
       return {
         privy: {
           exchange: async (input: PrivyExchangeInput) => {
-            const result = await $fetch<PrivyExchangeResponse>("/privy/exchange", {
-              body: input,
-              method: "POST",
-            });
+            const result = await $fetch<PrivyExchangeResponse>(
+              "/privy/exchange",
+              {
+                body: input,
+                method: "POST",
+              },
+            );
 
             if (!result.error) {
               $store.notify("$sessionSignal");
@@ -44,4 +50,11 @@ export function privyClient() {
 }
 
 export type PrivyClientPlugin = ReturnType<typeof privyClient>;
-export type { PrivyExchangeInput, PrivyExchangeResponse } from "./privy-bridge.js";
+export type {
+  PrivyExchangeInput,
+  PrivyExchangeResponse,
+} from "./privy-bridge.js";
+export {
+  LOGIN_RESTRICTION_BLOCK_CODE,
+  LOGIN_RESTRICTION_BLOCK_MESSAGE,
+} from "./login-restriction.js";

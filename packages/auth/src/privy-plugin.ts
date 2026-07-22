@@ -1,4 +1,8 @@
-import { APIError, createAuthEndpoint, formCsrfMiddleware } from "better-auth/api";
+import {
+  APIError,
+  createAuthEndpoint,
+  formCsrfMiddleware,
+} from "better-auth/api";
 import { setSessionCookie } from "better-auth/cookies";
 import { z } from "zod";
 import type { PrivyClient, User as PrivyUser } from "@privy-io/node";
@@ -13,6 +17,11 @@ import {
   type DerivedPrivyProfile,
 } from "./privy-bridge.js";
 import { normalizeAuthRecordId } from "./id-normalization.js";
+import {
+  LOGIN_RESTRICTION_BLOCK_CODE,
+  LOGIN_RESTRICTION_BLOCK_MESSAGE,
+  resolveLoginRestriction,
+} from "./login-restriction.js";
 import { isUserRole, normalizeUserRole, type UserRole } from "./roles.js";
 
 const privyExchangeBodySchema = z.object({
@@ -45,7 +54,8 @@ type BetterAuthUserUpdate = Partial<
 >;
 
 let privyClientPromise: Promise<PrivyClient> | null = null;
-let privyNodeModulePromise: Promise<typeof import("@privy-io/node")> | null = null;
+let privyNodeModulePromise: Promise<typeof import("@privy-io/node")> | null =
+  null;
 
 class OperationTimeoutError extends Error {
   constructor(
@@ -57,11 +67,17 @@ class OperationTimeoutError extends Error {
   }
 }
 
-function isOperationTimeoutError(error: unknown): error is OperationTimeoutError {
+function isOperationTimeoutError(
+  error: unknown,
+): error is OperationTimeoutError {
   return error instanceof OperationTimeoutError;
 }
 
-async function withTimeout<T>(operation: string, promise: Promise<T>, timeoutMs: number) {
+async function withTimeout<T>(
+  operation: string,
+  promise: Promise<T>,
+  timeoutMs: number,
+) {
   let timeout: ReturnType<typeof setTimeout> | undefined;
 
   try {
@@ -177,12 +193,14 @@ function authUserDocumentFilter(userId: string) {
 }
 
 async function persistAuthUserDefaults(user: NormalizedBetterAuthUserRecord) {
-  await authDbClient.collection("user").updateOne(authUserDocumentFilter(user.id), {
-    $set: {
-      role: user.role,
-      updatedAt: new Date(),
-    },
-  });
+  await authDbClient
+    .collection("user")
+    .updateOne(authUserDocumentFilter(user.id), {
+      $set: {
+        role: user.role,
+        updatedAt: new Date(),
+      },
+    });
 }
 
 type PrivyUserVerificationDependencies = {
@@ -251,7 +269,8 @@ export function privyBridge() {
           body: privyExchangeBodySchema,
           metadata: {
             openapi: {
-              description: "Exchange a Privy access token for a Better Auth session.",
+              description:
+                "Exchange a Privy access token for a Better Auth session.",
               operationId: "exchangePrivySession",
             },
           },
@@ -317,20 +336,48 @@ export function privyBridge() {
             });
           }
 
-          const linkedAccount = await ctx.context.internalAdapter.findAccountByProviderId(
-            privyUser.id,
-            PRIVY_PROVIDER_ID,
+          const loginRestriction = await resolveLoginRestriction(
+            profile.email,
+            authDbClient,
           );
-          const linkedAccountUserId = normalizeAuthRecordId(linkedAccount?.userId);
+
+          if (!loginRestriction.allowed) {
+            ctx.context.logger.info("privy.exchange.email_not_allowlisted", {
+              durationMs: Date.now() - exchangeStartedAt,
+              email: profile.email,
+              isrestriction: loginRestriction.isrestriction,
+              privyUserId: privyUser.id,
+            });
+            throw new APIError("FORBIDDEN", {
+              code: LOGIN_RESTRICTION_BLOCK_CODE,
+              message: LOGIN_RESTRICTION_BLOCK_MESSAGE,
+            });
+          }
+
+          const linkedAccount =
+            await ctx.context.internalAdapter.findAccountByProviderId(
+              privyUser.id,
+              PRIVY_PROVIDER_ID,
+            );
+          const linkedAccountUserId = normalizeAuthRecordId(
+            linkedAccount?.userId,
+          );
           const linkedUser = linkedAccountUserId
-            ? await ctx.context.internalAdapter.findUserById(linkedAccountUserId)
+            ? await ctx.context.internalAdapter.findUserById(
+                linkedAccountUserId,
+              )
             : null;
           const normalizedLinkedUser = linkedUser
             ? normalizeBetterAuthUser(linkedUser as BetterAuthUserRecord)
             : null;
-          const emailLookup = await ctx.context.internalAdapter.findUserByEmail(profile.email);
-          const emailUser = (emailLookup?.user ?? null) as BetterAuthUserRecord | null;
-          const normalizedEmailUser = emailUser ? normalizeBetterAuthUser(emailUser) : null;
+          const emailLookup = await ctx.context.internalAdapter.findUserByEmail(
+            profile.email,
+          );
+          const emailUser = (emailLookup?.user ??
+            null) as BetterAuthUserRecord | null;
+          const normalizedEmailUser = emailUser
+            ? normalizeBetterAuthUser(emailUser)
+            : null;
           const identityResolution = resolvePrivyIdentity({
             emailUserId: normalizedEmailUser?.id ?? null,
             linkedUserId: normalizedLinkedUser?.id ?? null,
@@ -370,7 +417,10 @@ export function privyBridge() {
 
           if (identityResolution.kind === "linked" && normalizedLinkedUser) {
             user = normalizedLinkedUser;
-          } else if (identityResolution.kind === "email" && normalizedEmailUser) {
+          } else if (
+            identityResolution.kind === "email" &&
+            normalizedEmailUser
+          ) {
             user = normalizedEmailUser;
           } else {
             user = normalizeBetterAuthUser(
@@ -411,7 +461,9 @@ export function privyBridge() {
             privyUserId: privyUser.id,
           });
 
-          const session = await ctx.context.internalAdapter.createSession(user.id);
+          const session = await ctx.context.internalAdapter.createSession(
+            user.id,
+          );
 
           await setSessionCookie(ctx, {
             session,

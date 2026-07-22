@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useLoginWithEmail, usePrivy } from "@privy-io/expo";
 import { useSmartWallets } from "@privy-io/expo/smart-wallets";
+import { LOGIN_RESTRICTION_BLOCK_MESSAGE } from "@rdm-hack/auth/client";
 import { polygonAmoyDeployment } from "@rdm-hack/blockchain-client";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
@@ -309,6 +310,13 @@ function AuthGateway() {
     };
   }, [code, email, hasSentCode]);
 
+  useEffect(() => {
+    if (lastError === LOGIN_RESTRICTION_BLOCK_MESSAGE) {
+      setCode("");
+      setHasSentCode(false);
+    }
+  }, [lastError]);
+
   const resetError = () => {
     if (formError) {
       setFormError(null);
@@ -502,7 +510,7 @@ function AuthGateway() {
                 />
               ) : null}
               <Text style={styles.authVerifiedAccountText}>
-                Please use your registered mail 
+                Please use your registered mail
               </Text>
             </View>
           ) : null}

@@ -1,8 +1,24 @@
-import { PrivyProvider, useEmbeddedEthereumWallet, usePrivy } from "@privy-io/expo";
+import {
+  PrivyProvider,
+  useEmbeddedEthereumWallet,
+  usePrivy,
+} from "@privy-io/expo";
 import { SmartWalletsProvider } from "@privy-io/expo/smart-wallets";
+import {
+  LOGIN_RESTRICTION_BLOCK_CODE,
+  LOGIN_RESTRICTION_BLOCK_MESSAGE,
+} from "@rdm-hack/auth/client";
 import { polygonAmoyChain } from "@rdm-hack/blockchain-client";
 import { env } from "@rdm-hack/env/native";
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import { authClient } from "@/lib/auth-client";
 import { queryClient } from "@/utils/trpc";
@@ -26,26 +42,39 @@ type NativePrivyBridgeContextValue = {
   wallets: NativePrivyWallet[];
 };
 
-const NativePrivyBridgeContext = createContext<NativePrivyBridgeContextValue | null>(null);
+const NativePrivyBridgeContext =
+  createContext<NativePrivyBridgeContextValue | null>(null);
 
-function getExchangeErrorMessage(error: {
-  message?: string;
-  status?: number;
-  statusText?: string;
-} | null) {
+function getExchangeErrorMessage(
+  error: {
+    code?: string;
+    message?: string;
+    status?: number;
+    statusText?: string;
+  } | null,
+) {
   if (!error) {
     return "Unable to create a Better Auth session from Privy.";
   }
 
-  return error.message ?? error.statusText ?? "Unable to create a Better Auth session from Privy.";
+  if (error.code === LOGIN_RESTRICTION_BLOCK_CODE) {
+    return LOGIN_RESTRICTION_BLOCK_MESSAGE;
+  }
+
+  return (
+    error.message ??
+    error.statusText ??
+    "Unable to create a Better Auth session from Privy."
+  );
 }
 
 function NativePrivySessionBridge({ children }: { children: React.ReactNode }) {
-  const { getAccessToken, isReady, user } = usePrivy();
+  const { getAccessToken, isReady, logout, user } = usePrivy();
   const { create, wallets } = useEmbeddedEthereumWallet();
   const { data: session } = authClient.useSession();
   const attemptedUserIdRef = useRef<string | null>(null);
   const attemptedWalletUserIdRef = useRef<string | null>(null);
+  const preserveLastErrorRef = useRef(false);
   const [isCreatingWallet, setIsCreatingWallet] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastError, setLastError] = useState<string | null>(null);
@@ -59,7 +88,9 @@ function NativePrivySessionBridge({ children }: { children: React.ReactNode }) {
     [wallets],
   );
   const activeWallets = user ? mappedWallets : [];
-  const primaryWalletAddress = user ? mappedWallets[0]?.address ?? null : null;
+  const primaryWalletAddress = user
+    ? (mappedWallets[0]?.address ?? null)
+    : null;
   const walletAddress = primaryWalletAddress;
 
   const syncSession = useCallback(async () => {
@@ -83,7 +114,14 @@ function NativePrivySessionBridge({ children }: { children: React.ReactNode }) {
       });
 
       if (result.error) {
-        setLastError(getExchangeErrorMessage(result.error));
+        const message = getExchangeErrorMessage(result.error);
+
+        if (result.error.code === LOGIN_RESTRICTION_BLOCK_CODE) {
+          preserveLastErrorRef.current = true;
+          await logout();
+        }
+
+        setLastError(message);
         return false;
       }
 
@@ -92,12 +130,16 @@ function NativePrivySessionBridge({ children }: { children: React.ReactNode }) {
 
       return true;
     } catch (error) {
-      setLastError(error instanceof Error ? error.message : "Privy session exchange failed.");
+      setLastError(
+        error instanceof Error
+          ? error.message
+          : "Privy session exchange failed.",
+      );
       return false;
     } finally {
       setIsSyncing(false);
     }
-  }, [getAccessToken, isReady, user]);
+  }, [getAccessToken, isReady, logout, user]);
 
   const retrySync = useCallback(async () => {
     attemptedUserIdRef.current = null;
@@ -117,7 +159,11 @@ function NativePrivySessionBridge({ children }: { children: React.ReactNode }) {
       setWalletError(null);
       return true;
     } catch (error) {
-      setWalletError(error instanceof Error ? error.message : "Unable to create a Privy wallet.");
+      setWalletError(
+        error instanceof Error
+          ? error.message
+          : "Unable to create a Privy wallet.",
+      );
       return false;
     } finally {
       setIsCreatingWallet(false);
@@ -137,7 +183,11 @@ function NativePrivySessionBridge({ children }: { children: React.ReactNode }) {
     if (!user) {
       attemptedUserIdRef.current = null;
       attemptedWalletUserIdRef.current = null;
-      setLastError(null);
+      if (preserveLastErrorRef.current) {
+        preserveLastErrorRef.current = false;
+      } else {
+        setLastError(null);
+      }
       setWalletError(null);
       return;
     }
@@ -219,7 +269,11 @@ function NativePrivySessionBridge({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function NativePrivyProvider({ children }: { children: React.ReactNode }) {
+export function NativePrivyProvider({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <PrivyProvider
       appId={env.EXPO_PUBLIC_PRIVY_APP_ID}
@@ -244,7 +298,9 @@ export function useNativePrivyBridge() {
   const context = useContext(NativePrivyBridgeContext);
 
   if (!context) {
-    throw new Error("useNativePrivyBridge must be used within NativePrivyProvider.");
+    throw new Error(
+      "useNativePrivyBridge must be used within NativePrivyProvider.",
+    );
   }
 
   return context;
