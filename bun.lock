@@ -1,6 +1,5 @@
 {
   "lockfileVersion": 1,
-  "configVersion": 0,
   "workspaces": {
     "": {
       "name": "rdm-hack",
@@ -202,9 +201,11 @@
     "packages/db": {
       "name": "@rdm-hack/db",
       "dependencies": {
+        "@rdm-hack/blockchain-client": "workspace:*",
         "@rdm-hack/env": "workspace:*",
         "dotenv": "catalog:",
         "mongoose": "^9.6.2",
+        "viem": "2.52.0",
         "zod": "catalog:",
       },
       "devDependencies": {

@@ -10,13 +10,16 @@
     }
   },
   "scripts": {
+    "host:grant": "bun scripts/grant-host.ts",
     "role:backfill": "bun scripts/set-user-role.ts --backfill-missing",
     "role:set": "bun scripts/set-user-role.ts"
   },
   "dependencies": {
+    "@rdm-hack/blockchain-client": "workspace:*",
     "@rdm-hack/env": "workspace:*",
     "dotenv": "catalog:",
     "mongoose": "^9.6.2",
+    "viem": "2.52.0",
     "zod": "catalog:"
   },
   "devDependencies": {

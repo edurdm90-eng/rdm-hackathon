@@ -8,8 +8,5 @@
     "rootDir": "../..",
     "composite": true
   },
-  "include": [
-    "src",
-    "../env/src"
-  ]
+  "include": ["scripts", "src", "../env/src"]
 }
