@@ -1263,6 +1263,7 @@ function HackRoomDetailDashboard({
   const [pendingRewardKind, setPendingRewardKind] = useState<RewardKind | null>(null);
   const [pendingApprovalSubmissionId, setPendingApprovalSubmissionId] = useState("");
   const [pendingWinnerSubmissionId, setPendingWinnerSubmissionId] = useState("");
+  const detailScrollRef = useRef<ScrollView | null>(null);
   const approvalInFlightRef = useRef(false);
   const rewardIssueInFlightRef = useRef(false);
   const winnerSelectionInFlightRef = useRef(false);
@@ -1483,6 +1484,10 @@ function HackRoomDetailDashboard({
 
   const handleBackToRooms = () => {
     router.replace("/hack-room");
+  };
+
+  const scrollDetailToTop = () => {
+    detailScrollRef.current?.scrollTo({ animated: true, y: 0 });
   };
 
   const handleShareCode = async (room: HackRoom) => {
@@ -1966,6 +1971,7 @@ function HackRoomDetailDashboard({
         onNotificationPress={handleNotifications}
       />
       <ScrollView
+        ref={detailScrollRef}
         contentContainerStyle={styles.dashboardContent}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
@@ -2024,6 +2030,7 @@ function HackRoomDetailDashboard({
             onRoomTabChange={setActiveRoomTab}
             onCopyInvite={handleCopyInviteCode}
             onIssueReward={handleIssueReward}
+            onMiniGameSwitch={scrollDetailToTop}
             onSendRoomNotification={handleSendRoomNotification}
             onSelectTask={setSelectedTaskId}
             onSelectWinner={handleSelectWinner}
@@ -2127,7 +2134,7 @@ function RoomCommandCenter({
       >
         <View style={styles.inviteJoinRow}>
           <View style={styles.inviteInputColumn}>
-            <Text style={styles.fieldLabel}>Enter invite code</Text>
+            <Text style={[styles.fieldLabel, styles.inviteFieldLabel]}>Enter invite code</Text>
             <HackTextInput
               autoCapitalize="characters"
               onChangeText={onInviteCodeChange}
@@ -2374,6 +2381,7 @@ function RoomWorkspace({
   onCopyInvite,
   onCreateTask,
   onIssueReward,
+  onMiniGameSwitch,
   onParticipantTabChange,
   onReturnSubmission,
   onRoomTabChange,
@@ -2429,6 +2437,7 @@ function RoomWorkspace({
   onCopyInvite: (room: HackRoom) => void;
   onCreateTask: (kind: TaskKind) => void;
   onIssueReward: (kind: RewardKind) => void;
+  onMiniGameSwitch: () => void;
   onParticipantTabChange: (tab: ParticipantTab | null) => void;
   onReturnSubmission: (submission: HackSubmission) => void;
   onRoomTabChange: (tab: RoomTab | null) => void;
@@ -2519,6 +2528,7 @@ function RoomWorkspace({
           onCopyInvite={onCopyInvite}
           onCreateTask={onCreateTask}
           onIssueReward={onIssueReward}
+          onMiniGameSwitch={onMiniGameSwitch}
           onReturnSubmission={onReturnSubmission}
           onRoomTabChange={onRoomTabChange}
           onSendRoomNotification={onSendRoomNotification}
@@ -2553,6 +2563,7 @@ function RoomWorkspace({
           activeParticipantTab={activeParticipantTab}
           mySubmissions={mySubmissions}
           onParticipantTabChange={onParticipantTabChange}
+          onMiniGameSwitch={onMiniGameSwitch}
           onSelectTask={onSelectTask}
           onSubmitProof={onSubmitProof}
           roomTasks={roomTasks}
@@ -2585,6 +2596,7 @@ function HostRoomWorkspace({
   onCopyInvite,
   onCreateTask,
   onIssueReward,
+  onMiniGameSwitch,
   onReturnSubmission,
   onRoomTabChange,
   onSendRoomNotification,
@@ -2629,6 +2641,7 @@ function HostRoomWorkspace({
   onCopyInvite: (room: HackRoom) => void;
   onCreateTask: (kind: TaskKind) => void;
   onIssueReward: (kind: RewardKind) => void;
+  onMiniGameSwitch: () => void;
   onReturnSubmission: (submission: HackSubmission) => void;
   onRoomTabChange: (tab: RoomTab | null) => void;
   onSendRoomNotification: () => void;
@@ -2906,7 +2919,7 @@ function HostRoomWorkspace({
         />
       ) : null}
 
-      {activeRoomTab === "games" ? <HostGamesPanel /> : null}
+      {activeRoomTab === "games" ? <HostGamesPanel onMiniGameSwitch={onMiniGameSwitch} /> : null}
 
       {activeRoomTab === "winners" ? (
         <Panel
@@ -3288,7 +3301,7 @@ function CreatedTaskLogCard({
   );
 }
 
-function HostGamesPanel() {
+function HostGamesPanel({ onMiniGameSwitch }: { onMiniGameSwitch: () => void }) {
   return (
     <Panel
       action={<CounterLabel label={`${gameTypeOptions.length} games`} />}
@@ -3297,7 +3310,7 @@ function HostGamesPanel() {
       title="Games"
       tone="lime"
     >
-      <MiniGamePlaySurface tone="lime" />
+      <MiniGamePlaySurface onMiniGameSwitch={onMiniGameSwitch} tone="lime" />
     </Panel>
   );
 }
@@ -3305,6 +3318,7 @@ function HostGamesPanel() {
 function ParticipantRoomWorkspace({
   activeParticipantTab,
   mySubmissions,
+  onMiniGameSwitch,
   onParticipantTabChange,
   onSelectTask,
   onSubmitProof,
@@ -3319,6 +3333,7 @@ function ParticipantRoomWorkspace({
 }: {
   activeParticipantTab: ParticipantTab | null;
   mySubmissions: DashboardData["mySubmissions"];
+  onMiniGameSwitch: () => void;
   onParticipantTabChange: (tab: ParticipantTab | null) => void;
   onSelectTask: (taskId: string) => void;
   onSubmitProof: () => void;
@@ -3432,6 +3447,7 @@ function ParticipantRoomWorkspace({
         <ParticipantGamesPanel
           challengeTasks={challengeTasks}
           mySubmissions={mySubmissions}
+          onMiniGameSwitch={onMiniGameSwitch}
           onSelectTask={onSelectTask}
           onSubmitProof={onSubmitProof}
           selectedTask={selectedTask}
@@ -3595,6 +3611,7 @@ function ParticipantHistoryPanel({
 function ParticipantGamesPanel({
   challengeTasks,
   mySubmissions,
+  onMiniGameSwitch,
   onSelectTask,
   onSubmitProof,
   selectedTask,
@@ -3605,6 +3622,7 @@ function ParticipantGamesPanel({
 }: {
   challengeTasks: DashboardData["tasks"];
   mySubmissions: DashboardData["mySubmissions"];
+  onMiniGameSwitch: () => void;
   onSelectTask: (taskId: string) => void;
   onSubmitProof: () => void;
   selectedTask?: HackTask;
@@ -3628,7 +3646,7 @@ function ParticipantGamesPanel({
         title="Games"
         tone="cyan"
       >
-        <MiniGamePlaySurface tone="cyan" />
+        <MiniGamePlaySurface onMiniGameSwitch={onMiniGameSwitch} tone="cyan" />
         <View style={styles.divider} />
         <Text style={styles.sectionEyebrow}>Spot Challenges</Text>
         <View style={styles.listStack}>
@@ -3985,10 +4003,22 @@ function GameAssignmentCard({
   );
 }
 
-function MiniGamePlaySurface({ tone }: { tone: Tone }) {
+function MiniGamePlaySurface({
+  onMiniGameSwitch,
+  tone,
+}: {
+  onMiniGameSwitch: () => void;
+  tone: Tone;
+}) {
   const [activeGameSession, setActiveGameSession] = useState<MiniGameSession | null>(null);
   const [latestResult, setLatestResult] = useState<MiniGameResult | null>(null);
   const toneColors = getToneColors(tone);
+  const startGame = (type: GameType) => {
+    if (activeGameSession) {
+      onMiniGameSwitch();
+    }
+    setActiveGameSession({ mode: "practice", type });
+  };
 
   return (
     <View style={styles.miniGamePlayStack}>
@@ -4037,7 +4067,7 @@ function MiniGamePlaySurface({ tone }: { tone: Tone }) {
           <Pressable
             accessibilityRole="button"
             key={option.value}
-            onPress={() => setActiveGameSession({ mode: "practice", type: option.value })}
+            onPress={() => startGame(option.value)}
             style={({ pressed }) => [styles.practiceGameCard, pressed && styles.pressed]}
           >
             <Ionicons name={option.icon} size={22} color={theme.participant} />
@@ -4703,7 +4733,7 @@ function ParticipantWalletPanel({
             showsHorizontalScrollIndicator={false}
           >
             {nftRewards.map((reward) => (
-              <NftBadgeCard key={reward._id} reward={reward} />
+              <NftBadgeCard key={reward._id} reward={reward} showTimestamp />
             ))}
           </ScrollView>
         ) : (
@@ -4720,7 +4750,9 @@ function ParticipantWalletPanel({
       >
         <View style={styles.listStack}>
           {certificateRewards.length ? (
-            certificateRewards.map((reward) => <RewardCard key={reward._id} reward={reward} />)
+            certificateRewards.map((reward) => (
+              <RewardCard key={reward._id} reward={reward} showTimestamp />
+            ))
           ) : (
             <EmptyState
               icon="document-text-outline"
@@ -4742,7 +4774,7 @@ function ParticipantWalletPanel({
             <LedgerRow
               key={submission._id}
               label={submission.taskTitle}
-              meta={`${submissionStatusLabel(submission.status)} - ${formatDate(submission.submittedAt)}`}
+              meta={`${submissionStatusLabel(submission.status)} - ${formatShortDateTime(submission.reviewedAt ?? submission.submittedAt)}`}
               value={`+${submission.awardXrdm ?? submission.rewardXrdm ?? 0} XRDM`}
             />
           ))}
@@ -4750,7 +4782,7 @@ function ParticipantWalletPanel({
             <LedgerRow
               key={reward._id}
               label={reward.title}
-              meta={`${rewardKindLabel(reward.kind)} - ${formatDate(reward.issuedAt)}`}
+              meta={`${rewardKindLabel(reward.kind)} - ${formatShortDateTime(reward.issuedAt)}`}
               value={reward.awardXrdm ? `+${reward.awardXrdm} XRDM` : "Issued"}
             />
           ))}
@@ -5022,7 +5054,13 @@ function WinnerSourceSelector({
   );
 }
 
-function RewardCard({ reward }: { reward: HackReward }) {
+function RewardCard({
+  reward,
+  showTimestamp = false,
+}: {
+  reward: HackReward;
+  showTimestamp?: boolean;
+}) {
   return (
     <View style={styles.rewardCard}>
       <View style={styles.cardTopRow}>
@@ -5032,7 +5070,8 @@ function RewardCard({ reward }: { reward: HackReward }) {
         <View style={styles.taskTitleBlock}>
           <Text style={styles.cardTitle}>{reward.title}</Text>
           <Text style={styles.cardMeta}>
-            {reward.roomName} - {formatDate(reward.issuedAt)}
+            {reward.roomName} -{" "}
+            {showTimestamp ? formatShortDateTime(reward.issuedAt) : formatDate(reward.issuedAt)}
           </Text>
         </View>
         <StatusPill label={rewardKindLabel(reward.kind)} tone={rewardKindTone(reward.kind)} />
@@ -5053,14 +5092,22 @@ function RewardCard({ reward }: { reward: HackReward }) {
   );
 }
 
-function NftBadgeCard({ reward }: { reward: HackReward }) {
+function NftBadgeCard({
+  reward,
+  showTimestamp = false,
+}: {
+  reward: HackReward;
+  showTimestamp?: boolean;
+}) {
   return (
     <View style={styles.nftBadgeCard}>
       <Ionicons name="diamond-outline" size={23} color={theme.award} />
       <Text numberOfLines={2} style={styles.nftBadgeName}>
         {reward.title}
       </Text>
-      <Text style={styles.nftBadgeDate}>{formatDate(reward.issuedAt)}</Text>
+      <Text numberOfLines={2} style={styles.nftBadgeDate}>
+        {showTimestamp ? formatShortDateTime(reward.issuedAt) : formatDate(reward.issuedAt)}
+      </Text>
     </View>
   );
 }
@@ -7253,6 +7300,15 @@ function formatDate(value: string) {
   });
 }
 
+function formatShortDateTime(value: string) {
+  return new Date(value).toLocaleString(undefined, {
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    month: "short",
+  });
+}
+
 function getMinimumTaskDueDate(date = new Date()) {
   return new Date(date.getTime() + minimumTaskDueOffsetMs);
 }
@@ -7880,6 +7936,9 @@ const styles = StyleSheet.create({
     fontSize: 9,
     letterSpacing: 1.1,
     textTransform: "uppercase",
+  },
+  inviteFieldLabel: {
+    color: theme.text,
   },
   fieldWithHelper: {
     gap: 6,
@@ -8660,6 +8719,8 @@ const styles = StyleSheet.create({
     color: theme.dim,
     fontFamily: Platform.select({ default: "monospace" }),
     fontSize: 9,
+    lineHeight: 12,
+    textAlign: "center",
   },
   nftBadgeName: {
     color: theme.text,
