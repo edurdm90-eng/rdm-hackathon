@@ -293,13 +293,16 @@ function AuthGateway() {
   const { sendCode, loginWithCode } = useLoginWithEmail();
   const { clearLastError, isSyncing, lastError, retrySync } =
     useNativePrivyBridge();
+  const checkLoginEmail = useMutation(
+    trpc.auth.checkLoginEmail.mutationOptions(),
+  );
   const [email, setEmail] = useState(cachedAuthGatewayState.email);
   const [code, setCode] = useState(cachedAuthGatewayState.code);
   const [hasSentCode, setHasSentCode] = useState(
     cachedAuthGatewayState.hasSentCode,
   );
   const [formError, setFormError] = useState<string | null>(null);
-  const [isSendingCode, setIsSendingCode] = useState(false);
+  const [isRequestingCode, setIsRequestingCode] = useState(false);
   const [isVerifyingCode, setIsVerifyingCode] = useState(false);
 
   useEffect(() => {
@@ -336,11 +339,12 @@ function AuthGateway() {
       return;
     }
 
-    setIsSendingCode(true);
+    setIsRequestingCode(true);
     setFormError(null);
     clearLastError();
 
     try {
+      await checkLoginEmail.mutateAsync({ email: parsed.data.email });
       await sendCode({ email: parsed.data.email });
       setEmail(parsed.data.email);
       setHasSentCode(true);
@@ -351,7 +355,7 @@ function AuthGateway() {
           : "Unable to send an email code.",
       );
     } finally {
-      setIsSendingCode(false);
+      setIsRequestingCode(false);
     }
   };
 
@@ -385,7 +389,9 @@ function AuthGateway() {
     }
   };
 
-  const isBusy = isSendingCode || isVerifyingCode || isSyncing;
+  const isCheckingEmail = checkLoginEmail.isPending;
+  const isBusy =
+    isCheckingEmail || isRequestingCode || isVerifyingCode || isSyncing;
   const isPrivyAuthenticated = Boolean(user);
 
   return (
@@ -489,7 +495,7 @@ function AuthGateway() {
               disabled={!isReady || !email.trim() || isBusy}
               icon="mail-outline"
               label="Send Email Code"
-              loading={isSendingCode}
+              loading={isRequestingCode}
               onPress={handleSendCode}
               tone="cyan"
             />

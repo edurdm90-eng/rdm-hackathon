@@ -1,7 +1,9 @@
 import { protectedProcedure, publicProcedure, router } from "../index.js";
+import { authRouter } from "./auth.js";
 import { hackRoomRouter } from "./hack-room.js";
 
 export const appRouter = router({
+  auth: authRouter,
   healthCheck: publicProcedure.query(() => {
     return "OK";
   }),
