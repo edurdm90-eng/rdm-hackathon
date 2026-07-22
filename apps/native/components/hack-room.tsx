@@ -502,7 +502,7 @@ function AuthGateway() {
                 />
               ) : null}
               <Text style={styles.authVerifiedAccountText}>
-                register with your verified account
+                Please use your registered mail 
               </Text>
             </View>
           ) : null}
