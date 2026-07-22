@@ -609,6 +609,74 @@ async function verifyHackathonCreated(txHash: Hex, expectedHost: string) {
   };
 }
 
+async function ensureRoomCreatedChainEvent(input: {
+  hostAddress: Address;
+  room: HackRoomRecord;
+  txHash: Hex;
+  verified?: Awaited<ReturnType<typeof verifyHackathonCreated>>;
+}) {
+  const idempotencyKey = `room:${input.room._id}:created`;
+  const existingEvent = await chainEventCollection().findOne({
+    idempotencyKey,
+    status: "confirmed",
+  });
+
+  if (
+    existingEvent &&
+    input.room.onchainHackathonId &&
+    existingEvent.txHash === input.txHash &&
+    existingEvent.expectedHackathonId === input.room.onchainHackathonId &&
+    input.room.onchainStatus === "confirmed" &&
+    input.room.chainId === polygonAmoyDeployment.chainId &&
+    sameAddress(input.room.contractAddress, polygonAmoyDeployment.eduProxy)
+  ) {
+    return input.room;
+  }
+
+  const { hackathonId, receipt } =
+    input.verified ?? (await verifyHackathonCreated(input.txHash, input.hostAddress));
+  const timestamp = now();
+
+  await Promise.all([
+    recordConfirmedChainEvent({
+      appEntityId: input.room._id,
+      expectedHackathonId: hackathonId,
+      expectedRecipients: [input.hostAddress],
+      idempotencyKey,
+      kind: "room_created",
+      receipt,
+      roomId: input.room._id,
+      txHash: input.txHash,
+    }),
+    roomCollection().updateOne(
+      { _id: input.room._id },
+      {
+        $set: {
+          chainId: polygonAmoyDeployment.chainId,
+          contractAddress: polygonAmoyDeployment.eduProxy,
+          createTxHash: input.txHash,
+          onchainHackathonId: hackathonId.toString(),
+          onchainStatus: "confirmed",
+          updatedAt: timestamp,
+        },
+      },
+    ),
+  ]);
+
+  const updatedRoom = await roomCollection().findOne({ _id: input.room._id });
+  return (
+    updatedRoom ?? {
+      ...input.room,
+      chainId: polygonAmoyDeployment.chainId,
+      contractAddress: polygonAmoyDeployment.eduProxy,
+      createTxHash: input.txHash,
+      onchainHackathonId: hackathonId.toString(),
+      onchainStatus: "confirmed" as const,
+      updatedAt: timestamp,
+    }
+  );
+}
+
 async function verifyParticipantsRegistered(
   txHash: Hex,
   expectedHackathonId: bigint,
@@ -943,7 +1011,7 @@ export const hackRoomRouter = router({
         },
       }),
       roomCollection()
-        .find({ hostId: user.id, status: "active" })
+        .find({ hostId: user.id, onchainStatus: "confirmed", status: "active" })
         .toArray(),
       roomCollection()
         .find({
@@ -1086,6 +1154,13 @@ export const hackRoomRouter = router({
     .mutation(async ({ ctx, input }) => {
       await requireHostRole(ctx.session.user.id);
 
+      if (!input.txHash) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Room creation must be confirmed on-chain before the room is saved",
+        });
+      }
+
       const hostUser = await userCollection().findOne(userIdLookup(ctx.session.user.id), {
         projection: {
           embeddedWalletAddress: 1,
@@ -1093,9 +1168,40 @@ export const hackRoomRouter = router({
           smartWalletAddress: 1,
         },
       });
+
+      const hostAddress =
+        normalizeStoredAddress(hostUser?.onchainAddress) ??
+        normalizeStoredAddress(hostUser?.smartWalletAddress);
+
+      if (!hostAddress) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Sync the host smart wallet before creating the room on-chain",
+        });
+      }
+
+      const existingRoom = await roomCollection().findOne({ createTxHash: input.txHash });
+      if (existingRoom) {
+        if (existingRoom.hostId !== ctx.session.user.id) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "This blockchain transaction is already linked to another room",
+          });
+        }
+        return await ensureRoomCreatedChainEvent({
+          hostAddress,
+          room: existingRoom,
+          txHash: input.txHash,
+        });
+      }
+
+      const verifiedCreation = await verifyHackathonCreated(input.txHash, hostAddress);
       const timestamp = now();
       const room: HackRoomRecord = {
         _id: makeId("room"),
+        chainId: polygonAmoyDeployment.chainId,
+        contractAddress: polygonAmoyDeployment.eduProxy,
+        createTxHash: input.txHash,
         name: input.name,
         description: input.description,
         inviteCode: await createUniqueInviteCode(),
@@ -1104,61 +1210,21 @@ export const hackRoomRouter = router({
         hostName: ctx.session.user.name,
         hostOnchainAddress: hostUser?.onchainAddress,
         hostSmartWalletAddress: hostUser?.smartWalletAddress,
-        onchainStatus: "not_created",
+        onchainHackathonId: verifiedCreation.hackathonId.toString(),
+        onchainStatus: "confirmed",
         status: "active",
         participants: [],
         createdAt: timestamp,
         updatedAt: timestamp,
       };
 
-      if (input.txHash) {
-        const hostAddress =
-          normalizeStoredAddress(hostUser?.onchainAddress) ??
-          normalizeStoredAddress(hostUser?.smartWalletAddress);
-
-        if (!hostAddress) {
-          throw new TRPCError({
-            code: "BAD_REQUEST",
-            message: "Sync the host smart wallet before creating the room on-chain",
-          });
-        }
-
-        const existingRoom = await roomCollection().findOne({ createTxHash: input.txHash });
-        if (existingRoom) {
-          if (existingRoom.hostId !== ctx.session.user.id) {
-            throw new TRPCError({
-              code: "FORBIDDEN",
-              message: "This blockchain transaction is already linked to another room",
-            });
-          }
-          return existingRoom;
-        }
-
-        const { hackathonId, receipt } = await verifyHackathonCreated(input.txHash, hostAddress);
-        room.chainId = polygonAmoyDeployment.chainId;
-        room.contractAddress = polygonAmoyDeployment.eduProxy;
-        room.createTxHash = input.txHash;
-        room.onchainHackathonId = hackathonId.toString();
-        room.onchainStatus = "confirmed";
-
-        await roomCollection().insertOne(room);
-        await recordConfirmedChainEvent({
-          appEntityId: room._id,
-          expectedHackathonId: hackathonId,
-          expectedRecipients: [hostAddress],
-          idempotencyKey: `room:${room._id}:created`,
-          kind: "room_created",
-          receipt,
-          roomId: room._id,
-          txHash: input.txHash,
-        });
-
-        return room;
-      }
-
       await roomCollection().insertOne(room);
-
-      return room;
+      return await ensureRoomCreatedChainEvent({
+        hostAddress,
+        room,
+        txHash: input.txHash,
+        verified: verifiedCreation,
+      });
     }),
 
   joinRoom: protectedProcedure
