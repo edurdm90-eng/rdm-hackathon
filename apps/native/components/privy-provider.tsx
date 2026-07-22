@@ -57,7 +57,7 @@ function getExchangeErrorMessage(
     return "Unable to create a Better Auth session from Privy.";
   }
 
-  if (error.code === LOGIN_RESTRICTION_BLOCK_CODE) {
+  if (isLoginRestrictionExchangeError(error)) {
     return LOGIN_RESTRICTION_BLOCK_MESSAGE;
   }
 
@@ -65,6 +65,25 @@ function getExchangeErrorMessage(
     error.message ??
     error.statusText ??
     "Unable to create a Better Auth session from Privy."
+  );
+}
+
+function isLoginRestrictionExchangeError(
+  error: {
+    code?: string;
+    message?: string;
+    status?: number;
+    statusText?: string;
+  } | null,
+) {
+  if (!error) {
+    return false;
+  }
+
+  return (
+    error.code === LOGIN_RESTRICTION_BLOCK_CODE ||
+    error.message === LOGIN_RESTRICTION_BLOCK_MESSAGE ||
+    error.status === 403
   );
 }
 
@@ -116,7 +135,7 @@ function NativePrivySessionBridge({ children }: { children: React.ReactNode }) {
       if (result.error) {
         const message = getExchangeErrorMessage(result.error);
 
-        if (result.error.code === LOGIN_RESTRICTION_BLOCK_CODE) {
+        if (isLoginRestrictionExchangeError(result.error)) {
           preserveLastErrorRef.current = true;
           await logout();
         }
