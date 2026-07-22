@@ -9,6 +9,7 @@ import { queryClient, trpc } from "@/utils/trpc";
 
 import { RoomCommandCenter } from "./forms";
 import { useHackRoomBlockchain } from "./blockchain";
+import { dashboardQueryOptions } from "./dashboard-query";
 import {
   buildRoomEntries,
   emptyRoomForm,
@@ -38,11 +39,7 @@ const WalletIcon = createNativeIcon("diamond-outline");
 
 export function HackRoomHomePwa({ user }: { user: SessionUser }) {
   const navigate = useNavigate();
-  const dashboard = useQuery({
-    ...trpc.hackRoom.dashboard.queryOptions(),
-    refetchInterval: 10_000,
-    refetchIntervalInBackground: false,
-  });
+  const dashboard = useQuery(dashboardQueryOptions());
 
   const stats = dashboard.data?.stats;
   const hostedRooms = dashboard.data?.hostedRooms ?? [];
@@ -54,13 +51,45 @@ export function HackRoomHomePwa({ user }: { user: SessionUser }) {
     [hostedRooms, joinedRooms],
   );
   const walletRoom = joinedRooms[0];
+  const quickActions = [
+    {
+      icon: AssignmentsIcon,
+      label: "Assignments",
+      meta: "Due and past work",
+      onClick: () => navigate({ to: "/hack-room" }),
+      tone: "cyan" as const,
+    },
+    {
+      icon: ChallengeIcon,
+      label: "Spot Challenge",
+      meta: "Live room prompts",
+      onClick: () => navigate({ to: "/hack-room" }),
+      tone: "orange" as const,
+    },
+    {
+      icon: GamesIcon,
+      label: "Games",
+      meta: "Play mini games",
+      onClick: () => navigate({ to: "/hack-room" }),
+      tone: "lime" as const,
+    },
+    ...(walletRoom
+      ? [
+          {
+            icon: WalletIcon,
+            label: "Wallet",
+            meta: "XRDM, certs, NFTs",
+            onClick: openWallet,
+            tone: "gold" as const,
+          },
+        ]
+      : []),
+  ];
 
-  function openWalletOrRooms() {
+  function openWallet() {
     if (walletRoom) {
       navigate({ to: "/hack-room/$roomId/$tab", params: { roomId: getRoomRouteParam(walletRoom), tab: "wallet" } });
-      return;
     }
-    navigate({ to: "/hack-room" });
   }
 
   return (
@@ -106,38 +135,7 @@ export function HackRoomHomePwa({ user }: { user: SessionUser }) {
 
       {dashboard.error ? <StatusBanner message={dashboard.error.message} tone="red" /> : null}
 
-      <QuickActionGrid
-        actions={[
-          {
-            icon: AssignmentsIcon,
-            label: "Assignments",
-            meta: "Due and past work",
-            onClick: () => navigate({ to: "/hack-room" }),
-            tone: "cyan",
-          },
-          {
-            icon: ChallengeIcon,
-            label: "Spot Challenge",
-            meta: "Live room prompts",
-            onClick: () => navigate({ to: "/hack-room" }),
-            tone: "orange",
-          },
-          {
-            icon: GamesIcon,
-            label: "Games",
-            meta: "Play mini games",
-            onClick: () => navigate({ to: "/hack-room" }),
-            tone: "lime",
-          },
-          {
-            icon: WalletIcon,
-            label: "Wallet",
-            meta: "XRDM, certs, NFTs",
-            onClick: openWalletOrRooms,
-            tone: "gold",
-          },
-        ]}
-      />
+      <QuickActionGrid actions={quickActions} columns={walletRoom ? 4 : 3} />
 
       <SectionCard badge={`${allRooms.length} active`} eyebrow="Overview" title="Hack Room Snapshot">
         <div className="grid gap-2">
@@ -166,11 +164,7 @@ export function HackRoomHomePwa({ user }: { user: SessionUser }) {
 }
 
 export function HackRoomRoomsPwa({ user: _user }: { user: SessionUser }) {
-  const dashboard = useQuery({
-    ...trpc.hackRoom.dashboard.queryOptions(),
-    refetchInterval: 10_000,
-    refetchIntervalInBackground: false,
-  });
+  const dashboard = useQuery(dashboardQueryOptions());
   const [roomForm, setRoomForm] = useState(emptyRoomForm);
   const [inviteCode, setInviteCode] = useState("");
   const [isCreatingRoomOnchain, setIsCreatingRoomOnchain] = useState(false);
@@ -306,11 +300,7 @@ export function HackRoomProfilePwa({ user }: { user: SessionUser }) {
   const navigate = useNavigate();
   const { logoutAndRedirect } = usePrivyAuth();
   const { walletError } = usePrivyWallet();
-  const dashboard = useQuery({
-    ...trpc.hackRoom.dashboard.queryOptions(),
-    refetchInterval: 10_000,
-    refetchIntervalInBackground: false,
-  });
+  const dashboard = useQuery(dashboardQueryOptions());
   const stats = dashboard.data?.stats;
   const role = dashboard.data?.viewerRole ?? "member";
 
