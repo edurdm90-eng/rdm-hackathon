@@ -1,12 +1,52 @@
 {
   "cli": {
-    "version": ">= 20.4.0"
+    "version": ">= 20.4.0",
+    "appVersionSource": "remote"
   },
   "build": {
-    "preview": {
+    "development": {
+      "developmentClient": true,
       "distribution": "internal",
+      "environment": "development",
+      "env": {
+        "NODE_OPTIONS": "--max-old-space-size=8192",
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true"
+      },
+      "channel": "development"
+    },
+    "preview": {
+      "autoIncrement": true,
+      "credentialsSource": "remote",
+      "distribution": "internal",
+      "environment": "preview",
+      "env": {
+        "NODE_OPTIONS": "--max-old-space-size=8192",
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true"
+      },
       "android": {
         "buildType": "apk"
+      },
+      "channel": "preview"
+    },
+    "production": {
+      "autoIncrement": true,
+      "credentialsSource": "remote",
+      "distribution": "store",
+      "environment": "production",
+      "env": {
+        "NODE_OPTIONS": "--max-old-space-size=8192",
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true"
+      },
+      "channel": "production"
+    }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "appleId": "eyemagnettdesign@gmail.com",
+        "ascAppId": "6793191125",
+        "appleTeamId": "R277PK696R",
+        "sku": "com.rdmhack.app"
       }
     }
   }
