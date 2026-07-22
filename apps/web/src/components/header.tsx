@@ -1,24 +1,90 @@
 import { Button } from "@rdm-hack/ui/components/button";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { toast } from "sonner";
 
 import { authClient } from "@/lib/auth-client";
 import { NativeIcon } from "@/lib/native-icons";
-import { trpc } from "@/utils/trpc";
+import { queryClient, trpc } from "@/utils/trpc";
 
 export default function Header() {
+  const [notificationMessage, setNotificationMessage] = useState<{
+    text: string;
+    tone: "cyan" | "violet";
+  } | null>(null);
+  const [acknowledgedNotificationIds, setAcknowledgedNotificationIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   const { data: session } = authClient.useSession();
   const user = session?.user;
   const dashboard = useQuery({
     ...trpc.hackRoom.dashboard.queryOptions(),
     enabled: Boolean(user),
+    refetchInterval: 10_000,
+    refetchIntervalInBackground: false,
   });
-  const notifications = dashboard.data?.notifications ?? [];
+  const serverNotifications = dashboard.data?.notifications ?? [];
+  const notifications = serverNotifications.filter(
+    (notification) => !acknowledgedNotificationIds.has(notification._id),
+  );
+  const markNotificationsRead = useMutation(
+    trpc.hackRoom.markNotificationsRead.mutationOptions({
+      onError: (_error, variables) => {
+        setAcknowledgedNotificationIds((current) => {
+          const next = new Set(current);
+          variables.notificationIds?.forEach((notificationId) => next.delete(notificationId));
+          return next;
+        });
+      },
+      onSettled: async () => {
+        await queryClient.invalidateQueries({ queryKey: trpc.hackRoom.dashboard.queryKey() });
+      },
+    }),
+  );
+
+  useEffect(() => {
+    if (!notificationMessage) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => setNotificationMessage(null), 5_000);
+    return () => window.clearTimeout(timeoutId);
+  }, [notificationMessage]);
+
+  useEffect(() => {
+    const serverNotificationIds = new Set(
+      serverNotifications.map((notification) => notification._id),
+    );
+
+    setAcknowledgedNotificationIds((current) => {
+      let changed = false;
+      const next = new Set<string>();
+
+      current.forEach((notificationId) => {
+        if (serverNotificationIds.has(notificationId)) {
+          next.add(notificationId);
+        } else {
+          changed = true;
+        }
+      });
+
+      return changed ? next : current;
+    });
+  }, [serverNotifications]);
 
   function showNotifications() {
-    toast(notificationBannerMessage(notifications));
+    setNotificationMessage({
+      text: notificationBannerMessage(notifications),
+      tone: notifications.length ? "violet" : "cyan",
+    });
+
+    if (!notifications.length) {
+      return;
+    }
+
+    const notificationIds = notifications.map((notification) => notification._id);
+    setAcknowledgedNotificationIds((current) => new Set([...current, ...notificationIds]));
+    markNotificationsRead.mutate({ notificationIds });
   }
 
   return (
@@ -75,7 +141,50 @@ export default function Header() {
           )}
         </div>
       </div>
+      {notificationMessage ? (
+        <HeaderStatusBanner
+          message={notificationMessage.text}
+          onDismiss={() => setNotificationMessage(null)}
+          tone={notificationMessage.tone}
+        />
+      ) : null}
     </header>
+  );
+}
+
+function HeaderStatusBanner({
+  message,
+  onDismiss,
+  tone,
+}: {
+  message: string;
+  onDismiss: () => void;
+  tone: "cyan" | "violet";
+}) {
+  const toneClass =
+    tone === "violet"
+      ? "border-[#4A1A90] bg-[#160A2A] text-[#A060FF]"
+      : "border-[#0B8060] bg-[#061F18] text-[#1EEAB0]";
+
+  return (
+    <div className="mx-auto w-full max-w-[560px] px-4 pb-3 sm:px-0">
+      <div className={`flex items-start gap-2 rounded-[10px] border px-3 py-2 text-xs leading-[18px] ${toneClass}`}>
+        <NativeIcon
+          className="mt-0.5 size-4 shrink-0"
+          name={tone === "violet" ? "notifications-outline" : "checkmark-circle-outline"}
+        />
+        <span className="min-w-0 flex-1">{message}</span>
+        <button
+          aria-label="Dismiss notification message"
+          className="grid size-5 shrink-0 place-items-center rounded-md text-current opacity-80 outline-none transition hover:bg-white/10 hover:opacity-100 focus-visible:ring-2 focus-visible:ring-current"
+          onClick={onDismiss}
+          title="Dismiss"
+          type="button"
+        >
+          <NativeIcon className="size-4" name="close-outline" />
+        </button>
+      </div>
+    </div>
   );
 }
 

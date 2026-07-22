@@ -1,5 +1,6 @@
 {
   "lockfileVersion": 1,
+  "configVersion": 0,
   "workspaces": {
     "": {
       "name": "rdm-hack",
@@ -110,6 +111,8 @@
         "@noble/hashes": "catalog:",
         "@privy-io/react-auth": "catalog:",
         "@rdm-hack/api": "workspace:*",
+        "@rdm-hack/auth": "workspace:*",
+        "@rdm-hack/blockchain-client": "workspace:*",
         "@rdm-hack/env": "workspace:*",
         "@rdm-hack/ui": "workspace:*",
         "@tailwindcss/vite": "^4.2.2",
@@ -127,6 +130,7 @@
         "react-dom": "^19.2.6",
         "react-icons": "^5.7.0",
         "sonner": "^2.0.7",
+        "viem": "2.52.0",
         "zod": "catalog:",
       },
       "devDependencies": {

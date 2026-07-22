@@ -1,6 +1,6 @@
 import { Button } from "@rdm-hack/ui/components/button";
 import { Input } from "@rdm-hack/ui/components/input";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type * as React from "react";
 
 import { NativeIcon } from "@/lib/native-icons";
@@ -48,6 +48,7 @@ import {
 } from "./shared-ui";
 
 function RoomCommandCenter({
+  createRoomBlockMessage,
   createRoomPending,
   inviteCode,
   joinRoomPending,
@@ -58,6 +59,7 @@ function RoomCommandCenter({
   roomForm,
   tone: _tone,
 }: {
+  createRoomBlockMessage?: string | null;
   createRoomPending: boolean;
   inviteCode: string;
   joinRoomPending: boolean;
@@ -125,6 +127,10 @@ function RoomCommandCenter({
               <Badge tone="violet">Host Owns Room</Badge>
             </div>
 
+            {createRoomBlockMessage ? (
+              <StatusBanner message={createRoomBlockMessage} tone="red" />
+            ) : null}
+
             <Field label="Room Name">
               <Input
                 className="h-10 rounded-[9px] border-[rgba(238,232,222,0.12)] bg-[#0D0F12] text-[13px] text-[#EEE8DE] placeholder:text-[#626058] focus-visible:border-[#A060FF]"
@@ -151,7 +157,7 @@ function RoomCommandCenter({
               </Button>
               <Button
                 className="h-10 rounded-[9px] bg-[#A060FF] text-[#060214] hover:bg-[#A060FF]/85"
-                disabled={!roomForm.name.trim() || createRoomPending}
+                disabled={!roomForm.name.trim() || createRoomPending || !!createRoomBlockMessage}
                 type="submit"
               >
                 <NativeIcon className="size-4" name="add-outline" />
@@ -162,6 +168,403 @@ function RoomCommandCenter({
         ) : null}
       </div>
     </SectionCard>
+  );
+}
+
+function splitDueAtValue(value: string) {
+  const [date = "", timeWithSeconds = ""] = value.split("T");
+  return {
+    date,
+    time: timeWithSeconds.slice(0, 5),
+  };
+}
+
+function mergeDueAtValue(currentValue: string, next: Partial<{ date: string; time: string }>) {
+  const current = splitDueAtValue(currentValue);
+  const date = next.date ?? current.date;
+  const time = next.time ?? current.time;
+
+  return `${date}T${time}`;
+}
+
+function hasCompleteDueAtValue(value: string) {
+  const dueAt = splitDueAtValue(value);
+  return !!dueAt.date && !!dueAt.time;
+}
+
+function parseDateOnlyValue(value: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+
+  if (!match) {
+    return null;
+  }
+
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function formatDateOnlyValue(date: Date) {
+  return `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, "0")}-${date.getDate().toString().padStart(2, "0")}`;
+}
+
+function formatCalendarTitle(date: Date) {
+  return date.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+}
+
+function formatSelectedDate(value: string) {
+  const date = parseDateOnlyValue(value);
+
+  if (!date) {
+    return "Select date";
+  }
+
+  return date.toLocaleDateString(undefined, {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function getStartOfDay(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function CalendarPicker({
+  month,
+  onMonthChange,
+  onSelect,
+  selectedDate,
+}: {
+  month: Date;
+  onMonthChange: (date: Date) => void;
+  onSelect: (date: Date) => void;
+  selectedDate: string;
+}) {
+  const minimumDate = parseDateOnlyValue(splitDueAtValue(getMinimumDueAtInputValue()).date) ?? new Date();
+  const selected = parseDateOnlyValue(selectedDate);
+  const firstOfMonth = new Date(month.getFullYear(), month.getMonth(), 1);
+  const daysInMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
+  const leadingDays = firstOfMonth.getDay();
+  const days = Array.from({ length: leadingDays + daysInMonth }, (_, index) =>
+    index < leadingDays ? null : new Date(month.getFullYear(), month.getMonth(), index - leadingDays + 1),
+  );
+  const weekDays = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+
+  return (
+    <div className="w-full max-w-[320px] rounded-[11px] border border-[rgba(238,232,222,0.14)] bg-[#0B0E10] p-3 shadow-2xl shadow-black/30">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <button
+          className="grid size-8 place-items-center rounded-[8px] border border-[rgba(238,232,222,0.12)] text-[#EEE8DE] transition hover:border-[#1EEAB0] hover:text-[#1EEAB0]"
+          onClick={() => onMonthChange(new Date(month.getFullYear(), month.getMonth() - 1, 1))}
+          type="button"
+        >
+          <NativeIcon className="size-4" name="chevron-back-outline" />
+        </button>
+        <div className="text-sm font-bold text-[#EEE8DE]">{formatCalendarTitle(month)}</div>
+        <button
+          className="grid size-8 place-items-center rounded-[8px] border border-[rgba(238,232,222,0.12)] text-[#EEE8DE] transition hover:border-[#1EEAB0] hover:text-[#1EEAB0]"
+          onClick={() => onMonthChange(new Date(month.getFullYear(), month.getMonth() + 1, 1))}
+          type="button"
+        >
+          <NativeIcon className="size-4" name="chevron-forward-outline" />
+        </button>
+      </div>
+      <div className="mb-1 grid grid-cols-7 gap-1">
+        {weekDays.map((day) => (
+          <div className="py-1 text-center font-mono text-[10px] font-bold uppercase text-[#626058]" key={day}>
+            {day}
+          </div>
+        ))}
+      </div>
+      <div className="grid grid-cols-7 gap-1">
+        {days.map((day, index) => {
+          if (!day) {
+            return <div className="aspect-square" key={`empty-${index}`} />;
+          }
+
+          const dateValue = formatDateOnlyValue(day);
+          const isSelected = selected ? formatDateOnlyValue(selected) === dateValue : false;
+          const isDisabled = getStartOfDay(day).getTime() < getStartOfDay(minimumDate).getTime();
+
+          return (
+            <button
+              className={`grid aspect-square place-items-center rounded-[8px] text-xs font-bold transition ${
+                isSelected
+                  ? "bg-[#1EEAB0] text-[#03120C]"
+                  : "border border-[rgba(238,232,222,0.08)] text-[#CCC6BA] hover:border-[#1EEAB0] hover:text-[#1EEAB0]"
+              } ${isDisabled ? "cursor-not-allowed opacity-35 hover:border-[rgba(238,232,222,0.08)] hover:text-[#CCC6BA]" : ""}`}
+              disabled={isDisabled}
+              key={dateValue}
+              onClick={() => onSelect(day)}
+              type="button"
+            >
+              {day.getDate()}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function formatSelectedTime(value: string) {
+  if (!/^\d{2}:\d{2}$/.test(value)) {
+    return "Select time";
+  }
+
+  const [hour = "00", minute = "00"] = value.split(":");
+  const hourNumber = Number(hour);
+  const hour12 = hourNumber % 12 || 12;
+  const period = hourNumber >= 12 ? "PM" : "AM";
+
+  return `${hour12}:${minute} ${period}`;
+}
+
+function to24HourTime(hour: number, minute: string, period: "AM" | "PM") {
+  const normalizedHour = period === "PM" ? (hour % 12) + 12 : hour % 12;
+  return `${normalizedHour.toString().padStart(2, "0")}:${minute}`;
+}
+
+function clampTimePart(value: number, max: number) {
+  return ((value % max) + max) % max;
+}
+
+function TimePicker({
+  onDone,
+  onSelect,
+  selectedTime,
+}: {
+  onDone: () => void;
+  onSelect: (time: string) => void;
+  selectedTime: string;
+}) {
+  const [selectedHourValue = "", selectedMinute = ""] = selectedTime.split(":");
+  const selectedHourNumber = Number(selectedHourValue);
+  const selectedHour = selectedHourNumber % 12 || 12;
+  const selectedPeriod: "AM" | "PM" = selectedHourNumber >= 12 ? "PM" : "AM";
+  const minuteNumber = Number(selectedMinute || "00");
+
+  function selectHour(nextHour: number) {
+    const normalizedHour = nextHour === 0 ? 12 : nextHour;
+    onSelect(to24HourTime(normalizedHour, selectedMinute || "00", selectedPeriod));
+  }
+
+  function selectMinute(nextMinute: number) {
+    onSelect(to24HourTime(selectedHour, nextMinute.toString().padStart(2, "0"), selectedPeriod));
+  }
+
+  return (
+    <div className="absolute right-0 top-12 z-20 w-[220px] rounded-[11px] border border-[rgba(238,232,222,0.14)] bg-[#0B0E10] p-2.5 shadow-2xl shadow-black/30">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-[#626058]">
+          Select time
+        </div>
+        <div className="flex rounded-[8px] border border-[rgba(238,232,222,0.12)] bg-[#0D0F12] p-1">
+          {(["AM", "PM"] as const).map((period) => (
+            <button
+              className={`h-6 rounded-[6px] px-2.5 text-xs font-bold transition ${
+                selectedPeriod === period
+                  ? "bg-[#1EEAB0] text-[#03120C]"
+                  : "text-[#9C9690] hover:text-[#EEE8DE]"
+              }`}
+              key={period}
+              onClick={() => onSelect(to24HourTime(selectedHour, selectedMinute || "00", period))}
+              type="button"
+            >
+              {period}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-1.5">
+        <TimeStepper
+          label="Hour"
+          onDown={() => selectHour(clampTimePart(selectedHour - 2, 12) + 1)}
+          onUp={() => selectHour((selectedHour % 12) + 1)}
+          value={selectedHour.toString().padStart(2, "0")}
+        />
+        <div className="pt-4 text-base font-extrabold text-[#626058]">:</div>
+        <TimeStepper
+          label="Minute"
+          onDown={() => selectMinute(clampTimePart(minuteNumber - 5, 60))}
+          onUp={() => selectMinute((minuteNumber + 5) % 60)}
+          value={(Number(selectedMinute || "00") || 0).toString().padStart(2, "0")}
+        />
+      </div>
+
+      <Button
+        className="mt-2 h-8 w-full rounded-[8px] bg-[#1EEAB0] text-xs text-[#03120C] hover:bg-[#1EEAB0]/85"
+        onClick={() => {
+          onSelect(to24HourTime(selectedHour, selectedMinute || "00", selectedPeriod));
+          onDone();
+        }}
+        type="button"
+      >
+        Done
+      </Button>
+    </div>
+  );
+}
+
+function TimeStepper({
+  label,
+  onDown,
+  onUp,
+  value,
+}: {
+  label: string;
+  onDown: () => void;
+  onUp: () => void;
+  value: string;
+}) {
+  return (
+    <div className="grid gap-1">
+      <div className="text-center font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-[#626058]">
+        {label}
+      </div>
+      <button
+        className="grid h-7 place-items-center rounded-[7px] border border-[rgba(238,232,222,0.12)] text-[#EEE8DE] transition hover:border-[#1EEAB0] hover:text-[#1EEAB0]"
+        onClick={onUp}
+        type="button"
+      >
+        <NativeIcon className="size-4 -rotate-90" name="chevron-forward-outline" />
+      </button>
+      <div className="grid h-10 place-items-center rounded-[8px] border border-[#1EEAB0] bg-[#061F18] text-lg font-extrabold text-[#EEE8DE]">
+        {value}
+      </div>
+      <button
+        className="grid h-7 place-items-center rounded-[7px] border border-[rgba(238,232,222,0.12)] text-[#EEE8DE] transition hover:border-[#1EEAB0] hover:text-[#1EEAB0]"
+        onClick={onDown}
+        type="button"
+      >
+        <NativeIcon className="size-4 rotate-90" name="chevron-forward-outline" />
+      </button>
+    </div>
+  );
+}
+
+function DueAtField({
+  error,
+  label,
+  onPickerOpenChange,
+  onChange,
+  value,
+}: {
+  error: string;
+  label: string;
+  onPickerOpenChange?: (open: boolean) => void;
+  onChange: (value: string) => void;
+  value: string;
+}) {
+  const dueAt = splitDueAtValue(value);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [timeOpen, setTimeOpen] = useState(false);
+  const [calendarMonth, setCalendarMonth] = useState(
+    () => parseDateOnlyValue(dueAt.date) ?? parseDateOnlyValue(splitDueAtValue(getMinimumDueAtInputValue()).date) ?? new Date(),
+  );
+  const hasOpenPicker = calendarOpen || timeOpen;
+
+  useEffect(() => {
+    onPickerOpenChange?.(hasOpenPicker);
+  }, [hasOpenPicker, onPickerOpenChange]);
+
+  useEffect(() => {
+    if (!hasOpenPicker) {
+      return;
+    }
+
+    function closeOnOutsidePointer(event: PointerEvent) {
+      if (containerRef.current?.contains(event.target as Node)) {
+        return;
+      }
+
+      setCalendarOpen(false);
+      setTimeOpen(false);
+    }
+
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key !== "Escape") {
+        return;
+      }
+
+      setCalendarOpen(false);
+      setTimeOpen(false);
+    }
+
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    document.addEventListener("keydown", closeOnEscape);
+
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsidePointer);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [hasOpenPicker]);
+
+  return (
+    <Field label={label}>
+      <div className="relative" ref={containerRef}>
+        <div className="flex min-h-10 items-center gap-2 rounded-[9px] border border-[rgba(238,232,222,0.12)] bg-[#061F18] p-1.5">
+          <div className="grid min-w-0 flex-1 grid-cols-2 gap-1.5">
+            <button
+              className={`inline-flex h-8 min-w-0 items-center justify-center gap-1.5 rounded-[7px] border px-2 text-xs font-black transition ${
+                dueAt.date
+                  ? "border-[#1EEAB0] bg-[#06382B] text-[#1EEAB0]"
+                  : "border-[rgba(238,232,222,0.1)] bg-[#0D0F12] text-[#9C9690] hover:border-[#1EEAB0] hover:text-[#1EEAB0]"
+              }`}
+              onClick={() => {
+                setCalendarOpen((open) => !open);
+                setTimeOpen(false);
+              }}
+              type="button"
+            >
+              <NativeIcon className="size-3.5" name="calendar-outline" />
+              <span className="truncate">{dueAt.date ? formatSelectedDate(dueAt.date) : "Date"}</span>
+            </button>
+            <button
+              className={`inline-flex h-8 min-w-0 items-center justify-center gap-1.5 rounded-[7px] border px-2 text-xs font-black transition ${
+                dueAt.time
+                  ? "border-[#1EEAB0] bg-[#06382B] text-[#1EEAB0]"
+                  : "border-[rgba(238,232,222,0.1)] bg-[#0D0F12] text-[#9C9690] hover:border-[#1EEAB0] hover:text-[#1EEAB0]"
+              }`}
+              onClick={() => {
+                setTimeOpen((open) => !open);
+                setCalendarOpen(false);
+              }}
+              type="button"
+            >
+              <NativeIcon className="size-3.5" name="time-outline" />
+              <span className="truncate">{dueAt.time ? formatSelectedTime(dueAt.time) : "Time"}</span>
+            </button>
+          </div>
+        </div>
+        {calendarOpen ? (
+          <div className="absolute left-0 top-12 z-20 w-full">
+            <CalendarPicker
+              month={calendarMonth}
+              onMonthChange={setCalendarMonth}
+              onSelect={(date) => {
+                onChange(mergeDueAtValue(value, { date: formatDateOnlyValue(date) }));
+                setCalendarMonth(date);
+                setCalendarOpen(false);
+              }}
+              selectedDate={dueAt.date}
+            />
+          </div>
+        ) : null}
+        {timeOpen ? (
+          <TimePicker
+            onDone={() => setTimeOpen(false)}
+            onSelect={(time) => {
+              onChange(mergeDueAtValue(value, { time }));
+            }}
+            selectedTime={dueAt.time}
+          />
+        ) : null}
+      </div>
+      {error ? <p className="text-xs leading-5 text-[#FF5A4A]">{error}</p> : null}
+    </Field>
   );
 }
 
@@ -188,23 +591,92 @@ function AssignmentComposer({
   setTaskForm: React.Dispatch<React.SetStateAction<typeof emptyTaskForm>>;
   taskForm: typeof emptyTaskForm;
 }) {
+  const [dueAtPickerOpen, setDueAtPickerOpen] = useState(false);
   const isNotification = assignmentMode === "notification";
   const isSpecial = assignmentMode === "special";
   const isGame = assignmentMode === "game";
+  const isChallenge = assignmentMode === "challenge";
   const effectiveProofTypes = isNotification ? [] : normalizeTaskProofTypes(assignmentMode, proofTypes);
   const descriptionLength = taskForm.description.trim().length;
   const dueAtError =
-    !isNotification && taskForm.dueAt.trim() && !isFutureDueAt(taskForm.dueAt)
-      ? "Choose a future due date and time."
+    !isNotification && taskForm.dueAt.trim()
+      ? !hasCompleteDueAtValue(taskForm.dueAt)
+        ? "Choose both due date and time."
+        : !isFutureDueAt(taskForm.dueAt)
+          ? "Choose a future due date and time."
+          : ""
       : "";
   const minimumDescriptionLength = isNotification
     ? minNotificationMessageLength
     : minAssignmentDescriptionLength;
+  const composerTitle = "Create Assignment";
+  const titleLabel = isNotification
+    ? "Notification title"
+    : isGame
+      ? "Game name"
+      : isChallenge
+        ? "Challenge name"
+        : "Assignment title";
+  const titlePlaceholder = isNotification
+    ? "Final submission reminder"
+    : isGame
+      ? "Bug bash arena"
+      : isChallenge
+        ? "10-minute UX fix sprint"
+        : isSpecial
+          ? "Private API integration follow-up"
+          : "Build a working prototype";
+  const dateLabel = isGame
+    ? "Game date and time"
+    : isChallenge
+      ? "Challenge date and time"
+      : isSpecial
+        ? "Special task due date and time"
+        : "Due date and time";
+  const descriptionLabel = isNotification
+    ? "Message"
+    : isChallenge || isGame
+      ? "Rules / brief"
+      : "Description";
+  const descriptionPlaceholder = isNotification
+    ? "Nudge everyone with the next step, reminder, or deadline."
+    : isGame
+      ? "Tell members what score, attempt, or result the host will verify."
+    : isChallenge
+        ? "Describe the fun challenge, who can join, and how winners will be picked."
+        : isSpecial
+          ? "Give this member a focused follow-up task and explain the expected proof."
+          : "Submit a functional demo. GitHub and Drive proof are mandatory.";
+  const proofLabel = isGame
+    ? "Game proof"
+    : assignmentMode === "task"
+      ? "Expected proof"
+      : isSpecial
+        ? "Special task proof"
+        : "Challenge proof";
+  const buttonLabel = isNotification
+    ? "Send Notification"
+    : isGame
+      ? "Create Game Card"
+      : isChallenge
+        ? "Create Spot Challenge"
+        : isSpecial
+          ? "Create Special Task"
+          : "Publish Regular Task";
+  const ButtonIcon = isNotification
+    ? "notifications-outline"
+    : isGame
+      ? "game-controller-outline"
+      : isChallenge
+        ? "flash-outline"
+        : isSpecial
+          ? "star-outline"
+          : "send-outline";
   const canSubmit =
     room &&
     taskForm.title.trim().length >= 3 &&
     descriptionLength >= minimumDescriptionLength &&
-    (isNotification || taskForm.dueAt.trim()) &&
+    (isNotification || hasCompleteDueAtValue(taskForm.dueAt)) &&
     !dueAtError &&
     (!isSpecial || taskForm.assignedToEmail.trim()) &&
     !createTaskPending &&
@@ -212,9 +684,9 @@ function AssignmentComposer({
 
   return (
     <SectionCard
-      badge={isSpecial ? "One participant" : isNotification ? "Room nudge" : "All Participants"}
+      badge={isSpecial ? "One member" : isNotification ? "Room nudge" : "All members"}
       eyebrow="Organizer Track"
-      title={isNotification ? "Send Notification" : "Create Assignment"}
+      title={composerTitle}
     >
       <div className="mb-3 grid grid-cols-2 gap-[7px]">
         <TaskKindButton
@@ -248,32 +720,29 @@ function AssignmentComposer({
       </div>
 
       <form
-        className="grid gap-3"
+        className={`grid gap-3 ${dueAtPickerOpen ? "pb-6" : ""}`}
         onSubmit={(event) => {
           event.preventDefault();
           onCreateTask();
         }}
       >
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label={isNotification ? "Notification Title" : isGame ? "Game Name" : "Assignment Title"}>
+        <div className="grid items-start gap-3 sm:grid-cols-2">
+          <Field label={titleLabel}>
             <Input
               className="h-10 rounded-[9px] border-[rgba(238,232,222,0.12)] bg-[#0D0F12] text-[13px] text-[#CCC6BA]"
               onChange={(event) => setTaskForm((current) => ({ ...current, title: event.target.value }))}
-              placeholder={isNotification ? "Demo check-in" : "Build a working prototype"}
+              placeholder={titlePlaceholder}
               value={taskForm.title}
             />
           </Field>
           {!isNotification ? (
-            <Field label="Due Date and Time">
-              <Input
-                className="h-10 rounded-[9px] border-[rgba(238,232,222,0.12)] bg-[#0D0F12] text-[13px] text-[#CCC6BA]"
-                min={getMinimumDueAtInputValue()}
-                onChange={(event) => setTaskForm((current) => ({ ...current, dueAt: event.target.value }))}
-                type="datetime-local"
-                value={taskForm.dueAt}
-              />
-              {dueAtError ? <p className="text-xs leading-5 text-[#FF5A4A]">{dueAtError}</p> : null}
-            </Field>
+            <DueAtField
+              error={dueAtError}
+              label={dateLabel}
+              onPickerOpenChange={setDueAtPickerOpen}
+              onChange={(value) => setTaskForm((current) => ({ ...current, dueAt: value }))}
+              value={taskForm.dueAt}
+            />
           ) : (
             <Field label="Audience">
               <Input
@@ -286,13 +755,13 @@ function AssignmentComposer({
         </div>
 
         {isSpecial ? (
-          <Field label="Participant Email">
+          <Field label="Registered member email">
             <Input
               className="h-10 rounded-[9px] border-[#FF8820] bg-[#241000] text-[13px] text-[#FF8820]"
               onChange={(event) =>
                 setTaskForm((current) => ({ ...current, assignedToEmail: event.target.value }))
               }
-              placeholder="student@example.com"
+              placeholder="member@company.com"
               value={taskForm.assignedToEmail}
             />
           </Field>
@@ -324,14 +793,10 @@ function AssignmentComposer({
           </Field>
         ) : null}
 
-        <Field label={isNotification ? "Message" : "Description"}>
+        <Field label={descriptionLabel}>
           <TextArea
             onChange={(value) => setTaskForm((current) => ({ ...current, description: value }))}
-            placeholder={
-              isNotification
-                ? "Share a reminder, deadline update, or room-wide nudge."
-                : "Submit a functional demo. GitHub and Drive proof are mandatory."
-            }
+            placeholder={descriptionPlaceholder}
             value={taskForm.description}
           />
           <p
@@ -347,7 +812,7 @@ function AssignmentComposer({
 
         {!isNotification ? (
           <div className="grid gap-3 sm:grid-cols-[1fr_110px]">
-            <Field label="Expected Proof">
+            <Field label={proofLabel}>
               <div className="flex flex-wrap gap-2">
                 {proofTypeOptions
                   .filter((option) => (isGame ? option.value === "game_score" : option.value !== "game_score"))
@@ -395,12 +860,8 @@ function AssignmentComposer({
           disabled={!canSubmit}
           type="submit"
         >
-          {isNotification ? (
-            <NativeIcon className="size-4" name="notifications-outline" />
-          ) : (
-            <NativeIcon className="size-4" name="send-outline" />
-          )}
-          {isNotification ? "Send Notification" : "Create Assignment"}
+          <NativeIcon className="size-4" name={ButtonIcon} />
+          {buttonLabel}
         </Button>
       </form>
     </SectionCard>

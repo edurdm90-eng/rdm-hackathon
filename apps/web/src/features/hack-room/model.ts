@@ -32,11 +32,15 @@ export type SubmissionStatus = DashboardData["mySubmissions"][number]["status"];
 export type GameType = "memory_match" | "breath_timer" | "quick_maths";
 export type Tone = "cyan" | "violet" | "gold" | "orange" | "red" | "lime" | "sky";
 export type SessionUser = {
+  embeddedWalletAddress?: string;
   email: string;
   id: string;
   name: string;
+  onchainAddress?: string;
+  smartWalletAddress?: string;
   walletAddress?: string;
 };
+export type ViewerRole = DashboardData["viewerRole"];
 export type MiniGameResult = {
   gameType: GameType;
   notes: string;
@@ -56,6 +60,7 @@ export type RoomTabSegment =
   | "overview"
   | "profile"
   | "submit"
+  | "spot-challenge"
   | "verify"
   | "wallet";
 
@@ -76,6 +81,24 @@ export const defaultSpecialProofTypes: ProofType[] = ["url"];
 export const minAssignmentDescriptionLength = 10;
 export const minNotificationMessageLength = 3;
 export const dueAtFutureBufferMs = 60_000;
+
+export function getFriendlyHackRoomErrorMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : "Something went wrong. Please try again.";
+
+  if (message.includes("Only users with the host role")) {
+    return "Only organizers can create hack rooms. Ask an admin to update your account role.";
+  }
+
+  if (message.includes("Sync the host smart wallet")) {
+    return "Your Privy smart wallet is still syncing. Wait a moment, refresh once, and try Create Room again.";
+  }
+
+  if (message.includes("Failed to fetch")) {
+    return "API server is not reachable from the browser. Check VITE_SERVER_URL and deployed server CORS.";
+  }
+
+  return message;
+}
 
 export const gameTypeOptions: Array<{
   description: string;
@@ -151,6 +174,7 @@ const hostTabsBySegment: Partial<Record<string, HostTab>> = {
   overview: "assign",
   profile: "profile",
   rewards: "rewards",
+  "spot-challenge": "assign",
   verify: "verify",
 };
 
@@ -234,7 +258,10 @@ export function makeEmptyRewardForm() {
     description: "",
     kind: "participant_certificate" as RewardKind,
     ledgerNote: "",
+    recipientEmailDraft: "",
+    recipientEmails: [] as string[],
     recipientIds: [] as string[],
+    recipientMode: "all" as "all" | "individual",
     sourceSubmissionId: "",
     title: "",
   };

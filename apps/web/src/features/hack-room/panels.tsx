@@ -95,8 +95,8 @@ function RewardsPanel({
           {rewardForm.kind === "participant_certificate" && room ? (
             <RecipientSelector
               onRewardFormChange={onRewardFormChange}
+              rewardForm={rewardForm}
               room={room}
-              selectedRecipientIds={rewardForm.recipientIds.length ? rewardForm.recipientIds : room.participants.map((p) => p.userId)}
             />
           ) : null}
           {rewardForm.kind !== "participant_certificate" ? (
@@ -587,79 +587,165 @@ function MemberList({ room }: { room: HackRoom }) {
 
 function RecipientSelector({
   onRewardFormChange,
+  rewardForm,
   room,
-  selectedRecipientIds,
 }: {
   onRewardFormChange: React.Dispatch<React.SetStateAction<ReturnType<typeof makeEmptyRewardForm>>>;
+  rewardForm: ReturnType<typeof makeEmptyRewardForm>;
   room: HackRoom;
-  selectedRecipientIds: string[];
 }) {
-  const allIds = room.participants.map((participant) => participant.userId);
+  const individualMode = rewardForm.recipientMode === "individual";
+  const participantsByEmail = new Map(
+    room.participants.map((participant) => [participant.email.trim().toLowerCase(), participant]),
+  );
+  const selectedRecipients = rewardForm.recipientIds
+    .map((recipientId) => room.participants.find((participant) => participant.userId === recipientId))
+    .filter((participant): participant is HackRoom["participants"][number] => Boolean(participant));
+
+  function addDraftEmails() {
+    onRewardFormChange((current) => {
+      const tokens = getEmailTokens(current.recipientEmailDraft ?? "");
+      if (!tokens.length) {
+        return current;
+      }
+
+      const validEmails = normalizeEmails(tokens.filter(isEmailLike));
+      const matchingParticipants = validEmails
+        .map((email) => participantsByEmail.get(email))
+        .filter((participant): participant is HackRoom["participants"][number] => Boolean(participant));
+
+      return {
+        ...current,
+        recipientEmailDraft: "",
+        recipientEmails: [
+          ...new Set([
+            ...(current.recipientEmails ?? []),
+            ...matchingParticipants.map((participant) => participant.email),
+          ]),
+        ],
+        recipientIds: [
+          ...new Set([
+            ...(current.recipientIds ?? []),
+            ...matchingParticipants.map((participant) => participant.userId),
+          ]),
+        ],
+        recipientMode: "individual",
+      };
+    });
+  }
 
   return (
     <Field label="Recipients">
-      <div className="flex flex-wrap gap-2">
+      <div className="grid gap-2">
+        <div className="grid grid-cols-2 gap-2">
         <ChipButton
-          active={selectedRecipientIds.length === allIds.length}
-          label="All participants"
-          onClick={() => onRewardFormChange((current) => ({ ...current, recipientIds: allIds }))}
+          active={!individualMode}
+          label="All Participants"
+          onClick={() =>
+            onRewardFormChange((current) => ({
+              ...current,
+              recipientEmailDraft: "",
+              recipientEmails: [],
+              recipientIds: [],
+              recipientMode: "all",
+            }))
+          }
         />
-        {room.participants.map((participant) => {
-          const active = selectedRecipientIds.includes(participant.userId);
-          return (
-            <RecipientButton
-              active={active}
-              key={participant.userId}
-              participant={participant}
-              onClick={() =>
-                onRewardFormChange((current) => {
-                  const currentIds = current.recipientIds.length ? current.recipientIds : allIds;
-                  return {
+        <ChipButton
+          active={individualMode}
+          label="Individual"
+          onClick={() =>
+            onRewardFormChange((current) => ({
+              ...current,
+              recipientMode: "individual",
+              recipientIds: current.recipientIds,
+            }))
+          }
+        />
+        </div>
+
+        {individualMode ? (
+          <div className="grid gap-2 rounded-[9px] border border-[rgba(238,232,222,0.12)] bg-[#0D0F12] p-2">
+            <div className="flex gap-2">
+              <Input
+                className="h-10 rounded-[9px] border-[rgba(238,232,222,0.12)] bg-[#061F18] text-[13px] text-[#EEE8DE]"
+                onChange={(event) =>
+                  onRewardFormChange((current) => ({
                     ...current,
-                    recipientIds: active
-                      ? currentIds.filter((id) => id !== participant.userId)
-                      : [...currentIds, participant.userId],
-                  };
-                })
-              }
-            />
-          );
-        })}
+                    recipientEmailDraft: event.target.value,
+                  }))
+                }
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    addDraftEmails();
+                  }
+                }}
+                placeholder="student@email.com"
+                value={rewardForm.recipientEmailDraft ?? ""}
+              />
+              <Button
+                className="h-10 rounded-[9px] bg-[#1EEAB0] px-3 text-[#03120C] hover:bg-[#1EEAB0]/85"
+                onClick={addDraftEmails}
+                type="button"
+              >
+                Add
+              </Button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {selectedRecipients.length ? (
+                selectedRecipients.map((participant) => (
+                  <RecipientButton
+                    key={participant.userId}
+                    participant={participant}
+                    onRemove={() =>
+                      onRewardFormChange((current) => ({
+                        ...current,
+                        recipientEmails: (current.recipientEmails ?? []).filter(
+                          (email) => email.toLowerCase() !== participant.email.toLowerCase(),
+                        ),
+                        recipientIds: (current.recipientIds ?? []).filter(
+                          (id) => id !== participant.userId,
+                        ),
+                      }))
+                    }
+                  />
+                ))
+              ) : (
+                <span className="text-[11px] text-[#626058]">Add one or more participant emails.</span>
+              )}
+            </div>
+          </div>
+        ) : null}
       </div>
     </Field>
   );
 }
 
 function RecipientButton({
-  active,
-  onClick,
+  onRemove,
   participant,
 }: {
-  active: boolean;
-  onClick: () => void;
+  onRemove: () => void;
   participant: HackRoom["participants"][number];
 }) {
   return (
     <button
-      aria-pressed={active}
-      className={`flex min-h-12 max-w-full items-center gap-2 rounded-[8px] border px-3 py-2 text-left transition ${
-        active
-          ? "border-[#1EEAB0] bg-[#061F18] text-[#1EEAB0]"
-          : "border-[rgba(238,232,222,0.12)] bg-[#0D0F12] text-[#9C9690] hover:border-[#1EEAB0]/60"
-      }`}
-      onClick={onClick}
-      title={`${participant.name} - ${participant.email}`}
+      className="flex min-h-10 max-w-full items-center gap-2 rounded-[8px] border border-[#1EEAB0] bg-[#061F18] px-3 py-2 text-left text-[#1EEAB0] transition hover:bg-[#0A2A21]"
+      onClick={onRemove}
+      title="Remove recipient"
       type="button"
     >
-      <Avatar name={participant.name} tone={active ? "cyan" : "violet"} />
+      <Avatar name={participant.name} tone="cyan" />
       <span className="min-w-0">
         <span className="block truncate font-mono text-[10px] font-semibold uppercase tracking-[0.08em]">
           {participant.name}
         </span>
-        <span className={`block truncate text-[11px] ${active ? "text-[#9CFFF0]" : "text-[#626058]"}`}>
+        <span className="block truncate text-[11px] text-[#9CFFF0]">
           {participant.email}
         </span>
       </span>
+      <NativeIcon className="size-4 shrink-0" name="close-outline" />
     </button>
   );
 }

@@ -2,11 +2,19 @@ import { Button } from "@rdm-hack/ui/components/button";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { toast } from "sonner";
 
+import { usePrivyWallet } from "@/components/privy-provider";
 import { NativeIcon } from "@/lib/native-icons";
 import { queryClient, trpc } from "@/utils/trpc";
 
+import {
+  getHackRoomBlockchainErrorMessage,
+  makeAwardNftCall,
+  makeAwardXrdmCall,
+  makeRegisterParticipantsCall,
+  useHackRoomBlockchain,
+  type ContractCall,
+} from "./blockchain";
 import {
   buildLeaderboard,
   buildProofItemsForTask,
@@ -20,6 +28,7 @@ import {
   emptyTaskForm,
   friendlyMutationMessage,
   getEmailTokens,
+  getFriendlyHackRoomErrorMessage,
   getHostTabFromSegment,
   getParticipantTabFromSegment,
   getRoomRouteParam,
@@ -27,6 +36,7 @@ import {
   isFutureDueAt,
   hostTabSegments,
   isEmailLike,
+  kindLabel,
   makeEmptyRewardForm,
   makeEmptySubmitForm,
   matchesRoomRouteParam,
@@ -61,7 +71,11 @@ export default function HackRoomPwa({
   user: SessionUser;
 }) {
   const navigate = useNavigate();
-  const dashboard = useQuery(trpc.hackRoom.dashboard.queryOptions());
+  const dashboard = useQuery({
+    ...trpc.hackRoom.dashboard.queryOptions(),
+    refetchInterval: 10_000,
+    refetchIntervalInBackground: false,
+  });
   const [hostTab, setHostTab] = useState<HostTab>("assign");
   const [participantTab, setParticipantTab] = useState<ParticipantTab>("submit");
   const [activeRoomId, setActiveRoomId] = useState("");
@@ -75,7 +89,10 @@ export default function HackRoomPwa({
   const [feedbackBySubmission, setFeedbackBySubmission] = useState<Record<string, string>>({});
   const [awardBySubmission, setAwardBySubmission] = useState<Record<string, string>>({});
   const [rewardForm, setRewardForm] = useState(makeEmptyRewardForm);
+  const [pendingRewardKind, setPendingRewardKind] = useState<RewardKind | null>(null);
   const [message, setMessage] = useState<{ text: string; tone: Tone } | null>(null);
+  const { createHackathonOnchain, sendContractCalls } = useHackRoomBlockchain();
+  const { walletAddress, walletError } = usePrivyWallet();
 
   const hostedRooms = dashboard.data?.hostedRooms ?? [];
   const joinedRooms = dashboard.data?.joinedRooms ?? [];
@@ -85,6 +102,10 @@ export default function HackRoomPwa({
   const visibleWinners = dashboard.data?.visibleWinners ?? [];
   const rewards = dashboard.data?.rewards ?? [];
   const allRooms = useMemo(() => buildRoomEntries(hostedRooms, joinedRooms), [hostedRooms, joinedRooms]);
+  const canCreateRoom = dashboard.data?.viewerRole === "host";
+  const createRoomBlockMessage = dashboard.data && !canCreateRoom
+    ? "Only organizers can create hack rooms. Ask an admin to update your account role."
+    : null;
 
   const activeSelectionId = roomId || activeRoomId;
   const selectedRoomEntry = roomId
@@ -152,7 +173,11 @@ export default function HackRoomPwa({
     });
   }, [navigate, roomId, roomTab, selectedRoom]);
 
-
+  useEffect(() => {
+    if (roomTab === "spot-challenge" && assignmentMode !== "challenge") {
+      handleAssignmentModeChange("challenge");
+    }
+  }, [assignmentMode, roomTab]);
 
   useEffect(() => {
     if (!selectedTaskId || !roomTasks.some((task) => task._id === selectedTaskId)) {
@@ -166,11 +191,19 @@ export default function HackRoomPwa({
 
   const createRoom = useMutation(
     trpc.hackRoom.createRoom.mutationOptions({
-      onError: (error) => showMessage(error.message, "red"),
+      onError: (error) => showMessage(getFriendlyHackRoomErrorMessage(error), "red"),
       onSuccess: async (room) => {
         setRoomForm(emptyRoomForm);
         setActiveRoomId(room._id);
-        showMessage(`Created ${room.name} with invite ${room.inviteCode}`, "violet");
+        showMessage(`Created ${room.name} with invite ${room.inviteCode}. Syncing on-chain...`, "violet");
+        await invalidateDashboard();
+      },
+    }),
+  );
+  const completeRoomOnchainCreate = useMutation(
+    trpc.hackRoom.completeRoomOnchainCreate.mutationOptions({
+      onSuccess: async (room) => {
+        showMessage(`${room.name} is confirmed on-chain.`, "gold");
         await invalidateDashboard();
       },
     }),
@@ -178,7 +211,7 @@ export default function HackRoomPwa({
 
   const joinRoom = useMutation(
     trpc.hackRoom.joinRoom.mutationOptions({
-      onError: (error) => showMessage(error.message, "red"),
+      onError: (error) => showMessage(getFriendlyHackRoomErrorMessage(error), "red"),
       onSuccess: async (room) => {
         setInviteCode("");
         setActiveRoomId(room._id);
@@ -188,14 +221,55 @@ export default function HackRoomPwa({
     }),
   );
 
+  const createRoomPending = createRoom.isPending;
+
+  async function handleCreateRoom() {
+    if (!roomForm.name.trim() || createRoomPending) {
+      return;
+    }
+
+    if (!canCreateRoom) {
+      showMessage(createRoomBlockMessage ?? "Only organizers can create hack rooms.", "red");
+      return;
+    }
+
+    try {
+      const room = await createRoom.mutateAsync(roomForm);
+      setActiveRoomId(room._id);
+
+      if (walletError || !walletAddress) {
+        showMessage(`${room.name} is created. Wallet is not ready, so on-chain sync will need a retry later.`, "gold");
+        return;
+      }
+
+      void (async () => {
+        try {
+          showMessage(`${room.name} created. Syncing on-chain in background...`, "gold");
+          const txHash = await createHackathonOnchain();
+          showMessage("Transaction mined. Verifying event and saving room...", "violet");
+          await completeRoomOnchainCreate.mutateAsync({
+            roomId: room._id,
+            txHash,
+          });
+        } catch (error) {
+          const errorMessage = getFriendlyHackRoomErrorMessage(new Error(getHackRoomBlockchainErrorMessage(error)));
+          showMessage(`${room.name} is created, but on-chain sync failed: ${errorMessage}`, "red");
+        }
+      })();
+    } catch (error) {
+      const errorMessage = getFriendlyHackRoomErrorMessage(error);
+      showMessage(errorMessage, "red");
+    }
+  }
+
   const createTask = useMutation(
     trpc.hackRoom.createTask.mutationOptions({
       onError: (error) => showMessage(error.message, "red"),
-      onSuccess: async () => {
+      onSuccess: async (task) => {
         setTaskForm(emptyTaskForm);
         setAssignmentMode("task");
         setProofTypes(defaultRegularProofTypes);
-        showMessage("Room assignment published", "violet");
+        showMessage(`${kindLabel(task.kind ?? "task")} card created`, "violet");
         await invalidateDashboard();
       },
     }),
@@ -207,7 +281,7 @@ export default function HackRoomPwa({
       onSuccess: async () => {
         setTaskForm(emptyTaskForm);
         setAssignmentMode("task");
-        showMessage("Notification sent to room participants", "violet");
+        showMessage("Notification nudged to all room members", "violet");
         await invalidateDashboard();
       },
     }),
@@ -254,16 +328,37 @@ export default function HackRoomPwa({
     }),
   );
 
-  const issueReward = useMutation(
-    trpc.hackRoom.issueReward.mutationOptions({
+  const prepareReward = useMutation(
+    trpc.hackRoom.prepareReward.mutationOptions({
+      onError: (error) => showMessage(error.message, "red"),
+    }),
+  );
+
+  const completeReward = useMutation(
+    trpc.hackRoom.completeReward.mutationOptions({
       onError: (error) => showMessage(error.message, "red"),
       onSuccess: async () => {
         setRewardForm(makeEmptyRewardForm());
-        showMessage("Reward issued to the in-app ledger", "gold");
+        showMessage("Reward issued and saved", "gold");
         await invalidateDashboard();
       },
     }),
   );
+
+  const completeParticipantRegistration = useMutation(
+    trpc.hackRoom.completeParticipantRegistration.mutationOptions({
+      onError: (error) => showMessage(error.message, "red"),
+      onSuccess: async () => {
+        await invalidateDashboard();
+      },
+    }),
+  );
+
+  const issueRewardPending =
+    Boolean(pendingRewardKind) ||
+    prepareReward.isPending ||
+    completeReward.isPending ||
+    completeParticipantRegistration.isPending;
 
   const isBusy =
     dashboard.isLoading ||
@@ -275,32 +370,30 @@ export default function HackRoomPwa({
     approveSubmission.isPending ||
     returnSubmission.isPending ||
     selectWinner.isPending ||
-    issueReward.isPending;
+    issueRewardPending;
 
   function showMessage(text: string, tone: Tone) {
     const friendlyText = friendlyMutationMessage(text);
     setMessage({ text: friendlyText, tone });
-    if (tone === "red") {
-      toast.error(friendlyText);
-    } else {
-      toast.success(friendlyText);
-    }
   }
 
   function handleAssignmentModeChange(nextMode: AssignmentMode) {
     setAssignmentMode(nextMode);
     if (nextMode === "task") {
       setProofTypes(defaultRegularProofTypes);
-      setTaskForm((current) => ({ ...current, rewardXrdm: current.rewardXrdm || "20" }));
+      setTaskForm({ ...emptyTaskForm, rewardXrdm: "20" });
     } else if (nextMode === "challenge") {
       setProofTypes(defaultSpotProofTypes);
-      setTaskForm((current) => ({ ...current, rewardXrdm: current.rewardXrdm || "20" }));
+      setTaskForm({ ...emptyTaskForm, rewardXrdm: "10" });
     } else if (nextMode === "game") {
       setProofTypes(defaultGameProofTypes);
-      setTaskForm((current) => ({ ...current, rewardXrdm: current.rewardXrdm || "20" }));
+      setTaskForm({ ...emptyTaskForm, rewardXrdm: "10" });
     } else if (nextMode === "special") {
       setProofTypes(defaultSpecialProofTypes);
-      setTaskForm((current) => ({ ...current, rewardXrdm: current.rewardXrdm || "20" }));
+      setTaskForm({ ...emptyTaskForm, rewardXrdm: "15" });
+    } else {
+      setProofTypes(defaultSpotProofTypes);
+      setTaskForm({ ...emptyTaskForm, rewardXrdm: "10" });
     }
   }
 
@@ -448,7 +541,43 @@ export default function HackRoomPwa({
     });
   }
 
+  async function registerMissingParticipants(input: {
+    hackathonId: string | null;
+    registration: Array<{ address: string; userId: string }>;
+    roomId: string;
+  }) {
+    if (!input.registration.length) {
+      return;
+    }
+
+    if (!input.hackathonId) {
+      throw new Error("Room is not confirmed on-chain yet.");
+    }
+
+    showMessage("Registering recipient wallets on-chain...", "gold");
+    const txHash = await sendContractCalls([
+      makeRegisterParticipantsCall({
+        hackathonId: input.hackathonId,
+        participantAddresses: input.registration.map((entry) => entry.address),
+      }),
+    ]);
+
+    if (!txHash) {
+      return;
+    }
+
+    showMessage("Verifying registration...", "violet");
+    await completeParticipantRegistration.mutateAsync({
+      participantIds: input.registration.map((entry) => entry.userId),
+      roomId: input.roomId,
+      txHash,
+    });
+  }
+
   function handleIssueReward(kind: RewardKind) {
+    if (issueRewardPending) {
+      return;
+    }
     if (!selectedRoom) {
       showMessage("Create or select a room first", "red");
       return;
@@ -458,27 +587,132 @@ export default function HackRoomPwa({
       return;
     }
 
-    issueReward.mutate({
-      awardXrdm: Number(rewardForm.awardXrdm || 0),
-      description: rewardForm.description,
-      kind,
-      ledgerNote: rewardForm.ledgerNote,
-      recipientIds: kind === "participant_certificate" ? rewardForm.recipientIds : [],
-      roomId: selectedRoom._id,
-      sourceSubmissionId:
-        kind === "participant_certificate"
-          ? undefined
-          : rewardForm.sourceSubmissionId || winnerSubmissions[0]?._id,
-      title: rewardForm.title || rewardKindLabel(kind),
-    });
+    const awardXrdm = Number(rewardForm.awardXrdm || 0);
+    if (!Number.isFinite(awardXrdm) || awardXrdm < 0) {
+      showMessage("Enter a valid XRDM amount", "red");
+      return;
+    }
+
+    const sourceSubmissionId =
+      kind === "participant_certificate"
+        ? undefined
+        : rewardForm.sourceSubmissionId || winnerSubmissions[0]?._id;
+    const sourceSubmission = sourceSubmissionId
+      ? winnerSubmissions.find((submission) => submission._id === sourceSubmissionId)
+      : undefined;
+
+    if (kind !== "participant_certificate" && !sourceSubmission) {
+      showMessage("Announce a winner before issuing winner certificates or NFT badges", "red");
+      return;
+    }
+
+    const recipientIds =
+      kind === "participant_certificate"
+        ? rewardForm.recipientMode === "individual"
+          ? rewardForm.recipientIds
+          : []
+        : sourceSubmission
+          ? [sourceSubmission.participantId]
+          : [];
+
+    if (kind === "participant_certificate" && rewardForm.recipientMode === "individual" && !recipientIds.length) {
+      showMessage("Add at least one participant email", "red");
+      return;
+    }
+
+    setPendingRewardKind(kind);
+    void (async () => {
+      try {
+        showMessage("Preparing reward...", "gold");
+        const prepared = await prepareReward.mutateAsync({
+          awardXrdm,
+          description: rewardForm.description,
+          kind,
+          ledgerNote: rewardForm.ledgerNote,
+          recipientIds,
+          roomId: selectedRoom._id,
+          sourceSubmissionId,
+          title: rewardForm.title || rewardKindLabel(kind),
+        });
+
+        const calls: ContractCall[] = [];
+        const hackathonId = prepared.onchain.hackathonId;
+        const requiresOnchainReward =
+          prepared.onchain.requiresNft || prepared.onchain.requiresXrdm;
+
+        if (requiresOnchainReward && !hackathonId) {
+          throw new Error("Room is not confirmed on-chain yet.");
+        }
+
+        if (requiresOnchainReward) {
+          await registerMissingParticipants({
+            hackathonId,
+            registration: prepared.onchain.registration,
+            roomId: selectedRoom._id,
+          });
+        }
+
+        if (prepared.onchain.requiresNft && prepared.onchain.metadataUri && hackathonId) {
+          prepared.onchain.recipientAddresses.forEach((recipientAddress) => {
+            calls.push(
+              makeAwardNftCall({
+                hackathonId,
+                metadataUri: prepared.onchain.metadataUri ?? "",
+                recipientAddress,
+              }),
+            );
+          });
+        }
+
+        if (prepared.onchain.requiresXrdm && hackathonId) {
+          calls.push(
+            makeAwardXrdmCall({
+              amounts: prepared.onchain.recipientAddresses.map(() => prepared.onchain.awardXrdm),
+              hackathonId,
+              recipientAddresses: prepared.onchain.recipientAddresses,
+            }),
+          );
+        }
+
+        let txHash: string | undefined;
+        if (calls.length) {
+          showMessage("Sending sponsored reward transaction...", "gold");
+          txHash = (await sendContractCalls(calls)) ?? undefined;
+        }
+
+        showMessage("Saving reward...", "violet");
+        await completeReward.mutateAsync({
+          nftTxHash: prepared.onchain.requiresNft ? txHash : undefined,
+          rewardId: prepared.reward._id,
+          xrdmTxHash: prepared.onchain.requiresXrdm ? txHash : undefined,
+        });
+      } catch (error) {
+        showMessage(
+          error instanceof Error ? error.message : "Unable to issue reward",
+          "red",
+        );
+      } finally {
+        setPendingRewardKind(null);
+      }
+    })();
   }
 
   async function copyInviteCode(room: HackRoom) {
+    if (room.onchainStatus !== "confirmed") {
+      showMessage("Room is created. Wait for on-chain sync before sharing the invite.", "gold");
+      return;
+    }
+
     await navigator.clipboard?.writeText(room.inviteCode);
     showMessage(`Copied ${room.inviteCode}`, "cyan");
   }
 
   async function shareInvite(room: HackRoom) {
+    if (room.onchainStatus !== "confirmed") {
+      showMessage("Room is created. Wait for on-chain sync before sharing the invite.", "gold");
+      return;
+    }
+
     const message = `Join ${room.name} in XRDM Hack Room with invite code ${room.inviteCode}`;
     if (navigator.share) {
       await navigator.share({ text: message, title: `${room.name} invite` });
@@ -525,6 +759,8 @@ export default function HackRoomPwa({
 
         {isStandaloneWallet ? null : (
           <RoomHero
+            onCopyInvite={role === "host" ? copyInviteCode : undefined}
+            onShareInvite={role === "host" ? shareInvite : undefined}
             role={role}
             room={selectedRoom}
             stats={{
@@ -589,13 +825,13 @@ export default function HackRoomPwa({
             activeTab={activeHostTab}
             approvedSubmissions={approvedSubmissions}
             assignmentMode={assignmentMode}
-            createRoomPending={createRoom.isPending}
+            createRoomPending={createRoomPending}
             createTaskPending={createTask.isPending}
             feedbackBySubmission={feedbackBySubmission}
             hostSubmissions={roomSubmissions}
             hostedRooms={hostedRooms}
             inviteCode={inviteCode}
-            issueRewardPending={issueReward.isPending}
+            issueRewardPending={issueRewardPending}
             joinRoomPending={joinRoom.isPending}
             leaderboard={leaderboard}
             onApproveSubmission={handleApproveSubmission}
@@ -604,7 +840,7 @@ export default function HackRoomPwa({
               setAwardBySubmission((current) => ({ ...current, [submissionId]: value }))
             }
             onCopyInvite={copyInviteCode}
-            onCreateRoom={() => createRoom.mutate(roomForm)}
+            onCreateRoom={handleCreateRoom}
             onCreateTask={handleCreateTask}
             onExitRoom={() => navigate({ to: "/hack-room" })}
             onFeedbackChange={(submissionId, value) =>

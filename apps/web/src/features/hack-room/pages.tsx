@@ -3,17 +3,18 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 
-import { usePrivyAuth } from "@/components/privy-provider";
-import { authClient } from "@/lib/auth-client";
+import { usePrivyAuth, usePrivyWallet } from "@/components/privy-provider";
 import { NativeIcon, createNativeIcon } from "@/lib/native-icons";
 import { queryClient, trpc } from "@/utils/trpc";
 
 import { RoomCommandCenter } from "./forms";
+import { getHackRoomBlockchainErrorMessage, useHackRoomBlockchain } from "./blockchain";
 import {
   buildRoomEntries,
   countUniqueNetworkParticipants,
   emptyRoomForm,
   firstName,
+  getFriendlyHackRoomErrorMessage,
   getRoomRouteParam,
   type HackRoom,
   type RoomTabSegment,
@@ -39,7 +40,11 @@ const WalletIcon = createNativeIcon("diamond-outline");
 
 export function HackRoomHomePwa({ user }: { user: SessionUser }) {
   const navigate = useNavigate();
-  const dashboard = useQuery(trpc.hackRoom.dashboard.queryOptions());
+  const dashboard = useQuery({
+    ...trpc.hackRoom.dashboard.queryOptions(),
+    refetchInterval: 10_000,
+    refetchIntervalInBackground: false,
+  });
 
   const stats = dashboard.data?.stats;
   const hostedRooms = dashboard.data?.hostedRooms ?? [];
@@ -47,6 +52,7 @@ export function HackRoomHomePwa({ user }: { user: SessionUser }) {
   const recentSubmissions = dashboard.data?.mySubmissions ?? [];
   const allRooms = useMemo(() => buildRoomEntries(hostedRooms, joinedRooms), [hostedRooms, joinedRooms]);
   const firstRoom = allRooms[0]?.room;
+  const hostRoom = hostedRooms[0] ?? firstRoom;
   const walletRoom = joinedRooms[0] ?? firstRoom;
 
   function openRoomOrShelf(room = firstRoom, tab: RoomTabSegment = "overview") {
@@ -106,21 +112,21 @@ export function HackRoomHomePwa({ user }: { user: SessionUser }) {
             icon: AssignmentsIcon,
             label: "Assignments",
             meta: "Due and past work",
-            onClick: () => navigate({ to: "/hack-room" }),
+            onClick: () => openRoomOrShelf(hostRoom, "assignments"),
             tone: "cyan",
           },
           {
             icon: ChallengeIcon,
             label: "Spot Challenge",
             meta: "Live room prompts",
-            onClick: () => navigate({ to: "/hack-room" }),
+            onClick: () => openRoomOrShelf(hostRoom, "spot-challenge"),
             tone: "orange",
           },
           {
             icon: GamesIcon,
             label: "Games",
             meta: "Play mini games",
-            onClick: () => navigate({ to: "/hack-room" }),
+            onClick: () => navigate({ to: "/games" }),
             tone: "lime",
           },
           {
@@ -136,7 +142,9 @@ export function HackRoomHomePwa({ user }: { user: SessionUser }) {
       <SectionCard badge={`${allRooms.length} active`} eyebrow="Overview" title="Hack Room Snapshot">
         <div className="grid gap-2">
           {allRooms.length ? (
-            allRooms.slice(0, 4).map((entry) => <RoomEntryLink entry={entry} key={entry.room._id} />)
+            allRooms
+              .slice(0, 4)
+              .map((entry) => <RoomEntryLink entry={entry} key={entry.room._id} showMeta={false} />)
           ) : (
             <EmptyState icon={<NativeIcon name="home-outline" />} text="Create or join a hack room from Rooms to start seeing activity here." />
           )}
@@ -159,14 +167,24 @@ export function HackRoomHomePwa({ user }: { user: SessionUser }) {
 }
 
 export function HackRoomRoomsPwa({ user: _user }: { user: SessionUser }) {
-  const dashboard = useQuery(trpc.hackRoom.dashboard.queryOptions());
+  const dashboard = useQuery({
+    ...trpc.hackRoom.dashboard.queryOptions(),
+    refetchInterval: 10_000,
+    refetchIntervalInBackground: false,
+  });
   const [roomForm, setRoomForm] = useState(emptyRoomForm);
   const [inviteCode, setInviteCode] = useState("");
   const [message, setMessage] = useState<{ text: string; tone: Tone } | null>(null);
+  const { createHackathonOnchain } = useHackRoomBlockchain();
+  const { isCreatingWallet, walletAddress, walletError } = usePrivyWallet();
 
   const hostedRooms = dashboard.data?.hostedRooms ?? [];
   const joinedRooms = dashboard.data?.joinedRooms ?? [];
   const allRooms = useMemo(() => buildRoomEntries(hostedRooms, joinedRooms), [hostedRooms, joinedRooms]);
+  const canCreateRoom = dashboard.data?.viewerRole === "host";
+  const createRoomBlockMessage = dashboard.data && !canCreateRoom
+    ? "Only organizers can create hack rooms. Ask an admin to update your account role."
+    : null;
 
   const invalidateDashboard = async () => {
     await queryClient.invalidateQueries({ queryKey: trpc.hackRoom.dashboard.queryKey() });
@@ -174,10 +192,18 @@ export function HackRoomRoomsPwa({ user: _user }: { user: SessionUser }) {
 
   const createRoom = useMutation(
     trpc.hackRoom.createRoom.mutationOptions({
-      onError: (error) => setMessage({ text: error.message, tone: "red" }),
+      onError: (error) => setMessage({ text: getFriendlyHackRoomErrorMessage(error), tone: "red" }),
       onSuccess: async (room) => {
         setRoomForm(emptyRoomForm);
-        setMessage({ text: `Created ${room.name} with invite ${room.inviteCode}`, tone: "violet" });
+        setMessage({ text: `Created ${room.name} with invite ${room.inviteCode}. Syncing on-chain...`, tone: "violet" });
+        await invalidateDashboard();
+      },
+    }),
+  );
+  const completeRoomOnchainCreate = useMutation(
+    trpc.hackRoom.completeRoomOnchainCreate.mutationOptions({
+      onSuccess: async (room) => {
+        setMessage({ text: `${room.name} is confirmed on-chain.`, tone: "gold" });
         await invalidateDashboard();
       },
     }),
@@ -185,7 +211,7 @@ export function HackRoomRoomsPwa({ user: _user }: { user: SessionUser }) {
 
   const joinRoom = useMutation(
     trpc.hackRoom.joinRoom.mutationOptions({
-      onError: (error) => setMessage({ text: error.message, tone: "red" }),
+      onError: (error) => setMessage({ text: getFriendlyHackRoomErrorMessage(error), tone: "red" }),
       onSuccess: async (room) => {
         setInviteCode("");
         setMessage({ text: `Joined ${room.name}`, tone: "cyan" });
@@ -194,7 +220,61 @@ export function HackRoomRoomsPwa({ user: _user }: { user: SessionUser }) {
     }),
   );
 
+  const createRoomPending = createRoom.isPending;
+
+  async function handleCreateRoom() {
+    if (!roomForm.name.trim() || createRoomPending) {
+      return;
+    }
+
+    if (!canCreateRoom) {
+      setMessage({
+        text: createRoomBlockMessage ?? "Only organizers can create hack rooms.",
+        tone: "red",
+      });
+      return;
+    }
+
+    try {
+      const room = await createRoom.mutateAsync(roomForm);
+
+      if (walletError || !walletAddress) {
+        setMessage({
+          text: `${room.name} is created. Wallet is not ready, so on-chain sync will need a retry later.`,
+          tone: "gold",
+        });
+        return;
+      }
+
+      void (async () => {
+        try {
+          setMessage({ text: `${room.name} created. Syncing on-chain in background...`, tone: "gold" });
+          const txHash = await createHackathonOnchain();
+          setMessage({ text: "Transaction mined. Verifying event and saving room...", tone: "violet" });
+          await completeRoomOnchainCreate.mutateAsync({
+            roomId: room._id,
+            txHash,
+          });
+        } catch (error) {
+          const errorMessage = getFriendlyHackRoomErrorMessage(new Error(getHackRoomBlockchainErrorMessage(error)));
+          setMessage({
+            text: `${room.name} is created, but on-chain sync failed: ${errorMessage}`,
+            tone: "red",
+          });
+        }
+      })();
+    } catch (error) {
+      const errorMessage = getFriendlyHackRoomErrorMessage(error);
+      setMessage({ text: errorMessage, tone: "red" });
+    }
+  }
+
   async function shareInvite(room: HackRoom) {
+    if (room.onchainStatus !== "confirmed") {
+      setMessage({ text: "Room is created. Wait for on-chain sync before sharing the invite.", tone: "gold" });
+      return;
+    }
+
     const text = `Join ${room.name} in XRDM Hack Room with invite code ${room.inviteCode}`;
     if (navigator.share) {
       await navigator.share({ text, title: `${room.name} invite` });
@@ -206,7 +286,7 @@ export function HackRoomRoomsPwa({ user: _user }: { user: SessionUser }) {
 
   return (
     <WebAppScreen activeNav="rooms">
-      {(dashboard.isLoading || createRoom.isPending || joinRoom.isPending) ? (
+      {(dashboard.isLoading || createRoomPending || joinRoom.isPending) ? (
         <div className="mb-3 flex items-center gap-2 rounded-[10px] border border-[rgba(238,232,222,0.12)] bg-[#141618] px-3 py-2 text-xs text-[#9C9690]">
           <NativeIcon className="size-4 animate-spin text-[#F0C040]" name="refresh-outline" />
           Syncing Hack Room...
@@ -214,10 +294,11 @@ export function HackRoomRoomsPwa({ user: _user }: { user: SessionUser }) {
       ) : null}
 
       <RoomCommandCenter
-        createRoomPending={createRoom.isPending}
+        createRoomBlockMessage={createRoomBlockMessage}
+        createRoomPending={createRoomPending}
         inviteCode={inviteCode}
         joinRoomPending={joinRoom.isPending}
-        onCreateRoom={() => createRoom.mutate(roomForm)}
+        onCreateRoom={handleCreateRoom}
         onInviteCodeChange={setInviteCode}
         onJoinRoom={() => joinRoom.mutate({ inviteCode })}
         onRoomFormChange={setRoomForm}
@@ -246,17 +327,19 @@ export function HackRoomRoomsPwa({ user: _user }: { user: SessionUser }) {
 
 export function HackRoomProfilePwa({ user }: { user: SessionUser }) {
   const navigate = useNavigate();
-  const { logout } = usePrivyAuth();
-  const dashboard = useQuery(trpc.hackRoom.dashboard.queryOptions());
+  const { logoutAndRedirect } = usePrivyAuth();
+  const { isCreatingWallet, walletError } = usePrivyWallet();
+  const dashboard = useQuery({
+    ...trpc.hackRoom.dashboard.queryOptions(),
+    refetchInterval: 10_000,
+    refetchIntervalInBackground: false,
+  });
   const stats = dashboard.data?.stats;
   const hostedRooms = dashboard.data?.hostedRooms ?? [];
   const networkCount = countUniqueNetworkParticipants(hostedRooms, user.id);
 
-  async function handleSignOut() {
-    await logout();
-    await authClient.signOut();
-    await queryClient.invalidateQueries();
-    navigate({ to: "/login" });
+  function handleSignOut() {
+    void logoutAndRedirect();
   }
 
   return (
@@ -277,14 +360,14 @@ export function HackRoomProfilePwa({ user }: { user: SessionUser }) {
       </section>
 
       {dashboard.error ? <StatusBanner message={dashboard.error.message} tone="red" /> : null}
+      {walletError ? <StatusBanner message={walletError} tone="red" /> : null}
+      {isCreatingWallet ? (
+        <StatusBanner message="Creating Privy wallet. Wait a moment..." tone="gold" />
+      ) : null}
 
       <SectionCard badge="Account" eyebrow="Profile" title="Account Details">
         <ProfileField label="Name" value={user.name} />
         <ProfileField label="Email" value={user.email} />
-        {user.walletAddress ? (
-          <ProfileField label="Wallet" value={user.walletAddress} tone="gold" />
-        ) : null}
-        <ProfileField label="User ID" value={user.id} />
         <Button
           className="mt-3 h-10 w-full rounded-[10px] border-[#FF5A4A] bg-[#280A08] text-[#FF5A4A] hover:bg-[#280A08]/80"
           onClick={handleSignOut}

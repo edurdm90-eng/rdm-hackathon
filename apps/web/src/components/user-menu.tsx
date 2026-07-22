@@ -9,14 +9,13 @@ import {
   DropdownMenuTrigger,
 } from "@rdm-hack/ui/components/dropdown-menu";
 import { Skeleton } from "@rdm-hack/ui/components/skeleton";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 
 import { usePrivyAuth } from "@/components/privy-provider";
 import { authClient } from "@/lib/auth-client";
 
 export default function UserMenu() {
-  const navigate = useNavigate();
-  const { logout } = usePrivyAuth();
+  const { logoutAndRedirect } = usePrivyAuth();
   const { data: session, isPending } = authClient.useSession();
 
   if (isPending) {
@@ -45,17 +44,8 @@ export default function UserMenu() {
           <DropdownMenuItem>{user.email || "Signed in"}</DropdownMenuItem>
           <DropdownMenuItem
             variant="destructive"
-            onClick={async () => {
-              await logout();
-              await authClient.signOut({
-                fetchOptions: {
-                  onSuccess: () => {
-                    navigate({
-                      to: "/login",
-                    });
-                  },
-                },
-              });
+            onClick={() => {
+              void logoutAndRedirect();
             }}
           >
             Sign Out

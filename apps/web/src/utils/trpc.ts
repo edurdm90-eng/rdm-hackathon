@@ -1,16 +1,21 @@
 import type { AppRouter } from "@rdm-hack/api/routers/index";
-import { env } from "@rdm-hack/env/web";
 import { QueryCache, QueryClient } from "@tanstack/react-query";
 import { createTRPCClient, httpBatchLink } from "@trpc/client";
 import { createTRPCOptionsProxy } from "@trpc/tanstack-react-query";
 import { toast } from "sonner";
 
 import { getPrivyAccessToken } from "@/lib/privy-session";
+import { serverUrl } from "@/lib/server-url";
 
 export const queryClient = new QueryClient({
   queryCache: new QueryCache({
     onError: (error, query) => {
-      toast.error(error.message, {
+      const message =
+        error.message === "Failed to fetch"
+          ? "API server is not reachable. Check the deployed server URL and server env."
+          : error.message;
+
+      toast.error(message, {
         action: {
           label: "retry",
           onClick: () => {
@@ -25,7 +30,7 @@ export const queryClient = new QueryClient({
 export const trpcClient = createTRPCClient<AppRouter>({
   links: [
     httpBatchLink({
-      url: `${env.VITE_SERVER_URL}/trpc`,
+      url: `${serverUrl}/trpc`,
       fetch(url, options) {
         const headers = new Headers(options?.headers);
         const accessToken = getPrivyAccessToken();

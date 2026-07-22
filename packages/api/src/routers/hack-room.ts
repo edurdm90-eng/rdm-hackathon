@@ -191,6 +191,7 @@ type HackNotificationRecord = {
   hostName: string;
   title: string;
   message: string;
+  readByUserIds?: string[];
   recipientIds: string[];
   recipientEmails: string[];
   createdAt: string;
@@ -236,10 +237,12 @@ const notificationCollection = () => client.collection<HackNotificationRecord>("
 const userCollection = () => client.collection<AuthUserRecord>("user");
 const chainEventCollection = () => client.collection<HackChainEventRecord>("hack_chain_events");
 
-const publicChainClient = createPublicClient({
-  chain: polygonAmoyChain,
-  transport: http(polygonAmoyChain.rpcUrls.default.http[0]),
-});
+const publicChainClients = polygonAmoyChain.rpcUrls.default.http.map((rpcUrl) =>
+  createPublicClient({
+    chain: polygonAmoyChain,
+    transport: http(rpcUrl),
+  }),
+);
 
 let idCounter = 0;
 
@@ -418,10 +421,24 @@ function requireRoomHackathonId(room: HackRoomRecord) {
 }
 
 async function waitForSuccessfulReceipt(txHash: Hex) {
-  const receipt = await publicChainClient.waitForTransactionReceipt({
-    hash: txHash,
-    timeout: 60_000,
-  });
+  const startedAt = Date.now();
+  const receipt = await firstResolved(
+    publicChainClients.map((chainClient, index) => async () => {
+      const rpcStartedAt = Date.now();
+      const candidateReceipt = await chainClient.waitForTransactionReceipt({
+        hash: txHash,
+        timeout: 60_000,
+      });
+
+      console.info(
+        `[chain-timing] backend-receipt rpc-${index} ${txHash} ${Date.now() - rpcStartedAt}ms`,
+      );
+
+      return candidateReceipt;
+    }),
+  );
+
+  console.info(`[chain-timing] backend-receipt resolved ${txHash} ${Date.now() - startedAt}ms`);
 
   if (receipt.status !== "success") {
     throw new TRPCError({
@@ -431,6 +448,32 @@ async function waitForSuccessfulReceipt(txHash: Hex) {
   }
 
   return receipt;
+}
+
+async function firstResolved<T>(tasks: Array<() => Promise<T>>) {
+  return new Promise<T>((resolve, reject) => {
+    const errors: Array<unknown> = [];
+    let pending = tasks.length;
+    let settled = false;
+
+    tasks.forEach((task) => {
+      void task()
+        .then((value) => {
+          if (!settled) {
+            settled = true;
+            resolve(value);
+          }
+        })
+        .catch((error) => {
+          errors.push(error);
+          pending -= 1;
+
+          if (pending === 0 && !settled) {
+            reject(errors[0] ?? new Error("Unable to resolve blockchain receipt."));
+          }
+        });
+    });
+  });
 }
 
 function getDecodedImplementationLogs(receipt: TransactionReceipt, eventName: string) {
@@ -900,7 +943,7 @@ export const hackRoomRouter = router({
         },
       }),
       roomCollection()
-        .find({ hostId: user.id, onchainStatus: "confirmed", status: "active" })
+        .find({ hostId: user.id, status: "active" })
         .toArray(),
       roomCollection()
         .find({
@@ -948,11 +991,9 @@ export const hackRoomRouter = router({
         visibleRoomIds.length
           ? notificationCollection()
               .find({
-                $or: [
-                  { roomId: { $in: hostedRoomIds } },
-                  { recipientIds: user.id },
-                  { recipientEmails: user.email.toLowerCase() },
-                ],
+                roomId: { $in: visibleRoomIds },
+                readByUserIds: { $ne: user.id },
+                $or: [{ recipientIds: user.id }, { recipientEmails: user.email.toLowerCase() }],
               })
               .toArray()
           : [],
@@ -1025,9 +1066,7 @@ export const hackRoomRouter = router({
       stats: {
         activeRooms: hostedRooms.length,
         joinedRooms: joinedRooms.length,
-        notifications: visibleNotifications.filter((notification) =>
-          notification.recipientIds.includes(user.id),
-        ).length,
+        notifications: visibleNotifications.length,
         participants: hostedRooms.reduce((total, room) => total + room.participants.length, 0),
         pendingSubmissions: hostSubmissions.filter((submission) => submission.status === "submitted")
           .length,
@@ -1041,7 +1080,7 @@ export const hackRoomRouter = router({
       z.object({
         name: z.string().trim().min(3).max(80),
         description: z.string().trim().max(240).default(""),
-        txHash: txHashSchema,
+        txHash: txHashSchema.optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -1054,35 +1093,9 @@ export const hackRoomRouter = router({
           smartWalletAddress: 1,
         },
       });
-      const hostAddress =
-        normalizeStoredAddress(hostUser?.onchainAddress) ??
-        normalizeStoredAddress(hostUser?.smartWalletAddress);
-
-      if (!hostAddress) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "Sync the host smart wallet before creating the room on-chain",
-        });
-      }
-
-      const existingRoom = await roomCollection().findOne({ createTxHash: input.txHash });
-      if (existingRoom) {
-        if (existingRoom.hostId !== ctx.session.user.id) {
-          throw new TRPCError({
-            code: "FORBIDDEN",
-            message: "This blockchain transaction is already linked to another room",
-          });
-        }
-        return existingRoom;
-      }
-
-      const { hackathonId, receipt } = await verifyHackathonCreated(input.txHash, hostAddress);
       const timestamp = now();
       const room: HackRoomRecord = {
         _id: makeId("room"),
-        chainId: polygonAmoyDeployment.chainId,
-        contractAddress: polygonAmoyDeployment.eduProxy,
-        createTxHash: input.txHash,
         name: input.name,
         description: input.description,
         inviteCode: await createUniqueInviteCode(),
@@ -1091,25 +1104,59 @@ export const hackRoomRouter = router({
         hostName: ctx.session.user.name,
         hostOnchainAddress: hostUser?.onchainAddress,
         hostSmartWalletAddress: hostUser?.smartWalletAddress,
-        onchainHackathonId: hackathonId.toString(),
-        onchainStatus: "confirmed",
+        onchainStatus: "not_created",
         status: "active",
         participants: [],
         createdAt: timestamp,
         updatedAt: timestamp,
       };
 
+      if (input.txHash) {
+        const hostAddress =
+          normalizeStoredAddress(hostUser?.onchainAddress) ??
+          normalizeStoredAddress(hostUser?.smartWalletAddress);
+
+        if (!hostAddress) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Sync the host smart wallet before creating the room on-chain",
+          });
+        }
+
+        const existingRoom = await roomCollection().findOne({ createTxHash: input.txHash });
+        if (existingRoom) {
+          if (existingRoom.hostId !== ctx.session.user.id) {
+            throw new TRPCError({
+              code: "FORBIDDEN",
+              message: "This blockchain transaction is already linked to another room",
+            });
+          }
+          return existingRoom;
+        }
+
+        const { hackathonId, receipt } = await verifyHackathonCreated(input.txHash, hostAddress);
+        room.chainId = polygonAmoyDeployment.chainId;
+        room.contractAddress = polygonAmoyDeployment.eduProxy;
+        room.createTxHash = input.txHash;
+        room.onchainHackathonId = hackathonId.toString();
+        room.onchainStatus = "confirmed";
+
+        await roomCollection().insertOne(room);
+        await recordConfirmedChainEvent({
+          appEntityId: room._id,
+          expectedHackathonId: hackathonId,
+          expectedRecipients: [hostAddress],
+          idempotencyKey: `room:${room._id}:created`,
+          kind: "room_created",
+          receipt,
+          roomId: room._id,
+          txHash: input.txHash,
+        });
+
+        return room;
+      }
+
       await roomCollection().insertOne(room);
-      await recordConfirmedChainEvent({
-        appEntityId: room._id,
-        expectedHackathonId: hackathonId,
-        expectedRecipients: [hostAddress],
-        idempotencyKey: `room:${room._id}:created`,
-        kind: "room_created",
-        receipt,
-        roomId: room._id,
-        txHash: input.txHash,
-      });
 
       return room;
     }),
@@ -1558,6 +1605,38 @@ export const hackRoomRouter = router({
 
       await notificationCollection().insertOne(notification);
       return notification;
+    }),
+
+  markNotificationsRead: protectedProcedure
+    .input(
+      z.object({
+        notificationIds: z.array(z.string().min(1)).max(100).default([]),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      if (!input.notificationIds.length) {
+        return { matchedCount: 0, modifiedCount: 0 };
+      }
+
+      const timestamp = now();
+      const result = await notificationCollection().updateMany(
+        {
+          _id: { $in: input.notificationIds },
+          $or: [
+            { recipientIds: ctx.session.user.id },
+            { recipientEmails: ctx.session.user.email.toLowerCase() },
+          ],
+        },
+        {
+          $addToSet: { readByUserIds: ctx.session.user.id },
+          $set: { updatedAt: timestamp },
+        },
+      );
+
+      return {
+        matchedCount: result.matchedCount,
+        modifiedCount: result.modifiedCount,
+      };
     }),
 
   prepareSubmissionApproval: protectedProcedure

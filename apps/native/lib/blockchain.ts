@@ -133,11 +133,18 @@ export async function resolveTransactionHashWithWaiters(input: {
   waitForTransactionReceipt: WaitForTransactionReceipt;
   waitForUserOperationReceipt?: WaitForUserOperationReceipt;
 }) {
+  const startedAt = Date.now();
+  const logTiming = (stage: string) => {
+    console.info(`[chain-timing] resolve-transaction ${stage} ${Date.now() - startedAt}ms`);
+  };
+
   const waitForDirectTransaction = async () => {
+    logTiming(`direct-receipt-start ${input.hash}`);
     await input.waitForTransactionReceipt({
       hash: input.hash,
       timeout: TRANSACTION_RECEIPT_TIMEOUT_MS,
     });
+    logTiming(`direct-receipt-mined ${input.hash}`);
 
     return input.hash;
   };
@@ -147,6 +154,7 @@ export async function resolveTransactionHashWithWaiters(input: {
   }
 
   const waitForSmartWalletOperation = async () => {
+    logTiming(`user-operation-receipt-start ${input.hash}`);
     const userOperationReceipt = await input.waitForUserOperationReceipt?.({
       hash: input.hash,
     });
@@ -158,6 +166,7 @@ export async function resolveTransactionHashWithWaiters(input: {
       throw new Error("Smart wallet receipt did not include a transaction hash.");
     }
 
+    logTiming(`user-operation-receipt-resolved ${transactionHash}`);
     return transactionHash;
   };
 
