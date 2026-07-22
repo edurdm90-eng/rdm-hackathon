@@ -81,6 +81,12 @@ function readRecordString(value: unknown, keys: readonly string[]) {
   return null;
 }
 
+function readErrorMessage(error: unknown, fallback: string) {
+  return typeof error === "object" && error !== null && "message" in error
+    ? String(error.message)
+    : fallback;
+}
+
 function readWalletAddress(wallet: unknown) {
   return readRecordString(wallet, ["address", "walletAddress"]);
 }
@@ -222,11 +228,8 @@ function PrivySessionBridge({ children }: { children: ReactNode }) {
     state: emailLoginState,
   } = useLoginWithEmail({
     onError: (error) => {
-      const unknownError: unknown = error;
-      const message =
-        typeof unknownError === "object" && unknownError !== null && "message" in unknownError
-          ? String(unknownError.message)
-          : "Unable to complete email login.";
+      const message = readErrorMessage(error, "Unable to complete email login.");
+      setSessionSyncError(message);
       toast.error(message);
     },
   });
@@ -363,11 +366,9 @@ function PrivySessionBridge({ children }: { children: ReactNode }) {
         },
         user: {
           email: serverUser.email || getUserEmail(currentUser),
-          embeddedWalletAddress: walletAddress ?? undefined,
           id: serverUser.id,
           name: serverUser.name || getUserName(currentUser),
           privyUserId: currentUser.id,
-          walletAddress: walletAddress ?? undefined,
         },
       });
       setHasSyncedSession(true);
@@ -390,7 +391,7 @@ function PrivySessionBridge({ children }: { children: ReactNode }) {
     return () => {
       active = false;
     };
-  }, [authenticated, getAccessToken, ready, user, walletAddress]);
+  }, [authenticated, getAccessToken, ready, user]);
 
   useEffect(() => {
     if (!ready || !walletsReady || !authenticated || !user || walletAddress || isCreatingWallet) {

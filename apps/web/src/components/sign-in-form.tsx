@@ -81,8 +81,8 @@ export default function SignInForm() {
       return;
     }
 
-    if (!trimmedCode || trimmedCode.length < 6) {
-      toast.error("Please enter the 6-digit OTP.");
+    if (!trimmedCode || trimmedCode.length < 4 || trimmedCode.length > 12) {
+      toast.error("Enter the code from your email");
       return;
     }
 
@@ -133,13 +133,12 @@ export default function SignInForm() {
                     className="h-[42px] rounded-[8px] border border-[rgba(238,232,222,0.12)] bg-[#0D0F12] px-3 py-[9px] text-center text-[16px] tracking-[0.18em] text-[#EEE8DE] outline-none placeholder:text-[#626058] focus-visible:border-[#1EEAB0] focus-visible:ring-1 focus-visible:ring-[#1EEAB0]/40"
                     id="privy-code"
                     inputMode="numeric"
-                    maxLength={6}
+                    maxLength={12}
                     onChange={(event) => setCode(event.target.value)}
-                    placeholder="000000"
+                    placeholder="123456"
                     type="text"
                     value={code}
                   />
-                  <p className="text-xs leading-5 text-[#8B8A84]">Code sent to {email.trim()}</p>
                 </div>
               ) : (
                 <div className="grid gap-1.5">
