@@ -191,6 +191,7 @@ type HackNotificationRecord = {
   hostName: string;
   title: string;
   message: string;
+  readByUserIds?: string[];
   recipientIds: string[];
   recipientEmails: string[];
   createdAt: string;
@@ -990,11 +991,9 @@ export const hackRoomRouter = router({
         visibleRoomIds.length
           ? notificationCollection()
               .find({
-                $or: [
-                  { roomId: { $in: hostedRoomIds } },
-                  { recipientIds: user.id },
-                  { recipientEmails: user.email.toLowerCase() },
-                ],
+                roomId: { $in: visibleRoomIds },
+                readByUserIds: { $ne: user.id },
+                $or: [{ recipientIds: user.id }, { recipientEmails: user.email.toLowerCase() }],
               })
               .toArray()
           : [],
@@ -1067,9 +1066,7 @@ export const hackRoomRouter = router({
       stats: {
         activeRooms: hostedRooms.length,
         joinedRooms: joinedRooms.length,
-        notifications: visibleNotifications.filter((notification) =>
-          notification.recipientIds.includes(user.id),
-        ).length,
+        notifications: visibleNotifications.length,
         participants: hostedRooms.reduce((total, room) => total + room.participants.length, 0),
         pendingSubmissions: hostSubmissions.filter((submission) => submission.status === "submitted")
           .length,
@@ -1608,6 +1605,38 @@ export const hackRoomRouter = router({
 
       await notificationCollection().insertOne(notification);
       return notification;
+    }),
+
+  markNotificationsRead: protectedProcedure
+    .input(
+      z.object({
+        notificationIds: z.array(z.string().min(1)).max(100).default([]),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      if (!input.notificationIds.length) {
+        return { matchedCount: 0, modifiedCount: 0 };
+      }
+
+      const timestamp = now();
+      const result = await notificationCollection().updateMany(
+        {
+          _id: { $in: input.notificationIds },
+          $or: [
+            { recipientIds: ctx.session.user.id },
+            { recipientEmails: ctx.session.user.email.toLowerCase() },
+          ],
+        },
+        {
+          $addToSet: { readByUserIds: ctx.session.user.id },
+          $set: { updatedAt: timestamp },
+        },
+      );
+
+      return {
+        matchedCount: result.matchedCount,
+        modifiedCount: result.modifiedCount,
+      };
     }),
 
   prepareSubmissionApproval: protectedProcedure
