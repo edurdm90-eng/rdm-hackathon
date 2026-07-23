@@ -148,7 +148,6 @@ export default function SignInForm() {
     }
 
     await sendEmailCode(trimmedEmail);
-    toast.success("OTP sent to your email.");
   }
 
   async function handleVerifyCode() {
