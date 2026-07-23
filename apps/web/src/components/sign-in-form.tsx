@@ -197,7 +197,7 @@ export default function SignInForm() {
             >
               {isSyncingSession ? (
                 <div className="rounded-[9px] border border-[#1EEAB0] bg-[#061F18] px-3 py-3 text-sm font-semibold text-[#1EEAB0]">
-                  Finishing sign in...
+                  Creating your Hack Room session...
                 </div>
               ) : isAwaitingOtp ? (
                 <div className="grid gap-1.5">
@@ -272,7 +272,7 @@ export default function SignInForm() {
                 {!ready
                   ? "Preparing login..."
                   : isSyncingSession
-                    ? "Finishing..."
+                    ? "Syncing Session"
                     : isCheckingLoginEmail
                       ? "Checking..."
                       : emailLoginStatus === "sending-code"
