@@ -35,6 +35,7 @@
     "allow:bulk": "bun run --cwd packages/db allow:bulk",
     "build": "turbo build",
     "check-types": "turbo check-types",
+    "db:indexes": "bun run --cwd packages/db indexes",
     "db:host:grant": "bun run --cwd packages/db host:grant",
     "db:role:backfill": "bun run --cwd packages/db role:backfill",
     "db:role:set": "bun run --cwd packages/db role:set",

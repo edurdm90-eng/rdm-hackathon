@@ -73,6 +73,12 @@ const privyCodeSchema = privyEmailSchema.extend({
     .max(12, "Code is too long"),
 });
 
+const LOGIN_EMAIL_HINT = "Please use ONLY your registered email";
+const LOGIN_EMAIL_UNAUTHORIZED_MESSAGE =
+  "Your mail-id is unauthorized, contact Admin";
+const LOGIN_EMAIL_CHECK_FAILED_MESSAGE =
+  "Unable to check your registered email. Please try again.";
+
 const walletSyncRetryDelaysMs = [0, 800, 1_600, 3_200, 6_400, 10_000] as const;
 let cachedNativeSessionUser: SessionUser | null = null;
 const syncedWalletKeys = new Set<string>();
@@ -87,6 +93,20 @@ function walletProfileValue(
   fallback = "Not synced yet",
 ) {
   return value && value.trim().length > 0 ? value : fallback;
+}
+
+function loginEmailPrecheckErrorMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : "";
+
+  if (
+    message === LOGIN_RESTRICTION_BLOCK_MESSAGE ||
+    message === LOGIN_EMAIL_UNAUTHORIZED_MESSAGE ||
+    message.includes("FORBIDDEN")
+  ) {
+    return LOGIN_EMAIL_UNAUTHORIZED_MESSAGE;
+  }
+
+  return message || LOGIN_EMAIL_CHECK_FAILED_MESSAGE;
 }
 
 function waitForWalletSyncRetry(delayMs: number) {
@@ -304,6 +324,10 @@ function AuthGateway() {
   const [formError, setFormError] = useState<string | null>(null);
   const [isRequestingCode, setIsRequestingCode] = useState(false);
   const [isVerifyingCode, setIsVerifyingCode] = useState(false);
+  const displayLastError =
+    lastError === LOGIN_RESTRICTION_BLOCK_MESSAGE
+      ? LOGIN_EMAIL_UNAUTHORIZED_MESSAGE
+      : lastError;
 
   useEffect(() => {
     cachedAuthGatewayState = {
@@ -345,6 +369,13 @@ function AuthGateway() {
 
     try {
       await checkLoginEmail.mutateAsync({ email: parsed.data.email });
+    } catch (error) {
+      setIsRequestingCode(false);
+      setFormError(loginEmailPrecheckErrorMessage(error));
+      return;
+    }
+
+    try {
       await sendCode({ email: parsed.data.email });
       setEmail(parsed.data.email);
       setHasSentCode(true);
@@ -393,6 +424,8 @@ function AuthGateway() {
   const isBusy =
     isCheckingEmail || isRequestingCode || isVerifyingCode || isSyncing;
   const isPrivyAuthenticated = Boolean(user);
+  const shouldShowLoginEmailHint =
+    !hasSentCode && !isPrivyAuthenticated && !formError && !displayLastError;
 
   return (
     <KeyboardAvoidingView
@@ -443,7 +476,7 @@ function AuthGateway() {
             />
           ) : null}
           {formError ? <ErrorBanner message={formError} /> : null}
-          {lastError ? <ErrorBanner message={lastError} /> : null}
+          {displayLastError ? <ErrorBanner message={displayLastError} /> : null}
 
           <Field label="Email">
             <HackTextInput
@@ -501,6 +534,17 @@ function AuthGateway() {
             />
           )}
 
+          {shouldShowLoginEmailHint ? (
+            <Text
+              style={[
+                styles.authVerifiedAccountText,
+                styles.authRegisteredEmailHintText,
+              ]}
+            >
+              {LOGIN_EMAIL_HINT}
+            </Text>
+          ) : null}
+
           {hasSentCode || isPrivyAuthenticated ? (
             <View style={styles.authSecondaryActions}>
               {lastError ? (
@@ -515,9 +559,6 @@ function AuthGateway() {
                   tone="violet"
                 />
               ) : null}
-              <Text style={styles.authVerifiedAccountText}>
-                Please use your registered mail
-              </Text>
             </View>
           ) : null}
         </View>
