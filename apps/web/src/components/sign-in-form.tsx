@@ -10,7 +10,8 @@ import { toast } from "sonner";
 import { usePrivyAuth } from "@/components/privy-provider";
 import { trpcClient } from "@/utils/trpc";
 
-const LOGIN_ALLOWLIST_ERROR_MESSAGE = "Not a registered email, contact Admin";
+const LOGIN_EMAIL_HINT = "Please use ONLY your registered email";
+const LOGIN_EMAIL_UNAUTHORIZED_MESSAGE = "Your mail-id is unauthorized, contact Admin";
 
 type CheckLoginEmailClient = {
   auth: {
@@ -42,12 +43,12 @@ function resolveLoginCheckErrorMessage(error: unknown) {
 
   if (
     !message ||
-    message === LOGIN_ALLOWLIST_ERROR_MESSAGE ||
+    message === LOGIN_EMAIL_UNAUTHORIZED_MESSAGE ||
     lowerMessage.includes("not a registered email") ||
     lowerMessage.includes("allowlist") ||
     lowerMessage.includes("forbidden")
   ) {
-    return LOGIN_ALLOWLIST_ERROR_MESSAGE;
+    return LOGIN_EMAIL_UNAUTHORIZED_MESSAGE;
   }
 
   return message;
@@ -84,11 +85,18 @@ export default function SignInForm() {
   } = usePrivyAuth();
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
+  const [formError, setFormError] = useState<string | null>(null);
   const [shouldRedirectAfterOtp, setShouldRedirectAfterOtp] = useState(false);
   const [isCheckingLoginEmail, setIsCheckingLoginEmail] = useState(false);
   const isAwaitingOtp =
     !isLoginRestrictionError &&
     (emailLoginStatus === "awaiting-code-input" || emailLoginStatus === "error");
+  const shouldShowLoginEmailHint =
+    !isAwaitingOtp &&
+    !configurationError &&
+    !formError &&
+    !isLoginRestrictionError &&
+    !sessionSyncError;
 
   useEffect(() => {
     if (!authenticated || !shouldRedirectAfterOtp) {
@@ -99,7 +107,6 @@ export default function SignInForm() {
       replace: true,
       to: "/dashboard",
     });
-    toast.success("Privy sign in successful");
   }, [authenticated, navigate, shouldRedirectAfterOtp]);
 
   useEffect(() => {
@@ -115,7 +122,7 @@ export default function SignInForm() {
     const trimmedEmail = email.trim().toLowerCase();
 
     if (!trimmedEmail || !trimmedEmail.includes("@")) {
-      toast.error("Please enter a valid email address.");
+      setFormError("Please enter a valid email address.");
       return;
     }
 
@@ -126,13 +133,15 @@ export default function SignInForm() {
 
     setEmail(trimmedEmail);
     setCode("");
+    setFormError(null);
     setShouldRedirectAfterOtp(false);
 
     setIsCheckingLoginEmail(true);
     try {
       await checkLoginEmail(trimmedEmail);
     } catch (error) {
-      toast.error(resolveLoginCheckErrorMessage(error));
+      const message = resolveLoginCheckErrorMessage(error);
+      setFormError(message);
       return;
     } finally {
       setIsCheckingLoginEmail(false);
@@ -147,7 +156,7 @@ export default function SignInForm() {
     const trimmedCode = code.trim();
 
     if (!trimmedEmail || !trimmedEmail.includes("@")) {
-      toast.error("Please enter a valid email address.");
+      setFormError("Please enter a valid email address.");
       return;
     }
 
@@ -222,7 +231,10 @@ export default function SignInForm() {
                     autoComplete="email"
                     className="h-[42px] rounded-[8px] border border-[rgba(238,232,222,0.12)] bg-[#0D0F12] px-3 py-[9px] text-[13px] text-[#EEE8DE] outline-none placeholder:text-[#626058] focus-visible:border-[#1EEAB0] focus-visible:ring-1 focus-visible:ring-[#1EEAB0]/40"
                     id="privy-email"
-                    onChange={(event) => setEmail(event.target.value)}
+                    onChange={(event) => {
+                      setEmail(event.target.value);
+                      setFormError(null);
+                    }}
                     placeholder="you@example.com"
                     type="email"
                     value={email}
@@ -232,6 +244,11 @@ export default function SignInForm() {
               {configurationError ? (
                 <p className="rounded-[9px] border border-[#904200] bg-[#241000] px-3 py-2 text-xs leading-5 text-[#FF8820]">
                   {configurationError}
+                </p>
+              ) : null}
+              {formError ? (
+                <p className="rounded-[9px] border border-[#7A120A] bg-[#2A0806] px-3 py-2 text-xs leading-5 text-[#FF8A7C]">
+                  {formError}
                 </p>
               ) : null}
               {sessionSyncError ? (
@@ -255,17 +272,22 @@ export default function SignInForm() {
                 {!ready
                   ? "Preparing login..."
                   : isSyncingSession
-                  ? "Finishing..."
-                  : isCheckingLoginEmail
-                    ? "Checking..."
-                  : emailLoginStatus === "sending-code"
-                  ? "Sending OTP..."
-                  : emailLoginStatus === "submitting-code"
-                    ? "Verifying..."
-                    : isAwaitingOtp
-                      ? "Verify OTP"
-                      : "Send OTP"}
+                    ? "Finishing..."
+                    : isCheckingLoginEmail
+                      ? "Checking..."
+                      : emailLoginStatus === "sending-code"
+                        ? "Sending OTP..."
+                        : emailLoginStatus === "submitting-code"
+                          ? "Verifying..."
+                          : isAwaitingOtp
+                            ? "Verify OTP"
+                            : "Send OTP"}
               </Button>
+              {shouldShowLoginEmailHint ? (
+                <p className="text-center text-xs font-semibold leading-5 text-[#1EEAB0]">
+                  {LOGIN_EMAIL_HINT}
+                </p>
+              ) : null}
             </form>
           </CardContent>
         </Card>
