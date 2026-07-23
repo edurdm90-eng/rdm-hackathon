@@ -199,27 +199,7 @@ export default function SignInForm() {
                 <div className="rounded-[9px] border border-[#1EEAB0] bg-[#061F18] px-3 py-3 text-sm font-semibold text-[#1EEAB0]">
                   Creating your Hack Room session...
                 </div>
-              ) : isAwaitingOtp ? (
-                <div className="grid gap-1.5">
-                  <Label
-                    className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#626058]"
-                    htmlFor="privy-code"
-                  >
-                    OTP code
-                  </Label>
-                  <Input
-                    autoComplete="one-time-code"
-                    className="h-[42px] rounded-[8px] border border-[rgba(238,232,222,0.12)] bg-[#0D0F12] px-3 py-[9px] text-center text-[16px] tracking-[0.18em] text-[#EEE8DE] outline-none placeholder:text-[#626058] focus-visible:border-[#1EEAB0] focus-visible:ring-1 focus-visible:ring-[#1EEAB0]/40"
-                    id="privy-code"
-                    inputMode="numeric"
-                    maxLength={12}
-                    onChange={(event) => setCode(event.target.value)}
-                    placeholder="123456"
-                    type="text"
-                    value={code}
-                  />
-                </div>
-              ) : (
+              ) : !isAwaitingOtp ? (
                 <div className="grid gap-1.5">
                   <Label
                     className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#626058]"
@@ -240,7 +220,46 @@ export default function SignInForm() {
                     value={email}
                   />
                 </div>
-              )}
+              ) : null}
+              {isAwaitingOtp ? (
+                <>
+                  <div className="grid gap-1.5">
+                    <Label
+                      className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#626058]"
+                      htmlFor="privy-email"
+                    >
+                      Email
+                    </Label>
+                    <Input
+                      autoComplete="email"
+                      className="h-[42px] rounded-[8px] border border-[rgba(238,232,222,0.12)] bg-[#0D0F12] px-3 py-[9px] text-[13px] text-[#EEE8DE] opacity-70 outline-none placeholder:text-[#626058]"
+                      disabled
+                      id="privy-email"
+                      type="email"
+                      value={email}
+                    />
+                  </div>
+                  <div className="grid gap-1.5">
+                    <Label
+                      className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#626058]"
+                      htmlFor="privy-code"
+                    >
+                      Email code
+                    </Label>
+                    <Input
+                      autoComplete="one-time-code"
+                      className="h-[42px] rounded-[8px] border border-[rgba(238,232,222,0.12)] bg-[#0D0F12] px-3 py-[9px] text-center text-[16px] tracking-[0.18em] text-[#EEE8DE] outline-none placeholder:text-[#626058] focus-visible:border-[#1EEAB0] focus-visible:ring-1 focus-visible:ring-[#1EEAB0]/40"
+                      id="privy-code"
+                      inputMode="numeric"
+                      maxLength={12}
+                      onChange={(event) => setCode(event.target.value)}
+                      placeholder="123456"
+                      type="text"
+                      value={code}
+                    />
+                  </div>
+                </>
+              ) : null}
               {configurationError ? (
                 <p className="rounded-[9px] border border-[#904200] bg-[#241000] px-3 py-2 text-xs leading-5 text-[#FF8820]">
                   {configurationError}
@@ -270,18 +289,18 @@ export default function SignInForm() {
               >
                 <LogIn className="size-4" />
                 {!ready
-                  ? "Preparing login..."
+                  ? "Preparing secure sign-in..."
                   : isSyncingSession
                     ? "Syncing Session"
                     : isCheckingLoginEmail
                       ? "Checking..."
                       : emailLoginStatus === "sending-code"
-                        ? "Sending OTP..."
+                        ? "Sending Email Code..."
                         : emailLoginStatus === "submitting-code"
-                          ? "Verifying..."
+                          ? "Verifying Code..."
                           : isAwaitingOtp
-                            ? "Verify OTP"
-                            : "Send OTP"}
+                            ? "Verify Code"
+                            : "Send Email Code"}
               </Button>
               {shouldShowLoginEmailHint ? (
                 <p className="text-center text-xs font-semibold leading-5 text-[#1EEAB0]">
