@@ -8,6 +8,64 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { usePrivyAuth } from "@/components/privy-provider";
+import { trpcClient } from "@/utils/trpc";
+
+const LOGIN_ALLOWLIST_ERROR_MESSAGE = "Not a registered email, contact Admin";
+
+type CheckLoginEmailClient = {
+  auth: {
+    checkLoginEmail: {
+      mutate: (input: { email: string }) => Promise<unknown>;
+      query: (input: { email: string }) => Promise<unknown>;
+    };
+  };
+};
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "";
+}
+
+function isProcedureTypeMismatch(error: unknown) {
+  const message = getErrorMessage(error).toLowerCase();
+
+  return (
+    message.includes('no "query"-procedure on path') ||
+    message.includes('no "mutation"-procedure on path') ||
+    message.includes("no query-procedure on path") ||
+    message.includes("no mutation-procedure on path")
+  );
+}
+
+function resolveLoginCheckErrorMessage(error: unknown) {
+  const message = getErrorMessage(error);
+  const lowerMessage = message.toLowerCase();
+
+  if (
+    !message ||
+    message === LOGIN_ALLOWLIST_ERROR_MESSAGE ||
+    lowerMessage.includes("not a registered email") ||
+    lowerMessage.includes("allowlist") ||
+    lowerMessage.includes("forbidden")
+  ) {
+    return LOGIN_ALLOWLIST_ERROR_MESSAGE;
+  }
+
+  return message;
+}
+
+async function checkLoginEmail(email: string) {
+  const client = trpcClient as unknown as CheckLoginEmailClient;
+
+  try {
+    await client.auth.checkLoginEmail.mutate({ email });
+  } catch (error) {
+    if (!isProcedureTypeMismatch(error)) {
+      throw error;
+    }
+
+    await client.auth.checkLoginEmail.query({ email });
+  }
+}
 
 export default function SignInForm() {
   const navigate = useNavigate({
@@ -27,6 +85,7 @@ export default function SignInForm() {
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [shouldRedirectAfterOtp, setShouldRedirectAfterOtp] = useState(false);
+  const [isCheckingLoginEmail, setIsCheckingLoginEmail] = useState(false);
   const isAwaitingOtp =
     !isLoginRestrictionError &&
     (emailLoginStatus === "awaiting-code-input" || emailLoginStatus === "error");
@@ -68,6 +127,17 @@ export default function SignInForm() {
     setEmail(trimmedEmail);
     setCode("");
     setShouldRedirectAfterOtp(false);
+
+    setIsCheckingLoginEmail(true);
+    try {
+      await checkLoginEmail(trimmedEmail);
+    } catch (error) {
+      toast.error(resolveLoginCheckErrorMessage(error));
+      return;
+    } finally {
+      setIsCheckingLoginEmail(false);
+    }
+
     await sendEmailCode(trimmedEmail);
     toast.success("OTP sent to your email.");
   }
@@ -175,6 +245,7 @@ export default function SignInForm() {
                 disabled={
                   !ready ||
                   isSyncingSession ||
+                  isCheckingLoginEmail ||
                   emailLoginStatus === "sending-code" ||
                   emailLoginStatus === "submitting-code"
                 }
@@ -185,6 +256,8 @@ export default function SignInForm() {
                   ? "Preparing login..."
                   : isSyncingSession
                   ? "Finishing..."
+                  : isCheckingLoginEmail
+                    ? "Checking..."
                   : emailLoginStatus === "sending-code"
                   ? "Sending OTP..."
                   : emailLoginStatus === "submitting-code"
