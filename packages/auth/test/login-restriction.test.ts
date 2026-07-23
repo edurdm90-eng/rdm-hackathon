@@ -1,8 +1,11 @@
 import { describe, expect, it } from "bun:test";
 
 import {
+  LOGIN_RESTRICTION_BLOCK_CODE,
+  LOGIN_RESTRICTION_BLOCK_MESSAGE,
   LOGIN_RESTRICTION_SETTINGS_KEY,
   normalizeAllowlistEmail,
+  resolveLoginEmailAccess,
   resolveLoginRestriction,
   type LoginRestrictionDb,
 } from "../src/login-restriction.js";
@@ -122,6 +125,32 @@ describe("resolveLoginRestriction", () => {
       allowed: false,
       isrestriction: true,
       role: null,
+    });
+  });
+});
+
+describe("resolveLoginEmailAccess", () => {
+  it("allows the pre-OTP check when restriction is off", async () => {
+    await expect(
+      resolveLoginEmailAccess(
+        "outsider@example.com",
+        createRestrictionDb({ allowlist: [], isrestriction: false }),
+      ),
+    ).resolves.toEqual({
+      allowed: true,
+    });
+  });
+
+  it("returns the user-facing block message before OTP is sent", async () => {
+    await expect(
+      resolveLoginEmailAccess(
+        "outsider@example.com",
+        createRestrictionDb({ allowlist: [], isrestriction: true }),
+      ),
+    ).resolves.toEqual({
+      allowed: false,
+      code: LOGIN_RESTRICTION_BLOCK_CODE,
+      message: LOGIN_RESTRICTION_BLOCK_MESSAGE,
     });
   });
 });
