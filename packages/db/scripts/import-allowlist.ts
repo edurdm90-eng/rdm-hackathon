@@ -102,6 +102,8 @@ async function importAllowlist() {
   let updated = 0;
 
   await allowlist.createIndex({ normalizedEmail: 1 }, { unique: true });
+  await allowlist.createIndex({ normalizedEmail: 1, status: 1 });
+  await allowlist.createIndex({ email: 1, status: 1 });
   await allowlist.createIndex({ status: 1 });
 
   for (const row of parsed.rows) {

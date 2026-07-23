@@ -11,6 +11,7 @@
   },
   "scripts": {
     "allow:bulk": "bun scripts/import-allowlist.ts",
+    "indexes": "bun scripts/ensure-indexes.ts",
     "host:grant": "bun scripts/grant-host.ts",
     "restriction": "bun scripts/set-login-restriction.ts",
     "role:backfill": "bun scripts/set-user-role.ts --backfill-missing",

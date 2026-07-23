@@ -61,8 +61,10 @@ async function setLoginRestriction() {
   loadEnvFiles();
   const { client } = await import("../src/index.js");
   const now = new Date();
+  const appSettings = client.collection("app_settings");
 
-  await client.collection("app_settings").updateOne(
+  await appSettings.createIndex({ key: 1 }, { unique: true });
+  await appSettings.updateOne(
     { key: "login_restriction" },
     {
       $set: {
