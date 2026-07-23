@@ -2,6 +2,8 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
 import {
+  LOGIN_RESTRICTION_BLOCK_CODE,
+  LOGIN_RESTRICTION_BLOCK_MESSAGE,
   resolveLoginEmailAccess,
 } from "../../../auth/src/login-restriction.js";
 import { client } from "../../../db/src/index.js";
@@ -20,9 +22,9 @@ export const authRouter = router({
       if (!access.allowed) {
         throw new TRPCError({
           code: "FORBIDDEN",
-          message: access.message,
+          message: LOGIN_RESTRICTION_BLOCK_MESSAGE,
           cause: {
-            code: access.code,
+            code: LOGIN_RESTRICTION_BLOCK_CODE,
           },
         });
       }
