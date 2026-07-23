@@ -201,7 +201,7 @@ export default function SignInForm() {
               ) : !isAwaitingOtp ? (
                 <div className="grid gap-1.5">
                   <Label
-                    className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#626058]"
+                    className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#C8BFAF]"
                     htmlFor="privy-email"
                   >
                     Email
@@ -224,7 +224,7 @@ export default function SignInForm() {
                 <>
                   <div className="grid gap-1.5">
                     <Label
-                      className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#626058]"
+                      className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#C8BFAF]"
                       htmlFor="privy-email"
                     >
                       Email
@@ -240,7 +240,7 @@ export default function SignInForm() {
                   </div>
                   <div className="grid gap-1.5">
                     <Label
-                      className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#626058]"
+                      className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#C8BFAF]"
                       htmlFor="privy-code"
                     >
                       Email code
