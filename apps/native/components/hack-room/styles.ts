@@ -100,6 +100,9 @@ export const styles = StyleSheet.create({
     lineHeight: 16,
     textAlign: "center",
   },
+  authRegisteredEmailHintText: {
+    color: theme.participant,
+  },
   authLogo: {
     height: 58,
     width: 106,
