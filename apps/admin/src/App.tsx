@@ -18,7 +18,8 @@ import {
   Users,
   WalletCards,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { MouseEvent as ReactMouseEvent } from "react";
 
 import {
   adminSnapshot,
@@ -280,142 +281,79 @@ function HealthPanel({ items }: { items: HealthItem[] }) {
   );
 }
 
-export function App() {
-  const sections = [
-    { id: "overview", label: "Overview", detail: "KPIs and movement", icon: LayoutDashboard },
-    { id: "roles", label: "Roles", detail: "Host vs member", icon: UsersRound },
-    { id: "users", label: "Users", detail: "Person-level insight", icon: UserRound },
-    { id: "hosts", label: "Hosts", detail: "Host performance", icon: ShieldCheck },
-    { id: "rooms", label: "Rooms", detail: "Room operations", icon: Blocks },
-    { id: "rewards", label: "Rewards", detail: "XRDM and certificates", icon: Coins },
-    { id: "chain", label: "Chain", detail: "Event health", icon: WalletCards },
-  ];
-  const [activeSection, setActiveSection] = useState("overview");
+const dashboardRoutes = [
+  {
+    id: "overview",
+    path: "/overview",
+    label: "Overview",
+    detail: "KPIs and movement",
+    description: "An operational summary across users, rooms, submissions, and rewards.",
+    icon: LayoutDashboard,
+  },
+  {
+    id: "roles",
+    path: "/roles",
+    label: "Roles",
+    detail: "Host vs member",
+    description: "Compare participation, approvals, winners, and rewards by platform role.",
+    icon: UsersRound,
+  },
+  {
+    id: "users",
+    path: "/users",
+    label: "Users",
+    detail: "Person-level insight",
+    description: "Inspect user movement, contributions, approvals, and earned rewards.",
+    icon: UserRound,
+  },
+  {
+    id: "hosts",
+    path: "/hosts",
+    label: "Hosts",
+    detail: "Host performance",
+    description: "Compare host activity, room ownership, approvals, and reward output.",
+    icon: ShieldCheck,
+  },
+  {
+    id: "rooms",
+    path: "/rooms",
+    label: "Rooms",
+    detail: "Room operations",
+    description: "Monitor participation, assignments, submissions, rewards, and room status.",
+    icon: Blocks,
+  },
+  {
+    id: "rewards",
+    path: "/rewards",
+    label: "Rewards",
+    detail: "XRDM and certificates",
+    description: "Track XRDM, winners, certificates, and NFT badge issuance.",
+    icon: Coins,
+  },
+  {
+    id: "chain",
+    path: "/chain",
+    label: "Chain",
+    detail: "Event health",
+    description: "Review confirmed, pending, and failed blockchain events by room.",
+    icon: WalletCards,
+  },
+] as const;
 
-  useEffect(() => {
-    const sectionElements = sections
-      .map((section) => document.getElementById(section.id))
-      .filter((section): section is HTMLElement => Boolean(section));
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const visibleEntry = entries
-          .filter((entry) => entry.isIntersecting)
-          .sort((first, second) => second.intersectionRatio - first.intersectionRatio)[0];
+type DashboardRoute = (typeof dashboardRoutes)[number];
+type DashboardRouteId = DashboardRoute["id"];
 
-        if (visibleEntry) {
-          setActiveSection(visibleEntry.target.id);
-        }
-      },
-      { rootMargin: "-15% 0px -70% 0px", threshold: [0, 0.2, 0.5] },
-    );
+function resolveRoute(pathname: string): DashboardRoute | null {
+  const normalizedPath = pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
+  return normalizedPath === "/"
+    ? dashboardRoutes[0]
+    : (dashboardRoutes.find((route) => route.path === normalizedPath) ?? null);
+}
 
-    sectionElements.forEach((section) => observer.observe(section));
-    return () => observer.disconnect();
-  }, []);
-
+function OverviewRoute() {
   return (
-    <div className="app-shell">
-      <aside className="sidebar">
-        <div className="sidebar-brand">
-          <span className="brand-mark">R</span>
-          <span>
-            <strong>RDM Hack</strong>
-            <small>Admin Console</small>
-          </span>
-        </div>
-
-        <nav className="sidebar-nav" aria-label="Admin dashboard routes">
-          <p className="sidebar-label">Workspace</p>
-          {sections.map((section) => {
-            const Icon = section.icon;
-
-            return (
-              <a
-                aria-current={activeSection === section.id ? "page" : undefined}
-                className={activeSection === section.id ? "active" : undefined}
-                href={`#${section.id}`}
-                key={section.id}
-                onClick={() => setActiveSection(section.id)}
-              >
-                <Icon size={17} />
-                <span>
-                  <strong>{section.label}</strong>
-                  <small>{section.detail}</small>
-                </span>
-              </a>
-            );
-          })}
-        </nav>
-
-        <div className="sidebar-footer">
-          <span className="readonly-dot" />
-          <span>
-            <strong>Read-only mode</strong>
-            <small>Production monitoring</small>
-          </span>
-        </div>
-      </aside>
-
-      <main className="admin-shell">
-        <header className="topbar">
-        <div>
-          <p className="eyebrow">RDM Hack Admin</p>
-          <h1>Founder Dashboard</h1>
-        </div>
-        <div className="server-pill">
-          <Radio size={15} />
-          <span>{adminSnapshot.serverUrl || "Server URL missing"}</span>
-        </div>
-        </header>
-
-      <section className="toolbar" aria-label="Dashboard filters">
-        <label>
-          Date range
-          <select defaultValue="7d">
-            <option value="24h">Last 24 hours</option>
-            <option value="7d">Last 7 days</option>
-            <option value="30d">Last 30 days</option>
-          </select>
-        </label>
-        <label>
-          Status
-          <select defaultValue="all">
-            <option value="all">All statuses</option>
-            <option value="confirmed">Confirmed</option>
-            <option value="pending">Pending</option>
-            <option value="failed">Failed</option>
-          </select>
-        </label>
-        <label>
-          Room
-          <select defaultValue="all">
-            <option value="all">All rooms</option>
-            {adminSnapshot.rooms.map((room) => (
-              <option key={room.id} value={room.id}>
-                {room.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="search-box">
-          Search
-          <span>
-            <Search size={15} />
-            <input placeholder="Room, host, wallet, team" />
-          </span>
-        </label>
-      </section>
-
-      <section className="notice">
-        <Gauge size={18} />
-        <p>
-          Read-only v1 interface. No create, update, delete, or blockchain transaction controls are included.
-          The current build is wired to the server URL and uses demo analytics until a protected read-only
-          analytics endpoint is available.
-        </p>
-      </section>
-
-      <section className="kpi-grid" id="overview" aria-label="Top KPIs">
+    <>
+      <section className="kpi-grid" aria-label="Top KPIs">
         {adminSnapshot.kpis.map((kpi) => (
           <KpiCard key={kpi.label} kpi={kpi} />
         ))}
@@ -440,7 +378,7 @@ export function App() {
         <article className="panel">
           <div className="panel-heading">
             <div>
-              <p className="eyebrow">Live Feed</p>
+              <p className="eyebrow">Activity Feed</p>
               <h2>Recent activity</h2>
             </div>
             <Clock3 size={18} />
@@ -448,7 +386,7 @@ export function App() {
           <ActivityFeed items={adminSnapshot.activity} />
         </article>
 
-        <article className="panel" id="rooms">
+        <article className="panel">
           <div className="panel-heading">
             <div>
               <p className="eyebrow">Rooms</p>
@@ -458,7 +396,7 @@ export function App() {
           <RankedList items={adminSnapshot.activeRooms} />
         </article>
 
-        <article className="panel" id="hosts">
+        <article className="panel">
           <div className="panel-heading">
             <div>
               <p className="eyebrow">Hosts</p>
@@ -467,79 +405,349 @@ export function App() {
           </div>
           <RankedList items={adminSnapshot.activeHosts} />
         </article>
-
-        <article className="panel panel-wide" id="roles">
-          <div className="panel-heading">
-            <div>
-              <p className="eyebrow">Role Route</p>
-              <h2>Stats by role</h2>
-            </div>
-          </div>
-          <SegmentTable label="Role" segments={adminSnapshot.roleSegments} />
-        </article>
-
-        <article className="panel panel-wide" id="users">
-          <div className="panel-heading">
-            <div>
-              <p className="eyebrow">User Route</p>
-              <h2>User-level activity and rewards</h2>
-            </div>
-          </div>
-          <UsersTable users={adminSnapshot.userInsights} />
-        </article>
-
-        <article className="panel panel-wide">
-          <div className="panel-heading">
-            <div>
-              <p className="eyebrow">Host Route</p>
-              <h2>Stats grouped by host</h2>
-            </div>
-          </div>
-          <SegmentTable label="Host" segments={adminSnapshot.hostSegments} />
-        </article>
-
-        <article className="panel panel-wide">
-          <div className="panel-heading">
-            <div>
-              <p className="eyebrow">Room Route</p>
-              <h2>Stats grouped by room</h2>
-            </div>
-          </div>
-          <SegmentTable label="Room" segments={adminSnapshot.roomSegments} />
-        </article>
-
-        <article className="panel panel-wide">
-          <div className="panel-heading">
-            <div>
-              <p className="eyebrow">Rooms Table</p>
-              <h2>Room, host, assignment, reward, and chain view</h2>
-            </div>
-          </div>
-          <RoomsTable rooms={adminSnapshot.rooms} />
-        </article>
-
-        <article className="panel panel-wide" id="rewards">
-          <div className="panel-heading">
-            <div>
-              <p className="eyebrow">Rewards and Blockchain</p>
-              <h2>Operational health</h2>
-            </div>
-            <CircleAlert size={18} />
-          </div>
-          <HealthPanel items={adminSnapshot.rewardHealth} />
-        </article>
-
-        <article className="panel panel-wide" id="chain">
-          <div className="panel-heading">
-            <div>
-              <p className="eyebrow">Chain Route</p>
-              <h2>Chain status by room</h2>
-            </div>
-            <CircleAlert size={18} />
-          </div>
-          <RoomsTable rooms={adminSnapshot.rooms} />
-        </article>
       </section>
+    </>
+  );
+}
+
+function RolesRoute() {
+  return (
+    <section className="dashboard-grid">
+      <article className="panel panel-wide">
+        <div className="panel-heading">
+          <div>
+            <p className="eyebrow">Role Analysis</p>
+            <h2>Stats by role</h2>
+          </div>
+        </div>
+        <SegmentTable label="Role" segments={adminSnapshot.roleSegments} />
+      </article>
+    </section>
+  );
+}
+
+function UsersRoute() {
+  return (
+    <section className="dashboard-grid">
+      <article className="panel panel-wide">
+        <div className="panel-heading">
+          <div>
+            <p className="eyebrow">User Analysis</p>
+            <h2>User-level activity and rewards</h2>
+          </div>
+        </div>
+        <UsersTable users={adminSnapshot.userInsights} />
+      </article>
+    </section>
+  );
+}
+
+function HostsRoute() {
+  return (
+    <section className="dashboard-grid">
+      <article className="panel">
+        <div className="panel-heading">
+          <div>
+            <p className="eyebrow">Host Ranking</p>
+            <h2>Most active hosts</h2>
+          </div>
+        </div>
+        <RankedList items={adminSnapshot.activeHosts} />
+      </article>
+
+      <article className="panel panel-wide">
+        <div className="panel-heading">
+          <div>
+            <p className="eyebrow">Host Analysis</p>
+            <h2>Stats grouped by host</h2>
+          </div>
+        </div>
+        <SegmentTable label="Host" segments={adminSnapshot.hostSegments} />
+      </article>
+    </section>
+  );
+}
+
+function RoomsRoute() {
+  return (
+    <section className="dashboard-grid">
+      <article className="panel">
+        <div className="panel-heading">
+          <div>
+            <p className="eyebrow">Room Ranking</p>
+            <h2>Most active rooms</h2>
+          </div>
+        </div>
+        <RankedList items={adminSnapshot.activeRooms} />
+      </article>
+
+      <article className="panel panel-wide">
+        <div className="panel-heading">
+          <div>
+            <p className="eyebrow">Room Analysis</p>
+            <h2>Stats grouped by room</h2>
+          </div>
+        </div>
+        <SegmentTable label="Room" segments={adminSnapshot.roomSegments} />
+      </article>
+
+      <article className="panel panel-wide">
+        <div className="panel-heading">
+          <div>
+            <p className="eyebrow">Rooms Table</p>
+            <h2>Room, host, assignment, reward, and chain view</h2>
+          </div>
+        </div>
+        <RoomsTable rooms={adminSnapshot.rooms} />
+      </article>
+    </section>
+  );
+}
+
+function RewardsRoute() {
+  return (
+    <section className="dashboard-grid">
+      <article className="panel panel-wide">
+        <div className="panel-heading">
+          <div>
+            <p className="eyebrow">Rewards</p>
+            <h2>XRDM, winners, certificates, and badges</h2>
+          </div>
+          <Award size={18} />
+        </div>
+        <HealthPanel items={adminSnapshot.rewardHealth} />
+      </article>
+    </section>
+  );
+}
+
+function ChainRoute() {
+  const chainHealthItems = adminSnapshot.rewardHealth.filter((item) =>
+    ["Confirmed XRDM", "Pending Chain Events", "Failed Chain Events"].includes(item.label),
+  );
+
+  return (
+    <section className="dashboard-grid">
+      <article className="panel panel-wide">
+        <div className="panel-heading">
+          <div>
+            <p className="eyebrow">Chain Events</p>
+            <h2>Blockchain event health</h2>
+          </div>
+          <CircleAlert size={18} />
+        </div>
+        <HealthPanel items={chainHealthItems} />
+      </article>
+
+      <article className="panel panel-wide">
+        <div className="panel-heading">
+          <div>
+            <p className="eyebrow">Room Ledger</p>
+            <h2>Chain status by room</h2>
+          </div>
+          <WalletCards size={18} />
+        </div>
+        <RoomsTable rooms={adminSnapshot.rooms} />
+      </article>
+    </section>
+  );
+}
+
+function NotFoundRoute() {
+  return (
+    <section className="empty-state panel">
+      <CircleAlert size={24} />
+      <h2>Page not found</h2>
+      <p>Choose an available dashboard route from the sidebar.</p>
+    </section>
+  );
+}
+
+function RouteContent({ routeId }: { routeId: DashboardRouteId | null }) {
+  switch (routeId) {
+    case "overview":
+      return <OverviewRoute />;
+    case "roles":
+      return <RolesRoute />;
+    case "users":
+      return <UsersRoute />;
+    case "hosts":
+      return <HostsRoute />;
+    case "rooms":
+      return <RoomsRoute />;
+    case "rewards":
+      return <RewardsRoute />;
+    case "chain":
+      return <ChainRoute />;
+    default:
+      return <NotFoundRoute />;
+  }
+}
+
+export function App() {
+  const [activeRoute, setActiveRoute] = useState<DashboardRoute | null>(() =>
+    resolveRoute(window.location.pathname),
+  );
+  const routeHeadingRef = useRef<HTMLHeadingElement>(null);
+  const hasMountedRef = useRef(false);
+
+  useEffect(() => {
+    if (window.location.pathname === "/") {
+      window.history.replaceState({}, "", dashboardRoutes[0].path);
+    }
+
+    const handlePopState = () => {
+      setActiveRoute(resolveRoute(window.location.pathname));
+      window.scrollTo({ top: 0 });
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
+  useEffect(() => {
+    document.title = `${activeRoute?.label ?? "Page not found"} | RDM Hack Admin`;
+
+    if (hasMountedRef.current) {
+      const focusFrame = window.requestAnimationFrame(() => routeHeadingRef.current?.focus());
+      return () => window.cancelAnimationFrame(focusFrame);
+    }
+
+    hasMountedRef.current = true;
+  }, [activeRoute]);
+
+  function handleRouteChange(event: ReactMouseEvent<HTMLAnchorElement>, route: DashboardRoute) {
+    if (
+      event.defaultPrevented ||
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+
+    if (window.location.pathname !== route.path) {
+      window.history.pushState({}, "", route.path);
+      setActiveRoute(route);
+      window.scrollTo({ top: 0 });
+    }
+  }
+
+  return (
+    <div className="app-shell">
+      <aside className="sidebar">
+        <div className="sidebar-brand">
+          <span className="brand-mark">R</span>
+          <span>
+            <strong>RDM Hack</strong>
+            <small>Admin Console</small>
+          </span>
+        </div>
+
+        <nav className="sidebar-nav" aria-label="Admin dashboard routes">
+          <p className="sidebar-label">Workspace</p>
+          {dashboardRoutes.map((route) => {
+            const Icon = route.icon;
+
+            return (
+              <a
+                aria-current={activeRoute?.id === route.id ? "page" : undefined}
+                className={activeRoute?.id === route.id ? "active" : undefined}
+                href={route.path}
+                key={route.id}
+                onClick={(event) => handleRouteChange(event, route)}
+              >
+                <Icon size={17} />
+                <span>
+                  <strong>{route.label}</strong>
+                  <small>{route.detail}</small>
+                </span>
+              </a>
+            );
+          })}
+        </nav>
+
+        <div className="sidebar-footer">
+          <span className="readonly-dot" />
+          <span>
+            <strong>Read-only mode</strong>
+            <small>Production monitoring</small>
+          </span>
+        </div>
+      </aside>
+
+      <main className="admin-shell">
+        <header className="topbar">
+          <div className="route-heading">
+            <p className="eyebrow">Founder Dashboard</p>
+            <h1 ref={routeHeadingRef} tabIndex={-1}>
+              {activeRoute?.label ?? "Page not found"}
+            </h1>
+            <p>
+              {activeRoute?.description ??
+                "This address does not match an available admin dashboard route."}
+            </p>
+          </div>
+          <div className="server-pill">
+            <Radio size={15} />
+            <span>{adminSnapshot.serverUrl || "Server URL missing"}</span>
+          </div>
+        </header>
+
+        <section className="toolbar" aria-label="Dashboard filters">
+          <label>
+            Date range
+            <select defaultValue="7d">
+              <option value="24h">Last 24 hours</option>
+              <option value="7d">Last 7 days</option>
+              <option value="30d">Last 30 days</option>
+            </select>
+          </label>
+          <label>
+            Status
+            <select defaultValue="all">
+              <option value="all">All statuses</option>
+              <option value="confirmed">Confirmed</option>
+              <option value="pending">Pending</option>
+              <option value="failed">Failed</option>
+            </select>
+          </label>
+          <label>
+            Room
+            <select defaultValue="all">
+              <option value="all">All rooms</option>
+              {adminSnapshot.rooms.map((room) => (
+                <option key={room.id} value={room.id}>
+                  {room.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="search-box">
+            Search
+            <span>
+              <Search size={15} />
+              <input placeholder="Room, host, wallet, team" />
+            </span>
+          </label>
+        </section>
+
+        <section className="notice">
+          <Gauge size={18} />
+          <p>
+            Read-only v1 interface. No create, update, delete, or blockchain transaction controls are
+            included. The current build is wired to the server URL and uses demo analytics until a
+            protected read-only analytics endpoint is available.
+          </p>
+        </section>
+
+        <div className="route-content" key={activeRoute?.id ?? "not-found"}>
+          <RouteContent routeId={activeRoute?.id ?? null} />
+        </div>
       </main>
     </div>
   );
