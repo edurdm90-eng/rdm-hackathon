@@ -6,7 +6,7 @@ The current product focus is the native app in `apps/native`.
 
 ## What The App Does
 
-Hack Room supports a complete room-based hackathon loop:
+Hack Room supports  complete room-based hackathon loop:
 
 - Hosts create Hack Rooms and share invite codes.
 - Participants join rooms with invite codes.
