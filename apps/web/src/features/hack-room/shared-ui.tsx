@@ -93,14 +93,21 @@ function QuickActionGrid({
   columns = 4,
 }: {
   actions: Array<{ icon: NativeIconComponent; label: string; meta?: string; onClick: () => void; tone?: Tone }>;
-  columns?: 2 | 4;
+  columns?: 2 | 3 | 4;
 }) {
+  const gridColumns =
+    columns === 2
+      ? "grid-cols-2"
+      : columns === 3
+        ? "grid-cols-3"
+        : "grid-cols-2 sm:grid-cols-4";
+
   return (
     <div className="mb-3">
       <div className="mb-2 font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-[#626058]">
         Quick Actions
       </div>
-      <div className={`grid gap-2 ${columns === 2 ? "grid-cols-2" : "grid-cols-2 sm:grid-cols-4"}`}>
+      <div className={`grid gap-2 ${gridColumns}`}>
         {actions.map((action) => {
           const Icon = action.icon;
           const tone = action.tone ?? "cyan";

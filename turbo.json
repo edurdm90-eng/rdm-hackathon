@@ -9,6 +9,7 @@
         "DATABASE_URL",
         "DATABASE_NAME",
         "CORS_ORIGIN",
+        "ADMIN_ALLOWED_EMAILS",
         "BETTER_AUTH_URL",
         "PRIVY_APP_ID",
         "PRIVY_APP_SECRET",

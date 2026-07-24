@@ -46,8 +46,12 @@ async function exchangePrivySession(
 
     if (!response.ok) {
       let message = response.statusText || "Unable to create a server session from Privy.";
+      let code: string | undefined;
       try {
         const body = await response.json();
+        if (typeof body?.code === "string") {
+          code = body.code;
+        }
         if (typeof body?.message === "string") {
           message = body.message;
         } else if (typeof body?.error === "string") {
@@ -60,6 +64,7 @@ async function exchangePrivySession(
       return {
         data: null,
         error: {
+          code,
           message,
           status: response.status,
           statusText: response.statusText,

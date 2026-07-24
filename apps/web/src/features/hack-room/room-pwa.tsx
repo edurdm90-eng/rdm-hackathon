@@ -7,6 +7,7 @@ import { usePrivyWallet } from "@/components/privy-provider";
 import { NativeIcon } from "@/lib/native-icons";
 import { queryClient, trpc } from "@/utils/trpc";
 
+import { dashboardQueryOptions } from "./dashboard-query";
 import {
   getHackRoomBlockchainErrorMessage,
   makeAwardNftCall,
@@ -71,11 +72,7 @@ export default function HackRoomPwa({
   user: SessionUser;
 }) {
   const navigate = useNavigate();
-  const dashboard = useQuery({
-    ...trpc.hackRoom.dashboard.queryOptions(),
-    refetchInterval: 10_000,
-    refetchIntervalInBackground: false,
-  });
+  const dashboard = useQuery(dashboardQueryOptions());
   const [hostTab, setHostTab] = useState<HostTab>("assign");
   const [participantTab, setParticipantTab] = useState<ParticipantTab>("submit");
   const [activeRoomId, setActiveRoomId] = useState("");

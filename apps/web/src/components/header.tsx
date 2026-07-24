@@ -4,6 +4,7 @@ import { Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 
 import { authClient } from "@/lib/auth-client";
+import { dashboardQueryOptions } from "@/features/hack-room/dashboard-query";
 import { NativeIcon } from "@/lib/native-icons";
 import { queryClient, trpc } from "@/utils/trpc";
 
@@ -17,12 +18,7 @@ export default function Header() {
   );
   const { data: session } = authClient.useSession();
   const user = session?.user;
-  const dashboard = useQuery({
-    ...trpc.hackRoom.dashboard.queryOptions(),
-    enabled: Boolean(user),
-    refetchInterval: 10_000,
-    refetchIntervalInBackground: false,
-  });
+  const dashboard = useQuery(dashboardQueryOptions({ enabled: Boolean(user) }));
   const serverNotifications = dashboard.data?.notifications ?? [];
   const notifications = serverNotifications.filter(
     (notification) => !acknowledgedNotificationIds.has(notification._id),

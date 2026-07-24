@@ -8,8 +8,65 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { usePrivyAuth } from "@/components/privy-provider";
+import { trpcClient } from "@/utils/trpc";
 
-import Loader from "./loader";
+const LOGIN_EMAIL_HINT = "Please use ONLY your registered email";
+const LOGIN_EMAIL_UNAUTHORIZED_MESSAGE = "Your mail-id is unauthorized, contact Admin";
+
+type CheckLoginEmailClient = {
+  auth: {
+    checkLoginEmail: {
+      mutate: (input: { email: string }) => Promise<unknown>;
+      query: (input: { email: string }) => Promise<unknown>;
+    };
+  };
+};
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "";
+}
+
+function isProcedureTypeMismatch(error: unknown) {
+  const message = getErrorMessage(error).toLowerCase();
+
+  return (
+    message.includes('no "query"-procedure on path') ||
+    message.includes('no "mutation"-procedure on path') ||
+    message.includes("no query-procedure on path") ||
+    message.includes("no mutation-procedure on path")
+  );
+}
+
+function resolveLoginCheckErrorMessage(error: unknown) {
+  const message = getErrorMessage(error);
+  const lowerMessage = message.toLowerCase();
+
+  if (
+    !message ||
+    message === LOGIN_EMAIL_UNAUTHORIZED_MESSAGE ||
+    lowerMessage.includes("not a registered email") ||
+    lowerMessage.includes("allowlist") ||
+    lowerMessage.includes("forbidden")
+  ) {
+    return LOGIN_EMAIL_UNAUTHORIZED_MESSAGE;
+  }
+
+  return message;
+}
+
+async function checkLoginEmail(email: string) {
+  const client = trpcClient as unknown as CheckLoginEmailClient;
+
+  try {
+    await client.auth.checkLoginEmail.mutate({ email });
+  } catch (error) {
+    if (!isProcedureTypeMismatch(error)) {
+      throw error;
+    }
+
+    await client.auth.checkLoginEmail.query({ email });
+  }
+}
 
 export default function SignInForm() {
   const navigate = useNavigate({
@@ -19,6 +76,7 @@ export default function SignInForm() {
     authenticated,
     configurationError,
     emailLoginStatus,
+    isLoginRestrictionError,
     isSyncingSession,
     loginWithEmailCode,
     ready,
@@ -27,7 +85,18 @@ export default function SignInForm() {
   } = usePrivyAuth();
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
+  const [formError, setFormError] = useState<string | null>(null);
   const [shouldRedirectAfterOtp, setShouldRedirectAfterOtp] = useState(false);
+  const [isCheckingLoginEmail, setIsCheckingLoginEmail] = useState(false);
+  const isAwaitingOtp =
+    !isLoginRestrictionError &&
+    (emailLoginStatus === "awaiting-code-input" || emailLoginStatus === "error");
+  const shouldShowLoginEmailHint =
+    !isAwaitingOtp &&
+    !configurationError &&
+    !formError &&
+    !isLoginRestrictionError &&
+    !sessionSyncError;
 
   useEffect(() => {
     if (!authenticated || !shouldRedirectAfterOtp) {
@@ -38,14 +107,22 @@ export default function SignInForm() {
       replace: true,
       to: "/dashboard",
     });
-    toast.success("Privy sign in successful");
   }, [authenticated, navigate, shouldRedirectAfterOtp]);
+
+  useEffect(() => {
+    if (!isLoginRestrictionError) {
+      return;
+    }
+
+    setCode("");
+    setShouldRedirectAfterOtp(false);
+  }, [isLoginRestrictionError]);
 
   async function handleSendCode() {
     const trimmedEmail = email.trim().toLowerCase();
 
     if (!trimmedEmail || !trimmedEmail.includes("@")) {
-      toast.error("Please enter a valid email address.");
+      setFormError("Please enter a valid email address.");
       return;
     }
 
@@ -56,9 +133,21 @@ export default function SignInForm() {
 
     setEmail(trimmedEmail);
     setCode("");
+    setFormError(null);
     setShouldRedirectAfterOtp(false);
+
+    setIsCheckingLoginEmail(true);
+    try {
+      await checkLoginEmail(trimmedEmail);
+    } catch (error) {
+      const message = resolveLoginCheckErrorMessage(error);
+      setFormError(message);
+      return;
+    } finally {
+      setIsCheckingLoginEmail(false);
+    }
+
     await sendEmailCode(trimmedEmail);
-    toast.success("OTP sent to your email.");
   }
 
   async function handleVerifyCode() {
@@ -66,21 +155,17 @@ export default function SignInForm() {
     const trimmedCode = code.trim();
 
     if (!trimmedEmail || !trimmedEmail.includes("@")) {
-      toast.error("Please enter a valid email address.");
+      setFormError("Please enter a valid email address.");
       return;
     }
 
-    if (!trimmedCode || trimmedCode.length < 6) {
-      toast.error("Please enter the 6-digit OTP.");
+    if (!trimmedCode || trimmedCode.length < 4 || trimmedCode.length > 12) {
+      toast.error("Enter the code from your email");
       return;
     }
 
     await loginWithEmailCode(trimmedCode);
     setShouldRedirectAfterOtp(true);
-  }
-
-  if (!ready) {
-    return <Loader />;
   }
 
   return (
@@ -101,7 +186,7 @@ export default function SignInForm() {
               className="grid gap-3"
               onSubmit={(event) => {
                 event.preventDefault();
-                if (emailLoginStatus === "awaiting-code-input" || emailLoginStatus === "error") {
+                if (isAwaitingOtp) {
                   void handleVerifyCode();
                   return;
                 }
@@ -111,33 +196,12 @@ export default function SignInForm() {
             >
               {isSyncingSession ? (
                 <div className="rounded-[9px] border border-[#1EEAB0] bg-[#061F18] px-3 py-3 text-sm font-semibold text-[#1EEAB0]">
-                  Finishing sign in...
+                  Creating your Hack Room session...
                 </div>
-              ) : emailLoginStatus === "awaiting-code-input" || emailLoginStatus === "error" ? (
+              ) : !isAwaitingOtp ? (
                 <div className="grid gap-1.5">
                   <Label
-                    className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#626058]"
-                    htmlFor="privy-code"
-                  >
-                    OTP code
-                  </Label>
-                  <Input
-                    autoComplete="one-time-code"
-                    className="h-[42px] rounded-[8px] border border-[rgba(238,232,222,0.12)] bg-[#0D0F12] px-3 py-[9px] text-center text-[16px] tracking-[0.18em] text-[#EEE8DE] outline-none placeholder:text-[#626058] focus-visible:border-[#1EEAB0] focus-visible:ring-1 focus-visible:ring-[#1EEAB0]/40"
-                    id="privy-code"
-                    inputMode="numeric"
-                    maxLength={6}
-                    onChange={(event) => setCode(event.target.value)}
-                    placeholder="000000"
-                    type="text"
-                    value={code}
-                  />
-                  <p className="text-xs leading-5 text-[#8B8A84]">Code sent to {email.trim()}</p>
-                </div>
-              ) : (
-                <div className="grid gap-1.5">
-                  <Label
-                    className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#626058]"
+                    className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#C8BFAF]"
                     htmlFor="privy-email"
                   >
                     Email
@@ -146,16 +210,63 @@ export default function SignInForm() {
                     autoComplete="email"
                     className="h-[42px] rounded-[8px] border border-[rgba(238,232,222,0.12)] bg-[#0D0F12] px-3 py-[9px] text-[13px] text-[#EEE8DE] outline-none placeholder:text-[#626058] focus-visible:border-[#1EEAB0] focus-visible:ring-1 focus-visible:ring-[#1EEAB0]/40"
                     id="privy-email"
-                    onChange={(event) => setEmail(event.target.value)}
+                    onChange={(event) => {
+                      setEmail(event.target.value);
+                      setFormError(null);
+                    }}
                     placeholder="you@example.com"
                     type="email"
                     value={email}
                   />
                 </div>
-              )}
+              ) : null}
+              {isAwaitingOtp ? (
+                <>
+                  <div className="grid gap-1.5">
+                    <Label
+                      className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#C8BFAF]"
+                      htmlFor="privy-email"
+                    >
+                      Email
+                    </Label>
+                    <Input
+                      autoComplete="email"
+                      className="h-[42px] rounded-[8px] border border-[rgba(238,232,222,0.12)] bg-[#0D0F12] px-3 py-[9px] text-[13px] text-[#EEE8DE] opacity-70 outline-none placeholder:text-[#626058]"
+                      disabled
+                      id="privy-email"
+                      type="email"
+                      value={email}
+                    />
+                  </div>
+                  <div className="grid gap-1.5">
+                    <Label
+                      className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#C8BFAF]"
+                      htmlFor="privy-code"
+                    >
+                      Email code
+                    </Label>
+                    <Input
+                      autoComplete="one-time-code"
+                      className="h-[42px] rounded-[8px] border border-[rgba(238,232,222,0.12)] bg-[#0D0F12] px-3 py-[9px] text-center text-[16px] tracking-[0.18em] text-[#EEE8DE] outline-none placeholder:text-[#626058] focus-visible:border-[#1EEAB0] focus-visible:ring-1 focus-visible:ring-[#1EEAB0]/40"
+                      id="privy-code"
+                      inputMode="numeric"
+                      maxLength={12}
+                      onChange={(event) => setCode(event.target.value)}
+                      placeholder="123456"
+                      type="text"
+                      value={code}
+                    />
+                  </div>
+                </>
+              ) : null}
               {configurationError ? (
                 <p className="rounded-[9px] border border-[#904200] bg-[#241000] px-3 py-2 text-xs leading-5 text-[#FF8820]">
                   {configurationError}
+                </p>
+              ) : null}
+              {formError ? (
+                <p className="rounded-[9px] border border-[#7A120A] bg-[#2A0806] px-3 py-2 text-xs leading-5 text-[#FF8A7C]">
+                  {formError}
                 </p>
               ) : null}
               {sessionSyncError ? (
@@ -167,23 +278,34 @@ export default function SignInForm() {
               <Button
                 className="mt-1 h-[42px] w-full rounded-[9px] bg-[#1EEAB0] text-[13px] font-bold text-[#03120C] hover:bg-[#1EEAB0]/85"
                 disabled={
+                  !ready ||
                   isSyncingSession ||
+                  isCheckingLoginEmail ||
                   emailLoginStatus === "sending-code" ||
                   emailLoginStatus === "submitting-code"
                 }
                 type="submit"
               >
                 <LogIn className="size-4" />
-                {isSyncingSession
-                  ? "Finishing..."
-                  : emailLoginStatus === "sending-code"
-                  ? "Sending OTP..."
-                  : emailLoginStatus === "submitting-code"
-                    ? "Verifying..."
-                    : emailLoginStatus === "awaiting-code-input" || emailLoginStatus === "error"
-                      ? "Verify OTP"
-                      : "Send OTP"}
+                {!ready
+                  ? "Preparing secure sign-in..."
+                  : isSyncingSession
+                    ? "Syncing Session"
+                    : isCheckingLoginEmail
+                      ? "Checking..."
+                      : emailLoginStatus === "sending-code"
+                        ? "Sending Email Code..."
+                        : emailLoginStatus === "submitting-code"
+                          ? "Verifying Code..."
+                          : isAwaitingOtp
+                            ? "Verify Code"
+                            : "Send Email Code"}
               </Button>
+              {shouldShowLoginEmailHint ? (
+                <p className="text-center text-xs font-semibold leading-5 text-[#1EEAB0]">
+                  {LOGIN_EMAIL_HINT}
+                </p>
+              ) : null}
             </form>
           </CardContent>
         </Card>

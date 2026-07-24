@@ -100,14 +100,16 @@ function RoomCommandCenter({
           </Button>
         </form>
 
-        <button
-          className="flex min-h-10 items-center justify-center gap-2 rounded-[9px] border border-[#4A1A90] bg-[#160A2A] px-3 text-xs font-extrabold text-[#A060FF] transition hover:bg-[#160A2A]/80"
-          onClick={() => setCreateOpen((open) => !open)}
-          type="button"
-        >
-          <NativeIcon className="size-4" name="add-outline" />
-          {createOpen ? "Hide Create Room" : "Create Hack Room"}
-        </button>
+        {!createRoomBlockMessage ? (
+          <button
+            className="flex min-h-10 items-center justify-center gap-2 rounded-[9px] border border-[#4A1A90] bg-[#160A2A] px-3 text-xs font-extrabold text-[#A060FF] transition hover:bg-[#160A2A]/80"
+            onClick={() => setCreateOpen((open) => !open)}
+            type="button"
+          >
+            <NativeIcon className="size-4" name="add-outline" />
+            {createOpen ? "Hide Create Room" : "Create Hack Room"}
+          </button>
+        ) : null}
 
         {createOpen ? (
           <form

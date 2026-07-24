@@ -10,6 +10,7 @@ import { ObjectId } from "mongodb";
 
 import { client as authDbClient } from "../../db/src/index.js";
 import { env } from "../../env/src/server.js";
+import { isAdminExchangeAllowed } from "./admin-access.js";
 import {
   derivePrivyProfile,
   PRIVY_PROVIDER_ID,
@@ -26,6 +27,7 @@ import { isUserRole, normalizeUserRole, type UserRole } from "./roles.js";
 
 const privyExchangeBodySchema = z.object({
   accessToken: z.string().min(1),
+  audience: z.literal("admin").optional(),
 });
 
 const PRIVY_API_TIMEOUT_MS = 8_000;
@@ -340,8 +342,13 @@ export function privyBridge() {
             profile.email,
             authDbClient,
           );
+          const isAdminExchange = isAdminExchangeAllowed(
+            ctx.body.audience,
+            profile.email,
+            env.ADMIN_ALLOWED_EMAILS,
+          );
 
-          if (!loginRestriction.allowed) {
+          if (!loginRestriction.allowed && !isAdminExchange) {
             ctx.context.logger.info("privy.exchange.email_not_allowlisted", {
               durationMs: Date.now() - exchangeStartedAt,
               email: profile.email,
