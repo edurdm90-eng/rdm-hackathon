@@ -1,0 +1,24 @@
+{
+  "name": "admin",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev --host 0.0.0.0 --port 3002",
+    "build": "vite build",
+    "serve": "vite preview --host 0.0.0.0 --port 3002",
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "lucide-react": "^1.8.0",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "vite": "^8.0.8"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^6.0.1",
+    "@types/react": "^19.2.15",
+    "@types/react-dom": "catalog:",
+    "typescript": "catalog:"
+  }
+}
