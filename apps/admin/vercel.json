@@ -1,7 +1,27 @@
 {
   "rewrites": [
     {
-      "source": "/(.*)",
+      "source": "/api/auth",
+      "destination": "https://rdm-hack-server.vercel.app/api/auth"
+    },
+    {
+      "source": "/api/auth/:path*",
+      "destination": "https://rdm-hack-server.vercel.app/api/auth/:path*"
+    },
+    {
+      "source": "/metadata/:path*",
+      "destination": "https://rdm-hack-server.vercel.app/metadata/:path*"
+    },
+    {
+      "source": "/trpc",
+      "destination": "https://rdm-hack-server.vercel.app/trpc"
+    },
+    {
+      "source": "/trpc/:path*",
+      "destination": "https://rdm-hack-server.vercel.app/trpc/:path*"
+    },
+    {
+      "source": "/((?!assets/|favicon.ico|manifest.webmanifest|robots.txt).*)",
       "destination": "/index.html"
     }
   ]
