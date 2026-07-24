@@ -2,7 +2,7 @@
   "expo": {
     "name": "RDM Hack",
     "slug": "rdm-hack",
-    "version": "1.0.4",
+    "version": "1.0.6",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "rdm-hack",
@@ -50,15 +50,15 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "f9873508-58f9-4aeb-8800-d8b2acc7f78b"
+        "projectId": "d9b9d860-e751-4f8b-aad0-5314effb741b"
       }
     },
-    "owner": "yashdiwan",
+    "owner": "dev_user",
     "runtimeVersion": {
       "policy": "appVersion"
     },
     "updates": {
-      "url": "https://u.expo.dev/f9873508-58f9-4aeb-8800-d8b2acc7f78b"
+      "url": "https://u.expo.dev/d9b9d860-e751-4f8b-aad0-5314effb741b"
     }
   }
 }
