@@ -313,37 +313,6 @@ select {
   gap: 12px;
   min-height: 154px;
   padding: 16px;
-  position: relative;
-  overflow: hidden;
-}
-
-.kpi-card::before {
-  content: "";
-  height: 3px;
-  left: 0;
-  position: absolute;
-  right: 0;
-  top: 0;
-}
-
-.tone-blue::before {
-  background: #46a5ff;
-}
-
-.tone-green::before {
-  background: #28d886;
-}
-
-.tone-amber::before {
-  background: #ffbd4f;
-}
-
-.tone-red::before {
-  background: #ff5f6d;
-}
-
-.tone-violet::before {
-  background: #9b7bff;
 }
 
 .kpi-card strong {
