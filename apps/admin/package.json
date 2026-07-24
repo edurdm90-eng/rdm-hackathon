@@ -10,6 +10,10 @@
     "check-types": "tsc --noEmit"
   },
   "dependencies": {
+    "@privy-io/react-auth": "catalog:",
+    "@rdm-hack/api": "workspace:*",
+    "@trpc/client": "catalog:",
+    "buffer": "^6.0.3",
     "lucide-react": "^1.8.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",

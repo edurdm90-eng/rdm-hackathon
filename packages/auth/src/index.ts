@@ -1,6 +1,7 @@
 import { expo } from "@better-auth/expo";
 import { betterAuth } from "better-auth";
 import { mongodbAdapter } from "better-auth/adapters/mongodb";
+import { bearer } from "better-auth/plugins";
 
 import { client } from "../../db/src/index.js";
 import { env } from "../../env/src/server.js";
@@ -59,7 +60,7 @@ export function createAuth() {
         httpOnly: true,
       },
     },
-    plugins: [expo(), privyBridge()],
+    plugins: [expo(), bearer(), privyBridge()],
   });
 }
 

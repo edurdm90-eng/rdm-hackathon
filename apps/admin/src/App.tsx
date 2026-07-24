@@ -9,8 +9,10 @@ import {
   Coins,
   Gauge,
   LayoutDashboard,
+  LogOut,
   Medal,
   Radio,
+  RefreshCw,
   Search,
   ShieldCheck,
   UserRound,
@@ -18,11 +20,18 @@ import {
   Users,
   WalletCards,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 
 import {
-  adminSnapshot,
+  type AdminSnapshot,
   type Activity as ActivityItem,
   type HealthItem,
   type Kpi,
@@ -33,6 +42,18 @@ import {
   type Status,
   type UserInsight,
 } from "./data";
+
+const AdminSnapshotContext = createContext<AdminSnapshot | null>(null);
+
+function useAdminSnapshot() {
+  const snapshot = useContext(AdminSnapshotContext);
+
+  if (!snapshot) {
+    throw new Error("Admin dashboard data is unavailable.");
+  }
+
+  return snapshot;
+}
 
 const statusLabels: Record<Status, string> = {
   confirmed: "Confirmed",
@@ -55,6 +76,43 @@ function statusClass(status: Status) {
   return `status status-${status}`;
 }
 
+function formatDate(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? value
+    : new Intl.DateTimeFormat("en-US", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      }).format(date);
+}
+
+function formatRelativeTime(value: string) {
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) {
+    return value;
+  }
+
+  const elapsedSeconds = Math.round((timestamp - Date.now()) / 1_000);
+  const relativeTime = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
+
+  if (Math.abs(elapsedSeconds) < 60) {
+    return relativeTime.format(elapsedSeconds, "second");
+  }
+
+  const elapsedMinutes = Math.round(elapsedSeconds / 60);
+  if (Math.abs(elapsedMinutes) < 60) {
+    return relativeTime.format(elapsedMinutes, "minute");
+  }
+
+  const elapsedHours = Math.round(elapsedMinutes / 60);
+  if (Math.abs(elapsedHours) < 24) {
+    return relativeTime.format(elapsedHours, "hour");
+  }
+
+  return relativeTime.format(Math.round(elapsedHours / 24), "day");
+}
+
 function KpiCard({ kpi }: { kpi: Kpi }) {
   return (
     <article className={`kpi-card tone-${kpi.tone}`}>
@@ -69,7 +127,10 @@ function KpiCard({ kpi }: { kpi: Kpi }) {
 }
 
 function MovementChart({ points }: { points: MovementPoint[] }) {
-  const maxValue = Math.max(...points.flatMap((point) => [point.users, point.joins, point.submissions]));
+  const maxValue = Math.max(
+    1,
+    ...points.flatMap((point) => [point.users, point.joins, point.submissions]),
+  );
 
   return (
     <div className="chart-grid" aria-label="User movement by day">
@@ -100,7 +161,11 @@ function MovementChart({ points }: { points: MovementPoint[] }) {
 }
 
 function RankedList({ items }: { items: RankedItem[] }) {
-  const maxValue = Math.max(...items.map((item) => item.value));
+  if (items.length === 0) {
+    return <p className="empty-copy">No ranked activity is available for this period.</p>;
+  }
+
+  const maxValue = Math.max(1, ...items.map((item) => item.value));
 
   return (
     <div className="rank-list">
@@ -121,6 +186,10 @@ function RankedList({ items }: { items: RankedItem[] }) {
 }
 
 function ActivityFeed({ items }: { items: ActivityItem[] }) {
+  if (items.length === 0) {
+    return <p className="empty-copy">No recent platform activity.</p>;
+  }
+
   return (
     <div className="activity-list">
       {items.map((item) => {
@@ -138,7 +207,7 @@ function ActivityFeed({ items }: { items: ActivityItem[] }) {
               </div>
               <p>{item.detail}</p>
             </div>
-            <time>{item.time}</time>
+            <time dateTime={item.time}>{formatRelativeTime(item.time)}</time>
           </article>
         );
       })}
@@ -163,22 +232,32 @@ function RoomsTable({ rooms }: { rooms: RoomRow[] }) {
           </tr>
         </thead>
         <tbody>
-          {rooms.map((room) => (
-            <tr key={room.id}>
-              <td>
-                <strong>{room.name}</strong>
-              </td>
-              <td>{room.hostEmail}</td>
-              <td>{room.participants}</td>
-              <td>{room.assignments}</td>
-              <td>{room.submissions}</td>
-              <td>{room.rewardsIssued}</td>
-              <td>{room.createdDate}</td>
-              <td>
-                <span className={statusClass(room.onchainStatus)}>{statusLabels[room.onchainStatus]}</span>
+          {rooms.length === 0 ? (
+            <tr>
+              <td className="table-empty" colSpan={8}>
+                No rooms match the current view.
               </td>
             </tr>
-          ))}
+          ) : (
+            rooms.map((room) => (
+              <tr key={room.id}>
+                <td>
+                  <strong>{room.name}</strong>
+                </td>
+                <td>{room.hostEmail}</td>
+                <td>{room.participants}</td>
+                <td>{room.assignments}</td>
+                <td>{room.submissions}</td>
+                <td>{room.rewardsIssued}</td>
+                <td>{formatDate(room.createdDate)}</td>
+                <td>
+                  <span className={statusClass(room.onchainStatus)}>
+                    {statusLabels[room.onchainStatus]}
+                  </span>
+                </td>
+              </tr>
+            ))
+          )}
         </tbody>
       </table>
     </div>
@@ -202,20 +281,28 @@ function SegmentTable({ label, segments }: { label: string; segments: SegmentMet
           </tr>
         </thead>
         <tbody>
-          {segments.map((segment) => (
-            <tr key={segment.segment}>
-              <td>
-                <strong>{segment.segment}</strong>
+          {segments.length === 0 ? (
+            <tr>
+              <td className="table-empty" colSpan={8}>
+                No grouped statistics are available.
               </td>
-              <td>{segment.users.toLocaleString()}</td>
-              <td>{segment.rooms.toLocaleString()}</td>
-              <td>{segment.joins.toLocaleString()}</td>
-              <td>{segment.submissions.toLocaleString()}</td>
-              <td>{segment.approvals.toLocaleString()}</td>
-              <td>{segment.winners.toLocaleString()}</td>
-              <td>{segment.xrdm.toLocaleString()}</td>
             </tr>
-          ))}
+          ) : (
+            segments.map((segment) => (
+              <tr key={segment.segment}>
+                <td>
+                  <strong>{segment.segment}</strong>
+                </td>
+                <td>{segment.users.toLocaleString()}</td>
+                <td>{segment.rooms.toLocaleString()}</td>
+                <td>{segment.joins.toLocaleString()}</td>
+                <td>{segment.submissions.toLocaleString()}</td>
+                <td>{segment.approvals.toLocaleString()}</td>
+                <td>{segment.winners.toLocaleString()}</td>
+                <td>{segment.xrdm.toLocaleString()}</td>
+              </tr>
+            ))
+          )}
         </tbody>
       </table>
     </div>
@@ -240,24 +327,32 @@ function UsersTable({ users }: { users: UserInsight[] }) {
           </tr>
         </thead>
         <tbody>
-          {users.map((user) => (
-            <tr key={user.id}>
-              <td>
-                <strong>{user.name}</strong>
-                <span className="muted-cell">{user.email}</span>
+          {users.length === 0 ? (
+            <tr>
+              <td className="table-empty" colSpan={9}>
+                No users match the current view.
               </td>
-              <td>
-                <span className={`role-chip role-${user.role}`}>{user.role}</span>
-              </td>
-              <td>{user.roomsHosted}</td>
-              <td>{user.roomsJoined}</td>
-              <td>{user.submissions}</td>
-              <td>{user.approvals}</td>
-              <td>{user.rewards}</td>
-              <td>{user.xrdm.toLocaleString()}</td>
-              <td>{user.lastSignal}</td>
             </tr>
-          ))}
+          ) : (
+            users.map((user) => (
+              <tr key={user.id}>
+                <td>
+                  <strong>{user.name}</strong>
+                  <span className="muted-cell">{user.email}</span>
+                </td>
+                <td>
+                  <span className={`role-chip role-${user.role}`}>{user.role}</span>
+                </td>
+                <td>{user.roomsHosted}</td>
+                <td>{user.roomsJoined}</td>
+                <td>{user.submissions}</td>
+                <td>{user.approvals}</td>
+                <td>{user.rewards}</td>
+                <td>{user.xrdm.toLocaleString()}</td>
+                <td>{formatRelativeTime(user.lastSignal)}</td>
+              </tr>
+            ))
+          )}
         </tbody>
       </table>
     </div>
@@ -265,6 +360,10 @@ function UsersTable({ users }: { users: UserInsight[] }) {
 }
 
 function HealthPanel({ items }: { items: HealthItem[] }) {
+  if (items.length === 0) {
+    return <p className="empty-copy">No reward or chain health records are available.</p>;
+  }
+
   return (
     <div className="health-grid">
       {items.map((item) => (
@@ -338,6 +437,14 @@ const dashboardRoutes = [
     description: "Review confirmed, pending, and failed blockchain events by room.",
     icon: WalletCards,
   },
+  {
+    id: "operations",
+    path: "/operations",
+    label: "Operations",
+    detail: "Risk and mismatch signals",
+    description: "Review pending confirmations, failed events, and ledger mismatches.",
+    icon: CircleAlert,
+  },
 ] as const;
 
 type DashboardRoute = (typeof dashboardRoutes)[number];
@@ -351,6 +458,8 @@ function resolveRoute(pathname: string): DashboardRoute | null {
 }
 
 function OverviewRoute() {
+  const adminSnapshot = useAdminSnapshot();
+
   return (
     <>
       <section className="kpi-grid" aria-label="Top KPIs">
@@ -411,13 +520,19 @@ function OverviewRoute() {
 }
 
 function RolesRoute() {
+  const adminSnapshot = useAdminSnapshot();
+
   return (
     <section className="dashboard-grid">
       <article className="panel panel-wide">
         <div className="panel-heading">
           <div>
             <p className="eyebrow">Role Analysis</p>
-            <h2>Stats by role</h2>
+            <h2>Actions and outcomes by role</h2>
+            <p className="panel-copy">
+              Events use each person&apos;s current role. Approvals use the room
+              host&apos;s role; winner outcomes and XRDM use the recipient&apos;s role.
+            </p>
           </div>
         </div>
         <SegmentTable label="Role" segments={adminSnapshot.roleSegments} />
@@ -427,6 +542,8 @@ function RolesRoute() {
 }
 
 function UsersRoute() {
+  const adminSnapshot = useAdminSnapshot();
+
   return (
     <section className="dashboard-grid">
       <article className="panel panel-wide">
@@ -443,6 +560,8 @@ function UsersRoute() {
 }
 
 function HostsRoute() {
+  const adminSnapshot = useAdminSnapshot();
+
   return (
     <section className="dashboard-grid">
       <article className="panel">
@@ -469,6 +588,8 @@ function HostsRoute() {
 }
 
 function RoomsRoute() {
+  const adminSnapshot = useAdminSnapshot();
+
   return (
     <section className="dashboard-grid">
       <article className="panel">
@@ -505,6 +626,8 @@ function RoomsRoute() {
 }
 
 function RewardsRoute() {
+  const adminSnapshot = useAdminSnapshot();
+
   return (
     <section className="dashboard-grid">
       <article className="panel panel-wide">
@@ -522,6 +645,7 @@ function RewardsRoute() {
 }
 
 function ChainRoute() {
+  const adminSnapshot = useAdminSnapshot();
   const chainHealthItems = adminSnapshot.rewardHealth.filter((item) =>
     ["Confirmed XRDM", "Pending Chain Events", "Failed Chain Events"].includes(item.label),
   );
@@ -553,6 +677,36 @@ function ChainRoute() {
   );
 }
 
+function OperationsRoute() {
+  const adminSnapshot = useAdminSnapshot();
+
+  return (
+    <section className="dashboard-grid">
+      <article className="panel panel-wide">
+        <div className="panel-heading">
+          <div>
+            <p className="eyebrow">Operations and Risk</p>
+            <h2>Confirmation and ledger signals</h2>
+          </div>
+          <CircleAlert size={18} />
+        </div>
+        <HealthPanel items={adminSnapshot.opsHealth} />
+      </article>
+
+      <article className="panel panel-wide ops-note">
+        <ShieldCheck size={19} />
+        <div>
+          <strong>Authentication audit coverage</strong>
+          <p>
+            Failed logins and unauthorized email attempts are not persisted by the
+            current server, so this dashboard does not invent counts for them.
+          </p>
+        </div>
+      </article>
+    </section>
+  );
+}
+
 function NotFoundRoute() {
   return (
     <section className="empty-state panel">
@@ -579,17 +733,129 @@ function RouteContent({ routeId }: { routeId: DashboardRouteId | null }) {
       return <RewardsRoute />;
     case "chain":
       return <ChainRoute />;
+    case "operations":
+      return <OperationsRoute />;
     default:
       return <NotFoundRoute />;
   }
 }
 
-export function App() {
+type DashboardAppProps = {
+  adminUser: {
+    email: string;
+    name: string;
+  };
+  isRefreshing: boolean;
+  onRefresh: () => void;
+  onSignOut: () => void;
+  snapshot: AdminSnapshot;
+};
+
+export function DashboardApp({
+  adminUser,
+  isRefreshing,
+  onRefresh,
+  onSignOut,
+  snapshot: adminSnapshot,
+}: DashboardAppProps) {
+  const [dateRange, setDateRange] = useState<"today" | "7d">("7d");
+  const [statusFilter, setStatusFilter] = useState<"all" | Status>("all");
+  const [roomFilter, setRoomFilter] = useState("all");
+  const [hostFilter, setHostFilter] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
   const [activeRoute, setActiveRoute] = useState<DashboardRoute | null>(() =>
     resolveRoute(window.location.pathname),
   );
   const routeHeadingRef = useRef<HTMLHeadingElement>(null);
   const hasMountedRef = useRef(false);
+  const filteredSnapshot = useMemo<AdminSnapshot>(() => {
+    const normalizedSearch = searchQuery.trim().toLowerCase();
+    const selectedRoom = adminSnapshot.rooms.find((room) => room.id === roomFilter);
+    const selectedHostRoomNames = new Set(
+      adminSnapshot.rooms
+        .filter((room) => hostFilter === "all" || room.hostEmail === hostFilter)
+        .map((room) => room.name),
+    );
+    const activityCutoff = new Date();
+    activityCutoff.setUTCHours(0, 0, 0, 0);
+    if (dateRange === "7d") {
+      activityCutoff.setUTCDate(activityCutoff.getUTCDate() - 6);
+    }
+    const matchesSearch = (...values: string[]) =>
+      !normalizedSearch ||
+      values.some((value) => value.toLowerCase().includes(normalizedSearch));
+    const matchesSelectedRoom = (roomName: string) =>
+      !selectedRoom || roomName === selectedRoom.name;
+    const matchesSelectedHost = (roomName: string) =>
+      hostFilter === "all" || selectedHostRoomNames.has(roomName);
+    const matchesActivityScope = (detail: string) =>
+      (!selectedRoom || detail.includes(selectedRoom.name)) &&
+      (hostFilter === "all" ||
+        [...selectedHostRoomNames].some((roomName) => detail.includes(roomName)));
+
+    return {
+      ...adminSnapshot,
+      movement: dateRange === "today" ? adminSnapshot.movement.slice(-1) : adminSnapshot.movement,
+      activity: adminSnapshot.activity.filter(
+        (item) =>
+          Date.parse(item.time) >= activityCutoff.getTime() &&
+          (statusFilter === "all" || item.status === statusFilter) &&
+          matchesActivityScope(item.detail) &&
+          matchesSearch(item.title, item.detail),
+      ),
+      rooms: adminSnapshot.rooms.filter(
+        (room) =>
+          (roomFilter === "all" || room.id === roomFilter) &&
+          (hostFilter === "all" || room.hostEmail === hostFilter) &&
+          (statusFilter === "all" || room.onchainStatus === statusFilter) &&
+          matchesSearch(room.name, room.hostEmail),
+      ),
+      roomSegments: adminSnapshot.roomSegments.filter(
+        (room) =>
+          matchesSelectedRoom(room.segment) &&
+          matchesSelectedHost(room.segment) &&
+          matchesSearch(room.segment),
+      ),
+      activeRooms: adminSnapshot.activeRooms.filter(
+        (room) =>
+          matchesSelectedRoom(room.label) &&
+          matchesSelectedHost(room.label) &&
+          matchesSearch(room.label, room.meta),
+      ),
+      hostSegments: adminSnapshot.hostSegments.filter(
+        (host) =>
+          (hostFilter === "all" || host.segment === hostFilter) &&
+          matchesSearch(host.segment),
+      ),
+      activeHosts: adminSnapshot.activeHosts.filter(
+        (host) =>
+          (hostFilter === "all" || host.label === hostFilter) &&
+          matchesSearch(host.label, host.meta),
+      ),
+      userInsights: adminSnapshot.userInsights.filter(
+        (user) =>
+          (hostFilter === "all" || user.email === hostFilter) &&
+          matchesSearch(user.name, user.email, user.role),
+      ),
+      rewardHealth: adminSnapshot.rewardHealth.filter(
+        (item) => statusFilter === "all" || item.status === statusFilter,
+      ),
+      opsHealth: adminSnapshot.opsHealth.filter(
+        (item) => statusFilter === "all" || item.status === statusFilter,
+      ),
+    };
+  }, [
+    adminSnapshot,
+    dateRange,
+    hostFilter,
+    roomFilter,
+    searchQuery,
+    statusFilter,
+  ]);
+  const hostOptions = useMemo(
+    () => [...new Set(adminSnapshot.rooms.map((room) => room.hostEmail))].sort(),
+    [adminSnapshot.rooms],
+  );
 
   useEffect(() => {
     if (window.location.pathname === "/") {
@@ -638,8 +904,9 @@ export function App() {
   }
 
   return (
-    <div className="app-shell">
-      <aside className="sidebar">
+    <AdminSnapshotContext.Provider value={filteredSnapshot}>
+      <div className="app-shell">
+        <aside className="sidebar">
         <div className="sidebar-brand">
           <span className="brand-mark">R</span>
           <span>
@@ -671,16 +938,26 @@ export function App() {
           })}
         </nav>
 
-        <div className="sidebar-footer">
-          <span className="readonly-dot" />
-          <span>
-            <strong>Read-only mode</strong>
-            <small>Production monitoring</small>
-          </span>
-        </div>
-      </aside>
+          <div className="sidebar-footer">
+            <span className="readonly-dot" />
+            <span>
+              <strong>Read-only mode</strong>
+              <small>Production monitoring</small>
+            </span>
+          </div>
 
-      <main className="admin-shell">
+          <div className="sidebar-account">
+            <div>
+              <strong>{adminUser.name}</strong>
+              <small>{adminUser.email}</small>
+            </div>
+            <button onClick={onSignOut} title="Sign out" type="button">
+              <LogOut size={16} />
+            </button>
+          </div>
+        </aside>
+
+        <main className="admin-shell">
         <header className="topbar">
           <div className="route-heading">
             <p className="eyebrow">Founder Dashboard</p>
@@ -692,24 +969,42 @@ export function App() {
                 "This address does not match an available admin dashboard route."}
             </p>
           </div>
-          <div className="server-pill">
-            <Radio size={15} />
-            <span>{adminSnapshot.serverUrl || "Server URL missing"}</span>
+          <div className="topbar-actions">
+            <button
+              className="refresh-button"
+              disabled={isRefreshing}
+              onClick={onRefresh}
+              title="Refresh dashboard data"
+              type="button"
+            >
+              <RefreshCw className={isRefreshing ? "spinning" : undefined} size={16} />
+            </button>
+            <div className="server-pill">
+              <Radio size={15} />
+              <span>Live data</span>
+            </div>
           </div>
         </header>
 
         <section className="toolbar" aria-label="Dashboard filters">
           <label>
-            Date range
-            <select defaultValue="7d">
-              <option value="24h">Last 24 hours</option>
+            Activity range
+            <select
+              onChange={(event) => setDateRange(event.target.value as "today" | "7d")}
+              value={dateRange}
+            >
+              <option value="today">Today (UTC)</option>
               <option value="7d">Last 7 days</option>
-              <option value="30d">Last 30 days</option>
             </select>
           </label>
           <label>
             Status
-            <select defaultValue="all">
+            <select
+              onChange={(event) =>
+                setStatusFilter(event.target.value as "all" | Status)
+              }
+              value={statusFilter}
+            >
               <option value="all">All statuses</option>
               <option value="confirmed">Confirmed</option>
               <option value="pending">Pending</option>
@@ -718,7 +1013,10 @@ export function App() {
           </label>
           <label>
             Room
-            <select defaultValue="all">
+            <select
+              onChange={(event) => setRoomFilter(event.target.value)}
+              value={roomFilter}
+            >
               <option value="all">All rooms</option>
               {adminSnapshot.rooms.map((room) => (
                 <option key={room.id} value={room.id}>
@@ -727,11 +1025,29 @@ export function App() {
               ))}
             </select>
           </label>
+          <label>
+            Host
+            <select
+              onChange={(event) => setHostFilter(event.target.value)}
+              value={hostFilter}
+            >
+              <option value="all">All hosts</option>
+              {hostOptions.map((host) => (
+                <option key={host} value={host}>
+                  {host}
+                </option>
+              ))}
+            </select>
+          </label>
           <label className="search-box">
             Search
             <span>
               <Search size={15} />
-              <input placeholder="Room, host, wallet, team" />
+              <input
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Room, host, email, role"
+                value={searchQuery}
+              />
             </span>
           </label>
         </section>
@@ -739,16 +1055,16 @@ export function App() {
         <section className="notice">
           <Gauge size={18} />
           <p>
-            Read-only v1 interface. No create, update, delete, or blockchain transaction controls are
-            included. The current build is wired to the server URL and uses demo analytics until a
-            protected read-only analytics endpoint is available.
+            Authorized read-only monitoring. Data refreshes from the production analytics endpoint;
+            no create, update, delete, or blockchain transaction controls are available.
           </p>
         </section>
 
         <div className="route-content" key={activeRoute?.id ?? "not-found"}>
           <RouteContent routeId={activeRoute?.id ?? null} />
         </div>
-      </main>
-    </div>
+        </main>
+      </div>
+    </AdminSnapshotContext.Provider>
   );
 }

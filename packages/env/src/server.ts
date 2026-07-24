@@ -38,6 +38,17 @@ function normalizeOriginList(value: string) {
     .filter(Boolean);
 }
 
+function normalizeEmailList(value: string) {
+  return [
+    ...new Set(
+      value
+        .split(",")
+        .map((email) => email.trim().toLowerCase())
+        .filter(Boolean),
+    ),
+  ];
+}
+
 export const env = createEnv({
   clientPrefix: "",
   client: {},
@@ -47,6 +58,11 @@ export const env = createEnv({
     BETTER_AUTH_SECRET: z.string().min(32),
     BETTER_AUTH_URL: z.url(),
     CORS_ORIGIN: z.string().min(1).transform(normalizeOriginList),
+    ADMIN_ALLOWED_EMAILS: z
+      .string()
+      .default("")
+      .transform(normalizeEmailList)
+      .pipe(z.array(z.email())),
     NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
     PRIVY_APP_ID: z.string().min(1),
     PRIVY_APP_SECRET: z.string().min(1),
