@@ -1,6 +1,7 @@
 import { Button } from "@rdm-hack/ui/components/button";
 import { Input } from "@rdm-hack/ui/components/input";
 import type * as React from "react";
+import * as XLSX from "xlsx";
 
 import { NativeIcon } from "@/lib/native-icons";
 
@@ -92,8 +93,9 @@ function RewardsPanel({
               />
             ))}
           </div>
-          {rewardForm.kind === "participant_certificate" && room ? (
+          {room ? (
             <RecipientSelector
+              emailOnly={rewardForm.kind !== "participant_certificate"}
               onRewardFormChange={onRewardFormChange}
               rewardForm={rewardForm}
               room={room}
@@ -292,6 +294,15 @@ function ReviewCard({
   submission: HackSubmission;
   trailing?: React.ReactNode;
 }) {
+  const proofItems = getSubmissionProofItems(submission);
+  const proofValues = new Set(proofItems.map((proofItem) => proofItem.value.trim()));
+  const submissionDescription = submission.submissionDescription?.trim();
+  const submissionNotes = submission.notes?.trim();
+  const hasVisibleDescription = Boolean(submissionDescription && !proofValues.has(submissionDescription));
+  const hasVisibleNotes = Boolean(
+    submissionNotes && !proofValues.has(submissionNotes) && submissionNotes !== submissionDescription,
+  );
+
   return (
     <article className="rounded-[10px] border border-[rgba(238,232,222,0.12)] bg-[#0D0F12] p-3">
       <div className="mb-2 flex items-start justify-between gap-3">
@@ -308,14 +319,16 @@ function ReviewCard({
         </div>
         <Badge tone={statusTone(submission.status)}>{submissionStatusLabel(submission.status)}</Badge>
       </div>
-      <ProofItemsList proofItems={getSubmissionProofItems(submission)} />
-      {submission.submissionDescription ? (
-        <p className="mt-2 text-xs leading-[18px] text-[#9C9690]">{submission.submissionDescription}</p>
+      <ProofItemsList proofItems={proofItems} />
+      {hasVisibleDescription ? (
+        <p className="mt-2 text-xs leading-[18px] text-[#9C9690]">{submissionDescription}</p>
       ) : null}
-      {submission.notes ? <p className="mt-2 text-xs leading-[18px] text-[#626058]">{submission.notes}</p> : null}
-      <Field label="Host Feedback">
-        <TextArea onChange={onFeedbackChange} value={feedback} />
-      </Field>
+      {hasVisibleNotes ? <p className="mt-2 text-xs leading-[18px] text-[#626058]">{submissionNotes}</p> : null}
+      <div className="mt-3">
+        <Field label="Host Feedback">
+          <TextArea onChange={onFeedbackChange} value={feedback} />
+        </Field>
+      </div>
       {trailing ? <div className="mt-3">{trailing}</div> : null}
     </article>
   );
@@ -537,6 +550,77 @@ function CreatedTasks({ tasks }: { tasks: HackTask[] }) {
   );
 }
 
+function downloadVerifiedAssignments(submissions: HackSubmission[]) {
+  const verifiedSubmissions = submissions.filter((submission) =>
+    ["approved", "winner"].includes(submission.status),
+  );
+
+  if (!verifiedSubmissions.length) {
+    return;
+  }
+
+  const headers = [
+    "Room",
+    "Assignment",
+    "Assignment Type",
+    "Status",
+    "Participant Name",
+    "Participant Email",
+    "Team Name",
+    "Team Mate Emails",
+    "Submitted At",
+    "Reviewed At",
+    "XRDM",
+    "Proof URL",
+    "Proof Items",
+    "Submission Description",
+    "Notes",
+    "Host Feedback",
+  ];
+  const rows = verifiedSubmissions.map((submission) => {
+    const proofItems = getSubmissionProofItems(submission)
+      .map((item) => `${proofTypeLabel(item.type)}: ${item.value}`)
+      .join("\n");
+
+    return [
+      submission.roomName,
+      submission.taskTitle,
+      kindLabel(submission.taskKind ?? "task"),
+      submissionStatusLabel(submission.status),
+      submission.participantName,
+      submission.participantEmail,
+      submission.teamName ?? "",
+      (submission.teamMateEmails ?? []).join(", "),
+      formatDate(submission.submittedAt),
+      submission.reviewedAt ? formatDate(submission.reviewedAt) : "",
+      getSubmissionLedgerXrdm(submission),
+      submission.proofUrl,
+      proofItems,
+      submission.submissionDescription ?? "",
+      submission.notes,
+      submission.hostFeedback ?? "",
+    ];
+  });
+  const dateStamp = new Date().toISOString().slice(0, 10);
+
+  const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+  worksheet["!cols"] = headers.map((header, index) => ({
+    wch: Math.min(
+      48,
+      Math.max(
+        header.length + 2,
+        ...rows.map((row) => String(row[index] ?? "").split("\n").reduce((longest, line) => Math.max(longest, line.length), 0) + 2),
+      ),
+    ),
+  }));
+
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Verified Assignments");
+  XLSX.writeFile(workbook, `verified-assignments-${dateStamp}.xlsx`, {
+    compression: true,
+  });
+}
+
 function SubmissionList({
   emptyText,
   submissions,
@@ -548,9 +632,26 @@ function SubmissionList({
   title: string;
   tone: Tone;
 }) {
+  const verifiedSubmissions = submissions.filter((submission) =>
+    ["approved", "winner"].includes(submission.status),
+  );
+
   return (
     <SectionCard badge={`${submissions.length} records`} eyebrow={title} title="History" tone={tone}>
       <div className="grid gap-2">
+        {verifiedSubmissions.length ? (
+          <div className="flex justify-end">
+            <Button
+              className="h-9 rounded-[9px] border-[#F0C040] bg-[#241A00] px-3 text-xs font-semibold text-[#F0C040] hover:bg-[#241A00]/80"
+              onClick={() => downloadVerifiedAssignments(submissions)}
+              type="button"
+              variant="outline"
+            >
+              <NativeIcon className="size-4" name="download-outline" />
+              Download Excel
+            </Button>
+          </div>
+        ) : null}
         {submissions.length ? (
           submissions.map((submission) => <SubmissionCard key={submission._id} submission={submission} />)
         ) : (
@@ -586,21 +687,28 @@ function MemberList({ room }: { room: HackRoom }) {
 }
 
 function RecipientSelector({
+  emailOnly = false,
   onRewardFormChange,
   rewardForm,
   room,
 }: {
+  emailOnly?: boolean;
   onRewardFormChange: React.Dispatch<React.SetStateAction<ReturnType<typeof makeEmptyRewardForm>>>;
   rewardForm: ReturnType<typeof makeEmptyRewardForm>;
   room: HackRoom;
 }) {
-  const individualMode = rewardForm.recipientMode === "individual";
+  const individualMode = emailOnly || rewardForm.recipientMode === "individual";
   const participantsByEmail = new Map(
     room.participants.map((participant) => [participant.email.trim().toLowerCase(), participant]),
   );
   const selectedRecipients = rewardForm.recipientIds
     .map((recipientId) => room.participants.find((participant) => participant.userId === recipientId))
     .filter((participant): participant is HackRoom["participants"][number] => Boolean(participant));
+  const draftTokens = getEmailTokens(rewardForm.recipientEmailDraft ?? "");
+  const invalidDraftEmail = draftTokens.find((email) => !isEmailLike(email));
+  const missingDraftEmail = normalizeEmails(draftTokens.filter(isEmailLike)).find(
+    (email) => !participantsByEmail.has(email),
+  );
 
   function addDraftEmails() {
     onRewardFormChange((current) => {
@@ -610,13 +718,17 @@ function RecipientSelector({
       }
 
       const validEmails = normalizeEmails(tokens.filter(isEmailLike));
+      const missingEmails = validEmails.filter((email) => !participantsByEmail.has(email));
       const matchingParticipants = validEmails
         .map((email) => participantsByEmail.get(email))
         .filter((participant): participant is HackRoom["participants"][number] => Boolean(participant));
 
       return {
         ...current,
-        recipientEmailDraft: "",
+        recipientEmailDraft: [
+          ...tokens.filter((email) => !isEmailLike(email)),
+          ...missingEmails,
+        ].join(", "),
         recipientEmails: [
           ...new Set([
             ...(current.recipientEmails ?? []),
@@ -637,32 +749,34 @@ function RecipientSelector({
   return (
     <Field label="Recipients">
       <div className="grid gap-2">
-        <div className="grid grid-cols-2 gap-2">
-        <ChipButton
-          active={!individualMode}
-          label="All Participants"
-          onClick={() =>
-            onRewardFormChange((current) => ({
-              ...current,
-              recipientEmailDraft: "",
-              recipientEmails: [],
-              recipientIds: [],
-              recipientMode: "all",
-            }))
-          }
-        />
-        <ChipButton
-          active={individualMode}
-          label="Individual"
-          onClick={() =>
-            onRewardFormChange((current) => ({
-              ...current,
-              recipientMode: "individual",
-              recipientIds: current.recipientIds,
-            }))
-          }
-        />
-        </div>
+        {!emailOnly ? (
+          <div className="grid grid-cols-2 gap-2">
+            <ChipButton
+              active={!individualMode}
+              label="All Participants"
+              onClick={() =>
+                onRewardFormChange((current) => ({
+                  ...current,
+                  recipientEmailDraft: "",
+                  recipientEmails: [],
+                  recipientIds: [],
+                  recipientMode: "all",
+                }))
+              }
+            />
+            <ChipButton
+              active={individualMode}
+              label="Individual"
+              onClick={() =>
+                onRewardFormChange((current) => ({
+                  ...current,
+                  recipientMode: "individual",
+                  recipientIds: current.recipientIds,
+                }))
+              }
+            />
+          </div>
+        ) : null}
 
         {individualMode ? (
           <div className="grid gap-2 rounded-[9px] border border-[rgba(238,232,222,0.12)] bg-[#0D0F12] p-2">
@@ -692,6 +806,15 @@ function RecipientSelector({
                 Add
               </Button>
             </div>
+            {invalidDraftEmail ? (
+              <span className="text-[11px] font-medium text-[#FF7A7A]">
+                Enter a valid participant email: {invalidDraftEmail}
+              </span>
+            ) : missingDraftEmail ? (
+              <span className="text-[11px] font-medium text-[#FFB020]">
+                {missingDraftEmail} has not joined this room yet.
+              </span>
+            ) : null}
             <div className="flex flex-wrap gap-2">
               {selectedRecipients.length ? (
                 selectedRecipients.map((participant) => (

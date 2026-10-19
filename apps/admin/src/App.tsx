@@ -7,13 +7,11 @@ import {
   CircleAlert,
   Clock3,
   Coins,
-  Gauge,
   LayoutDashboard,
   LogOut,
   Medal,
   Radio,
   RefreshCw,
-  Search,
   ShieldCheck,
   UserRound,
   UsersRound,
@@ -24,7 +22,6 @@ import {
   createContext,
   useContext,
   useEffect,
-  useMemo,
   useRef,
   useState,
 } from "react";
@@ -365,7 +362,7 @@ function HealthPanel({ items }: { items: HealthItem[] }) {
   }
 
   return (
-    <div className="health-grid">
+    <div className={`health-grid health-grid-${items.length}`}>
       {items.map((item) => (
         <article className="health-row" key={item.label}>
           <div>
@@ -386,7 +383,6 @@ const dashboardRoutes = [
     path: "/overview",
     label: "Overview",
     detail: "KPIs and movement",
-    description: "An operational summary across users, rooms, submissions, and rewards.",
     icon: LayoutDashboard,
   },
   {
@@ -394,7 +390,6 @@ const dashboardRoutes = [
     path: "/roles",
     label: "Roles",
     detail: "Host vs member",
-    description: "Compare participation, approvals, winners, and rewards by platform role.",
     icon: UsersRound,
   },
   {
@@ -402,7 +397,6 @@ const dashboardRoutes = [
     path: "/users",
     label: "Users",
     detail: "Person-level insight",
-    description: "Inspect user movement, contributions, approvals, and earned rewards.",
     icon: UserRound,
   },
   {
@@ -410,7 +404,6 @@ const dashboardRoutes = [
     path: "/hosts",
     label: "Hosts",
     detail: "Host performance",
-    description: "Compare host activity, room ownership, approvals, and reward output.",
     icon: ShieldCheck,
   },
   {
@@ -418,7 +411,6 @@ const dashboardRoutes = [
     path: "/rooms",
     label: "Rooms",
     detail: "Room operations",
-    description: "Monitor participation, assignments, submissions, rewards, and room status.",
     icon: Blocks,
   },
   {
@@ -426,7 +418,6 @@ const dashboardRoutes = [
     path: "/rewards",
     label: "Rewards",
     detail: "XRDM and certificates",
-    description: "Track XRDM, winners, certificates, and NFT badge issuance.",
     icon: Coins,
   },
   {
@@ -434,7 +425,6 @@ const dashboardRoutes = [
     path: "/chain",
     label: "Chain",
     detail: "Event health",
-    description: "Review confirmed, pending, and failed blockchain events by room.",
     icon: WalletCards,
   },
   {
@@ -442,7 +432,6 @@ const dashboardRoutes = [
     path: "/operations",
     label: "Operations",
     detail: "Risk and mismatch signals",
-    description: "Review pending confirmations, failed events, and ledger mismatches.",
     icon: CircleAlert,
   },
 ] as const;
@@ -758,104 +747,12 @@ export function DashboardApp({
   onSignOut,
   snapshot: adminSnapshot,
 }: DashboardAppProps) {
-  const [dateRange, setDateRange] = useState<"today" | "7d">("7d");
-  const [statusFilter, setStatusFilter] = useState<"all" | Status>("all");
-  const [roomFilter, setRoomFilter] = useState("all");
-  const [hostFilter, setHostFilter] = useState("all");
-  const [searchQuery, setSearchQuery] = useState("");
   const [activeRoute, setActiveRoute] = useState<DashboardRoute | null>(() =>
     resolveRoute(window.location.pathname),
   );
   const routeHeadingRef = useRef<HTMLHeadingElement>(null);
   const hasMountedRef = useRef(false);
-  const filteredSnapshot = useMemo<AdminSnapshot>(() => {
-    const normalizedSearch = searchQuery.trim().toLowerCase();
-    const selectedRoom = adminSnapshot.rooms.find((room) => room.id === roomFilter);
-    const selectedHostRoomNames = new Set(
-      adminSnapshot.rooms
-        .filter((room) => hostFilter === "all" || room.hostEmail === hostFilter)
-        .map((room) => room.name),
-    );
-    const activityCutoff = new Date();
-    activityCutoff.setUTCHours(0, 0, 0, 0);
-    if (dateRange === "7d") {
-      activityCutoff.setUTCDate(activityCutoff.getUTCDate() - 6);
-    }
-    const matchesSearch = (...values: string[]) =>
-      !normalizedSearch ||
-      values.some((value) => value.toLowerCase().includes(normalizedSearch));
-    const matchesSelectedRoom = (roomName: string) =>
-      !selectedRoom || roomName === selectedRoom.name;
-    const matchesSelectedHost = (roomName: string) =>
-      hostFilter === "all" || selectedHostRoomNames.has(roomName);
-    const matchesActivityScope = (detail: string) =>
-      (!selectedRoom || detail.includes(selectedRoom.name)) &&
-      (hostFilter === "all" ||
-        [...selectedHostRoomNames].some((roomName) => detail.includes(roomName)));
-
-    return {
-      ...adminSnapshot,
-      movement: dateRange === "today" ? adminSnapshot.movement.slice(-1) : adminSnapshot.movement,
-      activity: adminSnapshot.activity.filter(
-        (item) =>
-          Date.parse(item.time) >= activityCutoff.getTime() &&
-          (statusFilter === "all" || item.status === statusFilter) &&
-          matchesActivityScope(item.detail) &&
-          matchesSearch(item.title, item.detail),
-      ),
-      rooms: adminSnapshot.rooms.filter(
-        (room) =>
-          (roomFilter === "all" || room.id === roomFilter) &&
-          (hostFilter === "all" || room.hostEmail === hostFilter) &&
-          (statusFilter === "all" || room.onchainStatus === statusFilter) &&
-          matchesSearch(room.name, room.hostEmail),
-      ),
-      roomSegments: adminSnapshot.roomSegments.filter(
-        (room) =>
-          matchesSelectedRoom(room.segment) &&
-          matchesSelectedHost(room.segment) &&
-          matchesSearch(room.segment),
-      ),
-      activeRooms: adminSnapshot.activeRooms.filter(
-        (room) =>
-          matchesSelectedRoom(room.label) &&
-          matchesSelectedHost(room.label) &&
-          matchesSearch(room.label, room.meta),
-      ),
-      hostSegments: adminSnapshot.hostSegments.filter(
-        (host) =>
-          (hostFilter === "all" || host.segment === hostFilter) &&
-          matchesSearch(host.segment),
-      ),
-      activeHosts: adminSnapshot.activeHosts.filter(
-        (host) =>
-          (hostFilter === "all" || host.label === hostFilter) &&
-          matchesSearch(host.label, host.meta),
-      ),
-      userInsights: adminSnapshot.userInsights.filter(
-        (user) =>
-          (hostFilter === "all" || user.email === hostFilter) &&
-          matchesSearch(user.name, user.email, user.role),
-      ),
-      rewardHealth: adminSnapshot.rewardHealth.filter(
-        (item) => statusFilter === "all" || item.status === statusFilter,
-      ),
-      opsHealth: adminSnapshot.opsHealth.filter(
-        (item) => statusFilter === "all" || item.status === statusFilter,
-      ),
-    };
-  }, [
-    adminSnapshot,
-    dateRange,
-    hostFilter,
-    roomFilter,
-    searchQuery,
-    statusFilter,
-  ]);
-  const hostOptions = useMemo(
-    () => [...new Set(adminSnapshot.rooms.map((room) => room.hostEmail))].sort(),
-    [adminSnapshot.rooms],
-  );
+  const ActiveRouteIcon = activeRoute?.icon ?? CircleAlert;
 
   useEffect(() => {
     if (window.location.pathname === "/") {
@@ -904,39 +801,39 @@ export function DashboardApp({
   }
 
   return (
-    <AdminSnapshotContext.Provider value={filteredSnapshot}>
+    <AdminSnapshotContext.Provider value={adminSnapshot}>
       <div className="app-shell">
         <aside className="sidebar">
-        <div className="sidebar-brand">
-          <span className="brand-mark">R</span>
-          <span>
-            <strong>RDM Hack</strong>
-            <small>Admin Console</small>
-          </span>
-        </div>
+          <div className="sidebar-brand">
+            <span className="brand-mark">R</span>
+            <span>
+              <strong>RDM Hack</strong>
+              <small>Admin Console</small>
+            </span>
+          </div>
 
-        <nav className="sidebar-nav" aria-label="Admin dashboard routes">
-          <p className="sidebar-label">Workspace</p>
-          {dashboardRoutes.map((route) => {
-            const Icon = route.icon;
+          <nav className="sidebar-nav" aria-label="Admin dashboard routes">
+            <p className="sidebar-label">Workspace</p>
+            {dashboardRoutes.map((route) => {
+              const Icon = route.icon;
 
-            return (
-              <a
-                aria-current={activeRoute?.id === route.id ? "page" : undefined}
-                className={activeRoute?.id === route.id ? "active" : undefined}
-                href={route.path}
-                key={route.id}
-                onClick={(event) => handleRouteChange(event, route)}
-              >
-                <Icon size={17} />
-                <span>
-                  <strong>{route.label}</strong>
-                  <small>{route.detail}</small>
-                </span>
-              </a>
-            );
-          })}
-        </nav>
+              return (
+                <a
+                  aria-current={activeRoute?.id === route.id ? "page" : undefined}
+                  className={activeRoute?.id === route.id ? "active" : undefined}
+                  href={route.path}
+                  key={route.id}
+                  onClick={(event) => handleRouteChange(event, route)}
+                >
+                  <Icon size={17} />
+                  <span>
+                    <strong>{route.label}</strong>
+                    <small>{route.detail}</small>
+                  </span>
+                </a>
+              );
+            })}
+          </nav>
 
           <div className="sidebar-footer">
             <span className="readonly-dot" />
@@ -958,111 +855,38 @@ export function DashboardApp({
         </aside>
 
         <main className="admin-shell">
-        <header className="topbar">
-          <div className="route-heading">
-            <p className="eyebrow">Founder Dashboard</p>
-            <h1 ref={routeHeadingRef} tabIndex={-1}>
-              {activeRoute?.label ?? "Page not found"}
-            </h1>
-            <p>
-              {activeRoute?.description ??
-                "This address does not match an available admin dashboard route."}
-            </p>
-          </div>
-          <div className="topbar-actions">
-            <button
-              className="refresh-button"
-              disabled={isRefreshing}
-              onClick={onRefresh}
-              title="Refresh dashboard data"
-              type="button"
-            >
-              <RefreshCw className={isRefreshing ? "spinning" : undefined} size={16} />
-            </button>
-            <div className="server-pill">
-              <Radio size={15} />
-              <span>Live data</span>
+          <header className="topbar">
+            <div className="route-heading">
+              <span className="route-icon" aria-hidden="true">
+                <ActiveRouteIcon size={18} />
+              </span>
+              <div>
+                <p className="eyebrow">Founder Dashboard</p>
+                <h1 ref={routeHeadingRef} tabIndex={-1}>
+                  {activeRoute?.label ?? "Page not found"}
+                </h1>
+              </div>
             </div>
+            <div className="topbar-actions">
+              <button
+                className="refresh-button"
+                disabled={isRefreshing}
+                onClick={onRefresh}
+                title="Refresh dashboard data"
+                type="button"
+              >
+                <RefreshCw className={isRefreshing ? "spinning" : undefined} size={16} />
+              </button>
+              <div className="server-pill">
+                <Radio size={15} />
+                <span>Live data</span>
+              </div>
+            </div>
+          </header>
+
+          <div className="route-content" key={activeRoute?.id ?? "not-found"}>
+            <RouteContent routeId={activeRoute?.id ?? null} />
           </div>
-        </header>
-
-        <section className="toolbar" aria-label="Dashboard filters">
-          <label>
-            Activity range
-            <select
-              onChange={(event) => setDateRange(event.target.value as "today" | "7d")}
-              value={dateRange}
-            >
-              <option value="today">Today (UTC)</option>
-              <option value="7d">Last 7 days</option>
-            </select>
-          </label>
-          <label>
-            Status
-            <select
-              onChange={(event) =>
-                setStatusFilter(event.target.value as "all" | Status)
-              }
-              value={statusFilter}
-            >
-              <option value="all">All statuses</option>
-              <option value="confirmed">Confirmed</option>
-              <option value="pending">Pending</option>
-              <option value="failed">Failed</option>
-            </select>
-          </label>
-          <label>
-            Room
-            <select
-              onChange={(event) => setRoomFilter(event.target.value)}
-              value={roomFilter}
-            >
-              <option value="all">All rooms</option>
-              {adminSnapshot.rooms.map((room) => (
-                <option key={room.id} value={room.id}>
-                  {room.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Host
-            <select
-              onChange={(event) => setHostFilter(event.target.value)}
-              value={hostFilter}
-            >
-              <option value="all">All hosts</option>
-              {hostOptions.map((host) => (
-                <option key={host} value={host}>
-                  {host}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="search-box">
-            Search
-            <span>
-              <Search size={15} />
-              <input
-                onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="Room, host, email, role"
-                value={searchQuery}
-              />
-            </span>
-          </label>
-        </section>
-
-        <section className="notice">
-          <Gauge size={18} />
-          <p>
-            Authorized read-only monitoring. Data refreshes from the production analytics endpoint;
-            no create, update, delete, or blockchain transaction controls are available.
-          </p>
-        </section>
-
-        <div className="route-content" key={activeRoute?.id ?? "not-found"}>
-          <RouteContent routeId={activeRoute?.id ?? null} />
-        </div>
         </main>
       </div>
     </AdminSnapshotContext.Provider>

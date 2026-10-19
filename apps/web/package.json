@@ -13,6 +13,7 @@
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
     "@noble/hashes": "catalog:",
+    "@privy-io/react-auth": "catalog:",
     "@rdm-hack/api": "workspace:*",
     "@rdm-hack/auth": "workspace:*",
     "@rdm-hack/blockchain-client": "workspace:*",
@@ -25,7 +26,6 @@
     "@trpc/client": "catalog:",
     "@trpc/server": "catalog:",
     "@trpc/tanstack-react-query": "catalog:",
-    "@privy-io/react-auth": "catalog:",
     "better-auth": "catalog:",
     "dotenv": "catalog:",
     "lucide-react": "^1.8.0",
@@ -35,6 +35,7 @@
     "react-icons": "^5.7.0",
     "sonner": "^2.0.7",
     "viem": "2.52.0",
+    "xlsx": "^0.18.5",
     "zod": "catalog:"
   },
   "devDependencies": {
@@ -45,6 +46,7 @@
     "@types/node": "^22.13.14",
     "@types/react": "^19.2.15",
     "@types/react-dom": "catalog:",
+    "@types/xlsx": "^0.0.36",
     "@vitejs/plugin-react": "^6.0.1",
     "postcss": "^8.5.10",
     "tailwindcss": "^4.2.2",

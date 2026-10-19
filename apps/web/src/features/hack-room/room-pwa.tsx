@@ -590,6 +590,30 @@ export default function HackRoomPwa({
       return;
     }
 
+    const participantsByEmail = new Map(
+      selectedRoom.participants.map((participant) => [participant.email.trim().toLowerCase(), participant]),
+    );
+    const draftRecipientEmails = getEmailTokens(rewardForm.recipientEmailDraft ?? "");
+    const invalidRecipientEmail = draftRecipientEmails.find((email) => !isEmailLike(email));
+    if (invalidRecipientEmail) {
+      showMessage(`Check recipient email: ${invalidRecipientEmail}`, "red");
+      return;
+    }
+
+    const missingRecipientEmail = normalizeEmails(draftRecipientEmails).find(
+      (email) => !participantsByEmail.has(email),
+    );
+    if (missingRecipientEmail) {
+      showMessage(`${missingRecipientEmail} has not joined this room yet`, "red");
+      return;
+    }
+    const draftRecipientIds = normalizeEmails(draftRecipientEmails)
+      .map((email) => participantsByEmail.get(email)?.userId ?? "")
+      .filter(Boolean);
+    const selectedRecipientIds = [
+      ...new Set([...rewardForm.recipientIds, ...draftRecipientIds]),
+    ];
+
     const sourceSubmissionId =
       kind === "participant_certificate"
         ? undefined
@@ -603,14 +627,14 @@ export default function HackRoomPwa({
       return;
     }
 
-    const recipientIds =
-      kind === "participant_certificate"
-        ? rewardForm.recipientMode === "individual"
-          ? rewardForm.recipientIds
-          : []
-        : sourceSubmission
-          ? [sourceSubmission.participantId]
-          : [];
+    let recipientIds: string[];
+    if (kind === "participant_certificate") {
+      recipientIds = rewardForm.recipientMode === "individual" ? selectedRecipientIds : [];
+    } else if (selectedRecipientIds.length) {
+      recipientIds = selectedRecipientIds;
+    } else {
+      recipientIds = sourceSubmission ? [sourceSubmission.participantId] : [];
+    }
 
     if (kind === "participant_certificate" && rewardForm.recipientMode === "individual" && !recipientIds.length) {
       showMessage("Add at least one participant email", "red");
